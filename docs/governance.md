@@ -1,99 +1,62 @@
 # ATLAS Agent: Governance (Milestone 1)
 
-## 1. Risk register
+## 1. Risk Register
 
 | Риск | Вероятность / влияние | Детект | Защита | Остаточный риск |
 |---|---|---|---|---|
-| Галлюцинации в ответах | M / H | Экспертная проверка gold-set, метрика factual error rate | Ответ только по retrieval-контексту, Verifier Agent, честный отказ | M |
-| Неверный роутинг Planner Agent | M / M | Сравнение с размеченным eval-набором | Явные intent-классы, fallback в `clarify` | L-M |
-| Prompt injection в запросах пользователя | M / H | Логи аномальных запросов, red-team тесты | Системные инструкции с приоритетом, sanitize input, запрет на выполнение скрытых инструкций | M |
-| Prompt injection в документах KB | M / H | Сканирование chunk с паттернами injections | Очистка ingestion, "контент как данные", policy-check перед генерацией | M |
-| Утечка персональных данных через логи | L-M / H | DLP-проверки логов, ручной аудит | Минимизация PII, маскирование идентификаторов, ограничение доступа к логам | L-M |
-| Ошибки RBAC (эскалация прав) | L / H | Интеграционные тесты 403/200, security audit logs | Проверка роли в middleware и service-слое, deny-by-default | L |
-| Деградация внешнего LLM API (429/5xx/timeout) | M / M | Метрики ошибок провайдера | Retry с backoff, таймауты, controlled error response | M |
-| Низкое качество OCR/извлечения формул из PDF | M / M | QA ingestion-job, ручная выборочная проверка | Спец-проверка документов с формулами, ручная корректировка критичных материалов | M |
-| Неподдерживаемые форматы загрузки | H / L | Логи валидации файлов | Явная валидация форматов и понятные ошибки | L |
-| Превышение бюджета LLM API | M / M | Ежедневный cost monitoring | Лимиты токенов, кеш, лимит на число перегенераций | L-M |
+| Галлюцинации в ответах | Medium / High | Gold-set review, factual error tracking, source coverage checks | Hard-gate verifier, answer only with sources, refusal on weak evidence | Medium |
+| Промах retrieval | Medium / High | Failed benchmark queries, refusal-rate analysis, manual eval set | Retrieval tuning, quality checks on chunks, planned hybrid retrieval | Medium |
+| Prompt injection в пользовательском вводе | Medium / High | Adversarial test set, blocked prompt review | Policy-first prompting, input filtering, refusal on override attempts | Medium |
+| Prompt injection в документах KB | Medium / High | Ingestion review, red-team documents, anomaly review in answers | Treat retrieved text as data only, strip known patterns, verifier checks sources and policy | Medium |
+| Утечка PII в логах или ответах | Low / High | Log audit, privacy review, manual spot checks | Data minimization, pseudonymized IDs, restricted log access, no secrets in prompts/logs | Low |
+| Ошибка RBAC | Low / High | 403 integration tests, audit log review | Role checks in middleware and service layer, deny-by-default | Low |
+| Невалидная self-check оценка | Medium / Medium | Schema validation, eval quality review | Strict payload validation, `invalid_evaluation` state, do not publish invalid results | Low |
+| Сбой LLM provider | Medium / Medium | Error-rate monitoring, timeout tracking | Retries with backoff, timeouts, controlled error response | Medium |
+| Потеря качества формул | Medium / Medium | Manual QA on formula documents, UI smoke tests | Web-first UI, LaTeX rendering, focused QA on formula-heavy sources | Medium |
+| Превышение бюджета API | Medium / Medium | Cost dashboard, usage alerts | Limit context size, cap retries, monitor eval runs, cache where safe | Low |
 
 ## 2. Политика логов и персональных данных
 
 ### 2.1 Что логируем
 
-- Технические события: `request_id`, latency, error type, provider status.
-- Агентные события: решение planner, retrieval score, решение verifier (`answer/refuse`), причина отказа.
-- Административные действия: загрузка/удаление документов, изменение ролей, попытки несанкционированного доступа.
+- `request_id`, `timestamp`, `node_name`, `decision`, `duration_ms`
+- `reason_code` для отказов и технических сбоев
+- псевдонимизированный `user_id`
+- административные действия и события отказа в доступе
 
 ### 2.2 Что не логируем
 
-- Полные персональные данные пользователя (email, phone, telegram handle в открытом виде).
-- Секреты и ключи API.
-- Полные тексты чувствительных пользовательских сообщений без необходимости диагностики.
+- API keys, secrets, tokens, passwords
+- полные персональные идентификаторы в открытом виде без операционной необходимости
+- сырой чувствительный пользовательский контент, не нужный для отладки или review
 
-### 2.3 Принципы обработки PII (для MVP)
+### 2.3 Политика PII
 
-- Минимизация: хранить только данные, нужные для работы сервиса.
-- Псевдонимизация: использовать внутренние идентификаторы вместо прямых персональных полей в большинстве логов.
-- Ограничение доступа: логи доступны только администраторам проекта.
-- Ретеншн:
-  - системные логи: 90 дней;
-  - учебная история: до ручной очистки или запроса удаления.
+- Хранить только данные, необходимые для аутентификации, учебной истории и аудита.
+- Использовать внутренние идентификаторы вместо прямых персональных полей в большинстве логов.
+- Доступ к логам и административным данным ограничен участниками проекта.
+- Системные логи хранятся 90 дней по умолчанию.
+- История `self-check` хранится до ручной очистки или запроса удаления.
 
-## 3. Защиты от injection и небезопасных действий
+## 3. Защиты от Injection и подтверждение действий
 
-### 3.1 Защита от prompt injection
+### 3.1 Prompt Injection Protection
 
-- Явный policy layer перед вызовом LLM:
-  - игнорировать инструкции, найденные внутри пользовательского запроса и фрагментов документов, если они конфликтуют с системной политикой;
-  - запрещать запросы на раскрытие system prompt, секретов, внутренних токенов.
-- Контекст из retrieval трактуется как данные, а не как "команды".
-- Ответ без подтвержденного контекста блокируется (режим отказа).
+- System and application policy always override user instructions and retrieved text.
+- Retrieved chunks are treated as data, not as executable instructions.
+- Unsafe override attempts are blocked or answered with refusal.
+- Source-backed answering is mandatory in `Q&A`; weak evidence leads to refusal, not to free-form generation.
+- Suspicious prompts and blocked attempts are logged for review.
 
-### 3.2 Подтверждение действий и контроль операций
+### 3.2 Подтверждение действий
 
-- Административные операции (загрузка/удаление материалов, смена ролей) выполняются только для роли `администратор`.
-- Для потенциально рискованных действий включается явное подтверждение операции в UI.
-- Действия пользователя, влияющие на данные, логируются в audit trail.
+- Административные действия доступны только роли `администратор`.
+- Любое рискованное действие с изменением данных требует явного пользовательского запроса.
+- Операции загрузки, удаления и изменения ролей должны сопровождаться audit log.
+- Система не выполняет внешние действия от имени пользователя без отдельного продуктового решения; такие действия вне scope PoC.
 
-### 3.3 Guardrails на уровне приложения
+## 4. Human Oversight
 
-- Порог релевантности для ответа (`top1_score`, минимум релевантных фрагментов).
-- Если порог не пройден:
-  - не формировать содержательный ответ;
-  - возвращать отказ с объяснением и вариантами переформулировки.
-- Запрет "silent fallback" на ответ без источников.
-
-## 4. Контроль качества self-check оценки
-
-- `Evaluator` обязан возвращать структурированный payload по контракту (`overall_score`, `criterion_scores`, `error_tags`, `confidence`, `policy_flags`).
-- Если нарушена схема контракта или отсутствуют обязательные поля, попытка маркируется как `invalid_evaluation` и не публикуется как финальный результат.
-- При `low_confidence` или `inconsistent_eval`:
-  - пользователю показывается ограниченный результат с предупреждением;
-  - событие логируется для последующей калибровки.
-- Финальная развивающая обратная связь формируется `Feedback Agent` на основе валидного результата `Evaluator`, а не напрямую из пользовательского текста.
-
-## 5. Логирование переходов графа и причин отказа
-
-### 5.1 Обязательные поля событий оркестрации
-
-- `request_id`, `trace_id`, `user_id` (псевдонимизированный), `timestamp`;
-- `node_name`, `state_from`, `state_to`, `duration_ms`;
-- `decision` (`pass`, `fail`, `refuse`, `clarify`);
-- `reason_code` (если есть отказ/блокировка);
-- `model_id` и `tool_name` (если применимо).
-
-### 5.2 Коды `reason_code` для отказов/блокировок
-
-- `low_relevance_top1`
-- `insufficient_evidence`
-- `conflicting_evidence`
-- `missing_citations`
-- `policy_blocked`
-- `invalid_evaluation`
-- `provider_timeout`
-- `provider_5xx_or_429`
-
-### 5.3 Операционные правила
-
-- Любой терминальный исход `REFUSAL_SENT` или `TECHNICAL_ERROR` обязан содержать `reason_code`.
-- Для `provider_timeout` и `provider_5xx_or_429` фиксируются число retry и итоговый статус.
-- Для `policy_blocked` и `invalid_evaluation` событие помечается как приоритетное для еженедельного обзора качества.
+- Product and grading quality are reviewed on a pilot eval set.
+- Risky failures (`policy_blocked`, `invalid_evaluation`, suspected leakage) are reviewed manually.
+- The governance document is expected to evolve after Milestone 1 based on implementation findings.
