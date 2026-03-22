@@ -1,5 +1,10 @@
 # ATLAS: концепция проекта
 
+Статус файла:
+- концептуальный документ ранней стадии;
+- не является основным источником истины после `Milestone 1`;
+- зафиксированные решения уточняются и детализируются в `docs/product-proposal.md` и `docs/technical_specification.md`.
+
 ## 1. Название и назначение
 
 **ATLAS (Assistant for Technical Learning & Attestation Support)** — интеллектуальный ассистент для подготовки к сдаче кандидатского минимума по технической специальности.
@@ -141,6 +146,16 @@ ATLAS реализуется как агентная RAG-система (Retriev
 - расширенная аналитика прогресса и персонализированные дашборды обучения;
 - поддержка `djvu` без предварительной конвертации.
 
-## 10. Открытые вопросы к ТЗ
+## 10. Маппинг открытых вопросов на решения
 
-Файл фиксирует концептуальный уровень. Детализация требований, критериев качества, архитектуры, ограничений и плана реализации выносится в отдельное Техническое задание.
+| Открытый вопрос | Принятое решение | Где зафиксировано |
+|---|---|---|
+| Базовая архитектура: plain RAG или agentic RAG | Выбран `agentic RAG` с явным графом оркестрации | `docs/product-proposal.md`, `docs/technical_specification.md` |
+| Основной канал MVP | Выбран `web-first`, Telegram остается дополнительным каналом | `README.md`, `docs/product-proposal.md`, `docs/technical_specification.md` |
+| Политика надежности | Выбран `hard-gate` verifier с честным отказом | `docs/product-proposal.md`, `docs/technical_specification.md`, `docs/governance.md` |
+| Retrieval стратегия PoC | В PoC используется `vector-only`, hybrid вынесен в roadmap | `docs/product-proposal.md` |
+| Модель памяти | `Q&A` в рамках сессии, история `self-check` между сессиями | `docs/product-proposal.md`, `docs/technical_specification.md` |
+| Self-check pipeline | Целевая схема: `Question Generator -> Evaluator -> Feedback Agent`; в PoC — упрощенная ветка | `docs/product-proposal.md` |
+| Проверка качества | Зафиксирован пилотный `eval-set v0` и процесс разметки | `docs/product-proposal.md` |
+
+Файл сохраняет концептуальный контекст проекта, а все решения после `Milestone 1` должны проверяться по основным документам в `docs/`.

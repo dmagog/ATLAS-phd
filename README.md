@@ -1,5 +1,10 @@
 # ATLAS Agent
 
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-backend-009688?logo=fastapi&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-pgvector-4169E1?logo=postgresql&logoColor=white)
+![Status](https://img.shields.io/badge/Status-PoC%20definition%20complete-orange)
+
 **ATLAS (Assistant for Technical Learning & Attestation Support)** — агентный ассистент для подготовки к кандидатскому минимуму по технической специальности.
 
 ## Проблема
@@ -46,7 +51,7 @@ PoC демонстрирует агентный контур поверх RAG:
 
 ## Статус реализации
 
-- Текущий репозиторий фиксирует проектное согласование и требования (`Milestone 1`).
+- Текущий статус PoC: проектная рамка и документация для `Milestone 1` подготовлены; реализация еще не началась.
 - Реализация сервиса и исполняемый код MVP будут добавляться на следующих этапах.
 
 ## План локального запуска MVP (целевой runbook)
