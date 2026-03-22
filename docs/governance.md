@@ -4,16 +4,18 @@
 
 | Риск | Вероятность / влияние | Детект | Защита | Остаточный риск |
 |---|---|---|---|---|
-| Галлюцинации в ответах | Medium / High | Gold-set review, factual error tracking, source coverage checks | Hard-gate verifier, answer only with sources, refusal on weak evidence | Medium |
-| Промах retrieval | Medium / High | Failed benchmark queries, refusal-rate analysis, manual eval set | Retrieval tuning, quality checks on chunks, planned hybrid retrieval | Medium |
-| Prompt injection в пользовательском вводе | Medium / High | Adversarial test set, blocked prompt review | Policy-first prompting, input filtering, refusal on override attempts | Medium |
-| Prompt injection в документах KB | Medium / High | Ingestion review, red-team documents, anomaly review in answers | Treat retrieved text as data only, strip known patterns, verifier checks sources and policy | Medium |
-| Утечка PII в логах или ответах | Low / High | Log audit, privacy review, manual spot checks | Data minimization, pseudonymized IDs, restricted log access, no secrets in prompts/logs | Low |
-| Ошибка RBAC | Low / High | 403 integration tests, audit log review | Role checks in middleware and service layer, deny-by-default | Low |
-| Невалидная self-check оценка | Medium / Medium | Schema validation, eval quality review | Strict payload validation, `invalid_evaluation` state, do not publish invalid results | Low |
-| Сбой LLM provider | Medium / Medium | Error-rate monitoring, timeout tracking | Retries with backoff, timeouts, controlled error response | Medium |
-| Потеря качества формул | Medium / Medium | Manual QA on formula documents, UI smoke tests | Web-first UI, LaTeX rendering, focused QA on formula-heavy sources | Medium |
-| Превышение бюджета API | Medium / Medium | Cost dashboard, usage alerts | Limit context size, cap retries, monitor eval runs, cache where safe | Low |
+| Галлюцинации в ответах | Средняя / Высокое | Проверка на gold-set, трекинг factual errors, проверка покрытия источниками | Hard-gate verifier, ответы только с источниками, отказ при слабом evidence | Средний |
+| Промах retrieval | Средняя / Высокое | Анализ промахов на benchmark queries, refusal-rate, ручной eval set | Настройка retrieval, QA чанков, roadmap к hybrid retrieval | Средний |
+| Prompt injection в пользовательском вводе | Средняя / Высокое | Adversarial test set, review заблокированных попыток | Policy-first prompting, фильтрация входа, отказ при попытках override | Средний |
+| Prompt injection в документах KB | Средняя / Высокое | Review ingestion, red-team документы, анализ аномалий в ответах | Retrieved text трактуется как данные, удаление известных паттернов, verifier checks sources and policy | Средний |
+| Утечка PII в логах или ответах | Низкая / Высокое | Аудит логов, privacy review, выборочные проверки | Минимизация данных, псевдонимизированные ID, ограниченный доступ к логам, запрет секретов в prompts/logs | Низкий |
+| Компрометация аутентификации | Низкая / Высокое | Аудит логинов, review неуспешных входов, auth integration tests | Password hashing, role checks, short-lived sessions, admin allowlist in Telegram | Низкий |
+| PII в загружаемых документах | Средняя / Высокое | Review загружаемых документов, spot checks, corpus audit | Ограничение корпуса approved materials, редактирование obvious personal data, удаление документа по запросу | Средний |
+| Ошибка RBAC | Низкая / Высокое | 403 integration tests, audit log review | Role checks в middleware и service layer, deny-by-default | Низкий |
+| Невалидная self-check оценка | Средняя / Среднее | Schema validation, review качества оценивания | Strict payload validation, `invalid_evaluation` state, публикация только валидных результатов | Низкий |
+| Сбой LLM provider | Средняя / Среднее | Мониторинг error-rate и timeout | Retries with backoff, таймауты, controlled error response | Средний |
+| Потеря качества формул | Средняя / Среднее | Manual QA на formula-heavy документах, UI smoke tests | Web-first UI, LaTeX rendering, focused QA на formula-heavy sources | Средний |
+| Превышение бюджета API | Средняя / Среднее | Cost dashboard, usage alerts | Ограничение контекста, cap retries, мониторинг eval runs, безопасный кеш | Низкий |
 
 ## 2. Политика логов и персональных данных
 
@@ -38,13 +40,20 @@
 - Системные логи хранятся 90 дней по умолчанию.
 - История `self-check` хранится до ручной очистки или запроса удаления.
 
+### 2.4 PII в загружаемых документах
+
+- В knowledge base допускаются только материалы, одобренные для учебного использования в рамках пилота.
+- При загрузке документов администратор обязан исключать файлы с лишними персональными данными, если они не нужны для учебной задачи.
+- Если документ содержит incidental PII, он подлежит редактированию, замене или удалению из корпуса.
+- Документы, загруженные в KB, не должны использоваться как источник для раскрытия персональных данных в ответах модели.
+
 ## 3. Защиты от Injection и подтверждение действий
 
 ### 3.1 Prompt Injection Protection
 
 - System and application policy always override user instructions and retrieved text.
 - Retrieved chunks are treated as data, not as executable instructions.
-- Unsafe override attempts are blocked or answered with refusal.
+- Попытки override поведения системы блокируются или переводятся в отказ.
 - Source-backed answering is mandatory in `Q&A`; weak evidence leads to refusal, not to free-form generation.
 - Suspicious prompts and blocked attempts are logged for review.
 
@@ -54,6 +63,12 @@
 - Любое рискованное действие с изменением данных требует явного пользовательского запроса.
 - Операции загрузки, удаления и изменения ролей должны сопровождаться audit log.
 - Система не выполняет внешние действия от имени пользователя без отдельного продуктового решения; такие действия вне scope PoC.
+
+### 3.3 Защита аутентификации
+
+- Web MVP использует password hashing и ограниченный доступ к административным маршрутам.
+- Telegram admin access ограничен allowlist по `telegram_user_id`.
+- Аутентификационные ошибки и события отказа в доступе логируются для review.
 
 ## 4. Human Oversight
 
