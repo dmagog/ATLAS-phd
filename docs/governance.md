@@ -1,4 +1,4 @@
-# ATLAS Agent: Governance (Milestone 1)
+# ATLAS phd: Governance (Milestone 1)
 
 ## 1. Risk Register
 
