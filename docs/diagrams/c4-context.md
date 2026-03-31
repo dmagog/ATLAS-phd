@@ -1,6 +1,6 @@
 # C4 Context
 
-Диаграмма показывает систему ATLAS Agent как PoC и ее внешнее окружение.
+Диаграмма показывает систему ATLAS phd как PoC и ее внешнее окружение.
 
 ![C4 Context](./c4-context.svg)
 
@@ -8,7 +8,7 @@
 flowchart LR
     user["Пользователь / аспирант"] --> web["Web-интерфейс"]
     admin["Администратор"] --> web
-    web --> atlas["ATLAS Agent PoC"]
+    web --> atlas["ATLAS phd PoC"]
     atlas --> llm["Внешний LLM API / API эмбеддингов"]
     atlas --> db["PostgreSQL + pgvector"]
     admin --> corpus["Одобренные учебные материалы"]

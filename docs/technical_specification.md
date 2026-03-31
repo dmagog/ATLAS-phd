@@ -1,5 +1,5 @@
 # Техническое задание (ТЗ) v1.1
-## Проект ATLAS (Assistant for Technical Learning & Attestation Support)
+## Проект ATLAS phd (Assistant for Technical Learning & Attestation Support)
 
 ## 1. Общие сведения
 

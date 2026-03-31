@@ -1,4 +1,4 @@
-# ATLAS Agent: System Design (Milestone 2)
+# ATLAS phd: System Design (Milestone 2)
 
 ## 1. Назначение документа
 

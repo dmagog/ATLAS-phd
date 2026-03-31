@@ -98,6 +98,24 @@
 Назначение:
 - запустить ingestion пакета документов и получить `job_id`.
 
+Минимальный ответ:
+```json
+{
+  "job_id": "ing_001",
+  "status": "created",
+  "accepted_files": [
+    "lecture_01.pdf",
+    "lecture_02.pdf"
+  ],
+  "rejected_files": [
+    {
+      "filename": "notes.djvu",
+      "reason_code": "unsupported_format"
+    }
+  ]
+}
+```
+
 ## Стандартные формы ответов
 
 ### `RefusalResponse`
