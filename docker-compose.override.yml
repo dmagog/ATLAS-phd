@@ -8,6 +8,6 @@ services:
       - ./src:/app/src
       - ./alembic:/app/alembic
       - ./corpus:/app/corpus
-    command: uvicorn atlas.api.main:app --host 0.0.0.0 --port 8731 --reload --reload-dir /app/src
+    command: uvicorn atlas.api.main:app --host 0.0.0.0 --port 8731 --reload --reload-dir /app/src --timeout-graceful-shutdown 1
     environment:
       APP_ENV: development
