@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from atlas.core.logging import configure_logging
 from atlas.db.session import AsyncSessionLocal
 from atlas.api.startup import seed_admin
-from atlas.api.routers import auth, admin
+from atlas.api.routers import auth, admin, qa
 from atlas.llm.client import llm_client
 
 
@@ -20,6 +20,7 @@ app = FastAPI(title="ATLAS phd", version="0.1.0", lifespan=lifespan)
 
 app.include_router(auth.router)
 app.include_router(admin.router)
+app.include_router(qa.router)
 
 
 @app.get("/health")
