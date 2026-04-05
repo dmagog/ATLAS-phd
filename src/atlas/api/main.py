@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from atlas.core.logging import configure_logging
 from atlas.db.session import AsyncSessionLocal
-from atlas.api.startup import seed_admin
+from atlas.api.startup import seed_admin, reset_stale_jobs
 from atlas.api.routers import auth, admin, qa, selfcheck, web
 from atlas.llm.client import llm_client
 
@@ -12,6 +12,7 @@ async def lifespan(app: FastAPI):
     configure_logging()
     async with AsyncSessionLocal() as db:
         await seed_admin(db)
+        await reset_stale_jobs(db)
     yield
     await llm_client.close()
 
