@@ -57,6 +57,7 @@ class IngestionJob(Base):
     completed_at = Column(DateTime, nullable=True)
     accepted_files = Column(JSON, default=list)
     rejected_files = Column(JSON, default=list)
+    progress_info = Column(JSON, nullable=True)
 
 
 class Session(Base):
