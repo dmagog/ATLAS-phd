@@ -1,8 +1,14 @@
 """
 Ingestion pipeline: accept → extract → normalize → chunk → embed → index
+
+Supported formats:
+  - PDF, DOCX, TXT, MD  — plain text extraction, page number unknown
+  - JSONL               — page-aware format: {"page": N, "text": "...", "source_pdf": "..."}
+                          Preserves page numbers in chunk metadata for accurate citations.
 """
 import hashlib
 import io
+import json
 import re
 import uuid
 from dataclasses import dataclass, field
@@ -26,11 +32,22 @@ SUPPORTED_MIME_TYPES = {
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
     "text/plain": ".txt",
     "text/markdown": ".md",
+    "application/jsonl": ".jsonl",
 }
+
+# Also accept by extension regardless of MIME (browsers often send text/plain for .jsonl)
+SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".txt", ".md", ".jsonl"}
 
 CHUNK_MIN = 800
 CHUNK_MAX = 1200
 CHUNK_OVERLAP = 150
+
+
+@dataclass
+class ChunkMeta:
+    text: str
+    page: Optional[int] = None
+    section: Optional[str] = None
 
 
 @dataclass
@@ -51,9 +68,14 @@ class RawFile:
 
 # ── Stage 1: Accept ──────────────────────────────────────────────────────────
 
+def _is_supported(raw: RawFile) -> bool:
+    ext = Path(raw.filename).suffix.lower()
+    return raw.mime_type in SUPPORTED_MIME_TYPES or ext in SUPPORTED_EXTENSIONS
+
+
 def accept_file(raw: RawFile) -> tuple[bool, str]:
-    """Validate MIME type. Returns (ok, reason_code)."""
-    if raw.mime_type not in SUPPORTED_MIME_TYPES:
+    """Validate format by MIME type or file extension."""
+    if not _is_supported(raw):
         return False, "UNSUPPORTED_FORMAT"
     if len(raw.content) == 0:
         return False, "EMPTY_FILE"
@@ -64,24 +86,52 @@ def compute_sha256(content: bytes) -> str:
     return hashlib.sha256(content).hexdigest()
 
 
+def _is_jsonl(raw: RawFile) -> bool:
+    return Path(raw.filename).suffix.lower() == ".jsonl"
+
+
 # ── Stage 2: Extract ─────────────────────────────────────────────────────────
 
-def extract_text(raw: RawFile) -> str:
+def extract_pages(raw: RawFile) -> list[ChunkMeta]:
+    """
+    Extract content as a list of ChunkMeta items.
+    For JSONL: one item per page (with page number).
+    For other formats: one item with the full text (page=None).
+    """
+    if _is_jsonl(raw):
+        return _extract_jsonl(raw.content)
+    text = _extract_plain(raw)
+    return [ChunkMeta(text=text)]
+
+
+def _extract_jsonl(content: bytes) -> list[ChunkMeta]:
+    pages = []
+    for line in content.decode("utf-8", errors="replace").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+            text = obj.get("text", "").strip()
+            page = obj.get("page")
+            if text:
+                pages.append(ChunkMeta(text=text, page=page))
+        except json.JSONDecodeError:
+            continue
+    return pages
+
+
+def _extract_plain(raw: RawFile) -> str:
     if raw.mime_type == "application/pdf":
         return _extract_pdf(raw.content)
     if raw.mime_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
         return _extract_docx(raw.content)
-    # txt / md — decode as utf-8
     return raw.content.decode("utf-8", errors="replace")
 
 
 def _extract_pdf(content: bytes) -> str:
     reader = PdfReader(io.BytesIO(content))
-    pages = []
-    for page in reader.pages:
-        text = page.extract_text() or ""
-        pages.append(text)
-    return "\n\n".join(pages)
+    return "\n\n".join(page.extract_text() or "" for page in reader.pages)
 
 
 def _extract_docx(content: bytes) -> str:
@@ -95,11 +145,9 @@ _SUSPICIOUS = re.compile(r"(ignore previous instructions|system prompt|disregard
 
 
 def normalize(text: str) -> str:
-    # Collapse excessive whitespace while preserving paragraph breaks
     text = re.sub(r"[ \t]+", " ", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
-    text = text.strip()
-    return text
+    return text.strip()
 
 
 def has_suspicious_patterns(text: str) -> bool:
@@ -108,40 +156,65 @@ def has_suspicious_patterns(text: str) -> bool:
 
 # ── Stage 4: Chunk ───────────────────────────────────────────────────────────
 
-def chunk_text(text: str) -> list[str]:
+def chunk_pages(pages: list[ChunkMeta]) -> list[ChunkMeta]:
     """
-    Split text into chunks of CHUNK_MIN–CHUNK_MAX chars with CHUNK_OVERLAP overlap.
-    Tries to split at paragraph boundaries first, then at sentence boundaries.
-    """
-    paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
-    chunks: list[str] = []
-    current = ""
+    Chunk a list of page-level items into retrieval-sized chunks.
 
-    for para in paragraphs:
-        if len(current) + len(para) + 2 <= CHUNK_MAX:
-            current = (current + "\n\n" + para).strip()
+    Strategy:
+      - Accumulate pages until CHUNK_MAX is reached, then emit a chunk.
+      - The chunk inherits the page number of the FIRST page it started from.
+      - If a single page exceeds CHUNK_MAX, split it by sentences.
+      - Add CHUNK_OVERLAP of text from the previous chunk as prefix.
+    """
+    result: list[ChunkMeta] = []
+    current_text = ""
+    current_page: Optional[int] = None
+    prev_tail = ""
+
+    def _emit(text: str, page: Optional[int]) -> None:
+        nonlocal prev_tail
+        if text:
+            result.append(ChunkMeta(text=text.strip(), page=page))
+            prev_tail = text[-CHUNK_OVERLAP:]
+
+    for item in pages:
+        text = normalize(item.text)
+        if not text:
+            continue
+
+        if has_suspicious_patterns(text):
+            logger.warning("suspicious_content_in_page", page=item.page)
+
+        # If adding this page exceeds limit — emit current and start fresh
+        if current_text and len(current_text) + len(text) + 2 > CHUNK_MAX:
+            _emit(current_text, current_page)
+            overlap = prev_tail if prev_tail else ""
+            current_text = (overlap + "\n\n" + text).strip() if overlap else text
+            current_page = item.page
         else:
-            if current:
-                chunks.append(current)
-            # Para itself might exceed CHUNK_MAX — split by sentences
-            if len(para) > CHUNK_MAX:
-                chunks.extend(_split_long_para(para))
-                current = ""
+            # Merge into current chunk
+            if not current_text:
+                overlap = prev_tail if prev_tail else ""
+                current_text = (overlap + "\n\n" + text).strip() if overlap else text
+                current_page = item.page
             else:
-                # Start new chunk with overlap from previous chunk tail
-                overlap_text = current[-CHUNK_OVERLAP:] if current else ""
-                current = (overlap_text + "\n\n" + para).strip() if overlap_text else para
+                current_text = (current_text + "\n\n" + text).strip()
 
-    if current and len(current) >= CHUNK_MIN // 2:
-        chunks.append(current)
-    elif current and chunks:
-        chunks[-1] = chunks[-1] + "\n\n" + current
+        # Oversized single page — flush immediately in sentence-sized pieces
+        while len(current_text) > CHUNK_MAX:
+            pieces = _split_long_text(current_text)
+            for piece in pieces[:-1]:
+                _emit(piece, current_page)
+            current_text = pieces[-1] if pieces else ""
 
-    return chunks
+    if current_text:
+        _emit(current_text, current_page)
+
+    return result
 
 
-def _split_long_para(para: str) -> list[str]:
-    sentences = re.split(r"(?<=[.!?])\s+", para)
+def _split_long_text(text: str) -> list[str]:
+    sentences = re.split(r"(?<=[.!?])\s+", text)
     chunks: list[str] = []
     current = ""
     for sent in sentences:
@@ -153,13 +226,13 @@ def _split_long_para(para: str) -> list[str]:
             current = sent
     if current:
         chunks.append(current)
-    return chunks
+    return chunks if chunks else [text[:CHUNK_MAX]]
 
 
 # ── Stage 5: Embed ───────────────────────────────────────────────────────────
 
 async def embed_chunks(texts: list[str]) -> list[list[float]]:
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(timeout=60.0) as client:
         resp = await client.post(
             f"{settings.embeddings_url}/embed",
             json={"texts": texts},
@@ -174,7 +247,7 @@ async def index_document(
     db: AsyncSession,
     raw: RawFile,
     sha256: str,
-    chunks: list[str],
+    chunks: list[ChunkMeta],
     embeddings: list[list[float]],
     file_path: str,
     job_id: str,
@@ -190,18 +263,20 @@ async def index_document(
     db.add(doc)
     await db.flush()
 
-    for i, (text, embedding) in enumerate(zip(chunks, embeddings)):
-        chunk = Chunk(
+    for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
+        db.add(Chunk(
             id=uuid.uuid4(),
             document_id=doc.id,
             chunk_index=i,
-            text=text,
+            text=chunk.text,
+            page=chunk.page,
+            section=chunk.section,
             embedding=embedding,
-        )
-        db.add(chunk)
+        ))
 
     await db.commit()
-    logger.info("document_indexed", document_id=str(doc.id), filename=raw.filename, chunks=len(chunks), job_id=job_id)
+    logger.info("document_indexed", document_id=str(doc.id), filename=raw.filename,
+                chunks=len(chunks), job_id=job_id)
     return doc
 
 
@@ -218,37 +293,37 @@ async def process_file(
     if not ok:
         return FileResult(filename=raw.filename, status="rejected", reason=reason)
 
-    # Idempotency check
+    # Idempotency by SHA-256
     sha256 = compute_sha256(raw.content)
     existing = await db.execute(select(Document).where(Document.sha256 == sha256))
     if existing.scalar_one_or_none():
         return FileResult(filename=raw.filename, status="rejected", reason="DUPLICATE")
 
     try:
-        # Stage 2: Extract
-        text = extract_text(raw)
-        if not text.strip():
+        # Stage 2: Extract (page-aware)
+        pages = extract_pages(raw)
+        if not pages:
             return FileResult(filename=raw.filename, status="rejected", reason="EMPTY_CONTENT")
 
-        # Stage 3: Normalize
-        text = normalize(text)
-        if has_suspicious_patterns(text):
-            logger.warning("suspicious_content_detected", filename=raw.filename, job_id=job_id)
-
-        # Stage 4: Chunk
-        chunks = chunk_text(text)
+        # Stage 3+4: Normalize + Chunk
+        chunks = chunk_pages(pages)
         if not chunks:
             return FileResult(filename=raw.filename, status="failed", reason="CHUNKING_FAILED")
 
-        # Stage 5: Embed
-        embeddings = await embed_chunks(chunks)
+        # Stage 5: Embed (in batches of 64 to avoid timeout)
+        all_embeddings: list[list[float]] = []
+        batch_size = 64
+        texts = [c.text for c in chunks]
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i: i + batch_size]
+            all_embeddings.extend(await embed_chunks(batch))
 
-        # Save file to corpus dir
+        # Save raw file to corpus
         file_path = str(corpus_dir / raw.filename)
         (corpus_dir / raw.filename).write_bytes(raw.content)
 
         # Stage 6: Index
-        doc = await index_document(db, raw, sha256, chunks, embeddings, file_path, job_id)
+        doc = await index_document(db, raw, sha256, chunks, all_embeddings, file_path, job_id)
 
         return FileResult(
             filename=raw.filename,
@@ -286,9 +361,9 @@ async def run_ingestion_job(
 
     job.accepted_files = accepted
     job.rejected_files = rejected
-    job.status = "completed" if not rejected or accepted else "completed_with_errors"
-    if not accepted and rejected:
-        job.status = "failed"
+    job.status = "completed" if accepted and not rejected else (
+        "completed_with_errors" if accepted else "failed"
+    )
     job.completed_at = datetime.utcnow()
     await db.commit()
 
