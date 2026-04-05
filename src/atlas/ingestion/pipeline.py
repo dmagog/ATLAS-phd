@@ -219,7 +219,14 @@ def _split_long_text(text: str) -> list[str]:
     chunks: list[str] = []
     current = ""
     for sent in sentences:
-        if len(current) + len(sent) + 1 <= CHUNK_MAX:
+        # Sentence itself exceeds limit (formulas, tables, no punctuation) — force-split by chars
+        if len(sent) > CHUNK_MAX:
+            if current:
+                chunks.append(current)
+                current = ""
+            for i in range(0, len(sent), CHUNK_MAX):
+                chunks.append(sent[i: i + CHUNK_MAX])
+        elif len(current) + len(sent) + 1 <= CHUNK_MAX:
             current = (current + " " + sent).strip()
         else:
             if current:
