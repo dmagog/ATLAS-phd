@@ -43,7 +43,7 @@ services:
     volumes:
       - ./corpus:/app/corpus
     ports:
-      - "8000:8000"
+      - "8731:8731"
     depends_on:
       postgres:
         condition: service_healthy
