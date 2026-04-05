@@ -16,8 +16,8 @@ class Settings(BaseSettings):
     request_timeout_ms: int = 25000
     retriever_top_k: int = 8
     retriever_max_chunks_in_prompt: int = 4
-    retriever_min_top1_score: float = 0.70
-    retriever_min_score_threshold: float = 0.60
+    retriever_min_top1_score: float = 0.62
+    retriever_min_score_threshold: float = 0.55
     retriever_min_chunks_above_threshold: int = 2
 
 
