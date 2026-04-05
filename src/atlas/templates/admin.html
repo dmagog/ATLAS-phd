@@ -18,14 +18,28 @@
 </div>
 
 <!-- Progress card -->
+<style>
+@keyframes indeterminate {
+  0%   { left: -40%; width: 40%; }
+  60%  { left: 60%;  width: 40%; }
+  100% { left: 100%; width: 0%;  }
+}
+.bar-indeterminate { position:relative; overflow:hidden; }
+.bar-indeterminate::after {
+  content:''; position:absolute; top:0; height:100%;
+  background:#2563eb; border-radius:4px;
+  animation: indeterminate 1.4s ease-in-out infinite;
+}
+</style>
 <div id="progress-card" class="card hidden">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
     <h3 style="font-size:.95rem">Обработка файлов</h3>
     <span id="progress-status-label" style="font-size:.82rem;color:#6b7280"></span>
   </div>
-  <div style="height:8px;background:#e5e7eb;border-radius:4px;margin-bottom:14px;overflow:hidden">
+  <div id="progress-track" style="height:8px;background:#e5e7eb;border-radius:4px;margin-bottom:6px;overflow:hidden">
     <div id="progress-bar" style="height:100%;background:#2563eb;border-radius:4px;width:0%;transition:width .4s"></div>
   </div>
+  <div id="progress-hint" style="font-size:.78rem;color:#9ca3af;margin-bottom:12px"></div>
   <div id="accepted-list"></div>
   <div id="rejected-list"></div>
 </div>
@@ -84,9 +98,10 @@ document.getElementById('upload-btn').addEventListener('click', async () => {
 
 // ── Polling ───────────────────────────────────────────────────────────────────
 function startPolling(jobId, totalFiles) {
-  const progressCard = document.getElementById('progress-card');
-  progressCard.classList.remove('hidden');
-  setProgressBar(10); // show activity immediately
+  document.getElementById('progress-card').classList.remove('hidden');
+  setBarIndeterminate(true);
+  document.getElementById('progress-hint').textContent =
+    'Идёт извлечение текста, разбивка на чанки и построение эмбеддингов — это займёт несколько м��нут…';
 
   if (pollInterval) clearInterval(pollInterval);
   pollInterval = setInterval(() => pollJob(jobId, totalFiles), 2000);
@@ -101,20 +116,28 @@ async function pollJob(jobId, totalFiles) {
     const data = await res.json();
 
     const done = data.accepted_files.length + data.rejected_files.length;
-    const pct = totalFiles > 0 ? Math.max(10, Math.round(done / totalFiles * 100)) : 50;
     const terminal = ['completed', 'completed_with_errors', 'failed'].includes(data.status);
 
-    setProgressBar(terminal ? 100 : pct);
     document.getElementById('progress-status-label').textContent = statusLabel(data.status);
     renderFileLists(data.accepted_files, data.rejected_files);
 
     if (terminal) {
+      setBarIndeterminate(false);
+      setBarPct(100);
+      document.getElementById('progress-hint').textContent = '';
       clearInterval(pollInterval);
       pollInterval = null;
       document.getElementById('upload-btn').disabled = false;
       document.getElementById('upload-status').textContent = '';
-      await loadDocuments(); // refresh list after completion
+      await loadDocuments();
+    } else if (done > 0 && totalFiles > 0) {
+      // Some files already done — show real progress
+      setBarIndeterminate(false);
+      setBarPct(Math.round(done / totalFiles * 100));
+      document.getElementById('progress-hint').textContent =
+        `Обработано файлов: ${done} из ${totalFiles}`;
     }
+    // else: still indeterminate — keep animation
   } catch (e) { /* ignore transient errors */ }
 }
 
@@ -124,7 +147,18 @@ function statusLabel(s) {
            failed: '✗ Ошибка' }[s] || s;
 }
 
-function setProgressBar(pct) {
+function setBarIndeterminate(on) {
+  const track = document.getElementById('progress-track');
+  const bar   = document.getElementById('progress-bar');
+  if (on) {
+    track.classList.add('bar-indeterminate');
+    bar.style.width = '0%';
+  } else {
+    track.classList.remove('bar-indeterminate');
+  }
+}
+
+function setBarPct(pct) {
   document.getElementById('progress-bar').style.width = pct + '%';
 }
 
