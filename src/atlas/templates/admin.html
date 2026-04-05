@@ -1,35 +1,59 @@
 {% extends "base.html" %}
-{% block title %}Загрузка материалов{% endblock %}
+{% block title %}Материалы{% endblock %}
 {% block content %}
+
+<!-- Upload card -->
 <div class="card">
   <h2 style="font-size:1rem;margin-bottom:14px">Загрузка учебных материалов</h2>
   <p style="font-size:.88rem;color:#6b7280;margin-bottom:16px">
-    Поддерживаемые форматы: PDF, DOCX, TXT, MD, <b>JSONL</b> (постраничный формат — лучшие цитаты). Максимум 20 файлов за раз.
+    Форматы: PDF, DOCX, TXT, MD, <b>JSONL</b> (постраничный — точные цитаты).
+    Повторные файлы определяются автоматически по контрольной сумме и пропускаются.
   </p>
   <input type="file" id="file-input" multiple accept=".pdf,.docx,.txt,.md,.jsonl" style="margin-bottom:12px">
-  <div style="display:flex;gap:8px;align-items:center">
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
     <button class="btn-primary" id="upload-btn">Загрузить</button>
     <span id="upload-status" style="font-size:.85rem;color:#6b7280"></span>
   </div>
   <div id="upload-error" class="error hidden" style="margin-top:8px"></div>
 </div>
 
-<div id="results-card" class="card hidden">
-  <h3 style="font-size:.95rem;margin-bottom:12px">Результат загрузки</h3>
+<!-- Progress card -->
+<div id="progress-card" class="card hidden">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+    <h3 style="font-size:.95rem">Обработка файлов</h3>
+    <span id="progress-status-label" style="font-size:.82rem;color:#6b7280"></span>
+  </div>
+  <div style="height:8px;background:#e5e7eb;border-radius:4px;margin-bottom:14px;overflow:hidden">
+    <div id="progress-bar" style="height:100%;background:#2563eb;border-radius:4px;width:0%;transition:width .4s"></div>
+  </div>
   <div id="accepted-list"></div>
   <div id="rejected-list"></div>
 </div>
+
+<!-- Documents list -->
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+    <h3 style="font-size:.95rem">Загруженные материалы</h3>
+    <button class="btn-secondary" id="refresh-docs-btn" style="padding:4px 12px;font-size:.82rem">↻ Обновить</button>
+  </div>
+  <div id="documents-list"><p style="font-size:.85rem;color:#9ca3af">Загрузка...</p></div>
+</div>
+
 {% endblock %}
 {% block scripts %}
 <script>
+let pollInterval = null;
+
+// ── Upload ────────────────────────────────────────────────────────────────────
 document.getElementById('upload-btn').addEventListener('click', async () => {
   const files = document.getElementById('file-input').files;
   if (!files.length) return;
   const btn = document.getElementById('upload-btn');
-  const status = document.getElementById('upload-status');
+  const statusEl = document.getElementById('upload-status');
   const errEl = document.getElementById('upload-error');
-  btn.disabled = true; errEl.classList.add('hidden');
-  status.textContent = `Загружаю ${files.length} файл(ов)...`;
+  btn.disabled = true;
+  errEl.classList.add('hidden');
+  statusEl.textContent = `Передаю ${files.length} файл(ов)...`;
 
   const form = new FormData();
   for (const f of files) form.append('files', f);
@@ -37,47 +61,146 @@ document.getElementById('upload-btn').addEventListener('click', async () => {
   try {
     const res = await fetch('/admin/ingestion-jobs', {
       method: 'POST',
-      headers: {'Authorization': 'Bearer ' + getToken()},
+      headers: { 'Authorization': 'Bearer ' + getToken() },
       body: form,
     });
     const data = await res.json();
     if (!res.ok) {
-      errEl.textContent = data.detail || 'Ошибка загрузки (нет прав администратора?)';
+      errEl.textContent = data.detail || 'Ошибка (нет прав администратора?)';
       errEl.classList.remove('hidden');
-      status.textContent = '';
-    } else {
-      status.textContent = `Статус задачи: ${data.status}`;
-      renderResults(data);
+      statusEl.textContent = '';
+      btn.disabled = false;
+      return;
     }
-  } catch(e) {
-    errEl.textContent = 'Ошибка соединения.'; errEl.classList.remove('hidden'); status.textContent='';
+    statusEl.textContent = `Задача создана, обрабатывается...`;
+    startPolling(data.job_id, data.file_count);
+  } catch (e) {
+    errEl.textContent = 'Ошибка соединения.';
+    errEl.classList.remove('hidden');
+    statusEl.textContent = '';
+    btn.disabled = false;
   }
-  btn.disabled = false;
 });
 
-function renderResults(data) {
-  const card = document.getElementById('results-card');
-  card.classList.remove('hidden');
+// ── Polling ───────────────────────────────────────────────────────────────────
+function startPolling(jobId, totalFiles) {
+  const progressCard = document.getElementById('progress-card');
+  progressCard.classList.remove('hidden');
+  setProgressBar(10); // show activity immediately
 
-  const acc = data.accepted_files || [];
-  const rej = data.rejected_files || [];
+  if (pollInterval) clearInterval(pollInterval);
+  pollInterval = setInterval(() => pollJob(jobId, totalFiles), 2000);
+}
 
-  document.getElementById('accepted-list').innerHTML = acc.length
-    ? `<div style="margin-bottom:10px"><b style="color:#16a34a">✓ Принято (${acc.length})</b>`
-      + acc.map(f => `<div style="font-size:.85rem;padding:4px 0;border-bottom:1px solid #f0fdf4">
-        ${f.filename} — ${f.chunks_created ?? '?'} чанков
-        <span class="tag" style="background:#dcfce7;color:#166534">${f.document_id ? 'indexed' : 'ok'}</span>
-      </div>`).join('') + '</div>'
+async function pollJob(jobId, totalFiles) {
+  try {
+    const res = await fetch(`/admin/ingestion-jobs/${jobId}`, {
+      headers: { 'Authorization': 'Bearer ' + getToken() },
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+
+    const done = data.accepted_files.length + data.rejected_files.length;
+    const pct = totalFiles > 0 ? Math.max(10, Math.round(done / totalFiles * 100)) : 50;
+    const terminal = ['completed', 'completed_with_errors', 'failed'].includes(data.status);
+
+    setProgressBar(terminal ? 100 : pct);
+    document.getElementById('progress-status-label').textContent = statusLabel(data.status);
+    renderFileLists(data.accepted_files, data.rejected_files);
+
+    if (terminal) {
+      clearInterval(pollInterval);
+      pollInterval = null;
+      document.getElementById('upload-btn').disabled = false;
+      document.getElementById('upload-status').textContent = '';
+      await loadDocuments(); // refresh list after completion
+    }
+  } catch (e) { /* ignore transient errors */ }
+}
+
+function statusLabel(s) {
+  return { created: 'В очереди…', running: 'Обрабатывается…',
+           completed: '✓ Завершено', completed_with_errors: '⚠ Завершено с ошибками',
+           failed: '✗ Ошибка' }[s] || s;
+}
+
+function setProgressBar(pct) {
+  document.getElementById('progress-bar').style.width = pct + '%';
+}
+
+// ── File lists ────────────────────────────────────────────────────────────────
+function renderFileLists(accepted, rejected) {
+  document.getElementById('accepted-list').innerHTML = accepted.length
+    ? `<div style="margin-bottom:10px">
+        <b style="color:#16a34a;font-size:.88rem">✓ Принято (${accepted.length})</b>` +
+      accepted.map(f =>
+        `<div style="font-size:.82rem;padding:3px 0;border-bottom:1px solid #f0fdf4;display:flex;justify-content:space-between">
+          <span>${f.filename}</span>
+          <span style="color:#6b7280">${f.chunks_created != null ? f.chunks_created + ' чанков' : ''}</span>
+        </div>`
+      ).join('') + '</div>'
     : '';
 
-  document.getElementById('rejected-list').innerHTML = rej.length
-    ? `<div><b style="color:#dc2626">✗ Отклонено (${rej.length})</b>`
-      + rej.map(f => `<div style="font-size:.85rem;padding:4px 0;border-bottom:1px solid #fef2f2">
-        ${f.filename} — <span style="color:#dc2626">${f.reason || 'unknown'}</span>
-      </div>`).join('') + '</div>'
+  document.getElementById('rejected-list').innerHTML = rejected.length
+    ? `<div>
+        <b style="color:#dc2626;font-size:.88rem">✗ Пропущено / ошибка (${rejected.length})</b>` +
+      rejected.map(f =>
+        `<div style="font-size:.82rem;padding:3px 0;border-bottom:1px solid #fef2f2;display:flex;justify-content:space-between">
+          <span>${f.filename}</span>
+          <span style="color:#dc2626">${reasonLabel(f.reason)}</span>
+        </div>`
+      ).join('') + '</div>'
     : '';
 }
 
-function onAuthReady() {}
+function reasonLabel(r) {
+  return { DUPLICATE: 'уже загружен', UNSUPPORTED_FORMAT: 'формат не поддерживается',
+           EMPTY_FILE: 'пустой файл', EMPTY_CONTENT: 'нет текста',
+           PROCESSING_ERROR: 'ошибка обработки', CHUNKING_FAILED: 'ошибка разбивки' }[r] || r || '';
+}
+
+// ── Documents list ────────────────────────────────────────────────────────────
+async function loadDocuments() {
+  const container = document.getElementById('documents-list');
+  try {
+    const res = await fetch('/admin/documents', {
+      headers: { 'Authorization': 'Bearer ' + getToken() },
+    });
+    if (!res.ok) { container.innerHTML = '<p style="font-size:.85rem;color:#dc2626">Ошибка загрузки списка.</p>'; return; }
+    const docs = await res.json();
+    if (!docs.length) {
+      container.innerHTML = '<p style="font-size:.85rem;color:#9ca3af">Материалы ещё не загружены.</p>';
+      return;
+    }
+    container.innerHTML = `
+      <table style="width:100%;border-collapse:collapse;font-size:.85rem">
+        <thead>
+          <tr style="border-bottom:2px solid #e5e7eb;color:#6b7280">
+            <th style="text-align:left;padding:6px 4px">Название</th>
+            <th style="text-align:left;padding:6px 4px">Файл</th>
+            <th style="text-align:right;padding:6px 4px">Чанков</th>
+            <th style="text-align:right;padding:6px 4px">Загружен</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${docs.map(d => `
+            <tr style="border-bottom:1px solid #f3f4f6">
+              <td style="padding:6px 4px;font-weight:500">${d.title}</td>
+              <td style="padding:6px 4px;color:#6b7280;font-size:.8rem">${d.filename}</td>
+              <td style="padding:6px 4px;text-align:right">
+                <span class="tag">${d.chunk_count}</span>
+              </td>
+              <td style="padding:6px 4px;text-align:right;color:#9ca3af">${d.created_at}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`;
+  } catch (e) {
+    container.innerHTML = '<p style="font-size:.85rem;color:#dc2626">Ошибка соединения.</p>';
+  }
+}
+
+document.getElementById('refresh-docs-btn').addEventListener('click', loadDocuments);
+
+function onAuthReady() { loadDocuments(); }
 </script>
 {% endblock %}
