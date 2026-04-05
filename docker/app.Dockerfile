@@ -9,4 +9,4 @@ COPY src/ src/
 COPY alembic.ini .
 COPY alembic/ alembic/
 
-CMD ["uvicorn", "atlas.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "atlas.api.main:app", "--host", "0.0.0.0", "--port", "8731"]
