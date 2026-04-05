@@ -4,6 +4,7 @@ from atlas.core.logging import configure_logging
 from atlas.db.session import AsyncSessionLocal
 from atlas.api.startup import seed_admin
 from atlas.api.routers import auth, admin
+from atlas.llm.client import llm_client
 
 
 @asynccontextmanager
@@ -12,6 +13,7 @@ async def lifespan(app: FastAPI):
     async with AsyncSessionLocal() as db:
         await seed_admin(db)
     yield
+    await llm_client.close()
 
 
 app = FastAPI(title="ATLAS phd", version="0.1.0", lifespan=lifespan)
