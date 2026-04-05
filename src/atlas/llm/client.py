@@ -62,6 +62,22 @@ class LLMClient:
         resp.raise_for_status()
 
         data = resp.json()
+
+        # OpenRouter free-tier can return {"error": {...}} instead of {"choices": [...]}
+        if "error" in data:
+            err = data["error"]
+            code = err.get("code", 0)
+            msg = err.get("message", str(err))
+            logger.warning("llm_api_error", code=code, message=msg, request_id=request_id)
+            # Treat rate-limit errors as retriable
+            if code in (429, 503) or "rate" in msg.lower():
+                raise httpx.HTTPStatusError(msg, request=resp.request, response=resp)
+            raise RuntimeError(f"LLM API error {code}: {msg}")
+
+        if not data.get("choices"):
+            logger.error("llm_empty_choices", response_keys=list(data.keys()), request_id=request_id)
+            raise RuntimeError(f"LLM returned no choices: {list(data.keys())}")
+
         content = data["choices"][0]["message"]["content"]
         usage = data.get("usage", {})
         logger.info(
