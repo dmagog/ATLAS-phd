@@ -353,14 +353,21 @@ async def run_ingestion_job(
     corpus_dir: Path,
 ) -> IngestionJob:
     job.status = "running"
+    job.accepted_files = []
+    job.rejected_files = []
     await db.commit()
 
-    accepted = []
-    rejected = []
+    accepted: list[dict] = []
+    rejected: list[dict] = []
+    total = len(files)
 
-    for raw in files:
+    for idx, raw in enumerate(files, 1):
+        logger.info("ingestion_file_start", filename=raw.filename,
+                    progress=f"{idx}/{total}", job_id=str(job.id))
+
         result = await process_file(db, raw, corpus_dir, str(job.id))
         entry = {"filename": result.filename, "reason": result.reason}
+
         if result.status in ("processed", "accepted"):
             entry["document_id"] = result.document_id
             entry["chunks_created"] = result.chunks_created
@@ -368,8 +375,17 @@ async def run_ingestion_job(
         else:
             rejected.append(entry)
 
-    job.accepted_files = accepted
-    job.rejected_files = rejected
+        # Commit partial progress after every file so polling sees live state
+        from sqlalchemy.orm.attributes import flag_modified
+        job.accepted_files = list(accepted)
+        job.rejected_files = list(rejected)
+        flag_modified(job, "accepted_files")
+        flag_modified(job, "rejected_files")
+        await db.commit()
+
+        logger.info("ingestion_file_done", filename=raw.filename,
+                    status=result.status, progress=f"{idx}/{total}", job_id=str(job.id))
+
     job.status = "completed" if accepted and not rejected else (
         "completed_with_errors" if accepted else "failed"
     )
