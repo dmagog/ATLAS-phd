@@ -121,6 +121,11 @@ async function pollJob(jobId, totalFiles) {
     document.getElementById('progress-status-label').textContent = statusLabel(data.status);
     renderFileLists(data.accepted_files, data.rejected_files);
 
+    // Update progress hint from pipeline stage info
+    if (data.progress_info && !terminal) {
+      document.getElementById('progress-hint').textContent = stageLabel(data.progress_info);
+    }
+
     if (terminal) {
       setBarIndeterminate(false);
       setBarPct(100);
@@ -131,13 +136,9 @@ async function pollJob(jobId, totalFiles) {
       document.getElementById('upload-status').textContent = '';
       await loadDocuments();
     } else if (done > 0 && totalFiles > 0) {
-      // Some files already done — show real progress
       setBarIndeterminate(false);
       setBarPct(Math.round(done / totalFiles * 100));
-      document.getElementById('progress-hint').textContent =
-        `Обработано файлов: ${done} из ${totalFiles}`;
     }
-    // else: still indeterminate — keep animation
   } catch (e) { /* ignore transient errors */ }
 }
 
@@ -145,6 +146,18 @@ function statusLabel(s) {
   return { created: 'В очереди…', running: 'Обрабатывается…',
            completed: '✓ Завершено', completed_with_errors: '⚠ Завершено с ошибками',
            failed: '✗ Ошибка' }[s] || s;
+}
+
+function stageLabel(p) {
+  if (!p) return '';
+  const f = p.file || '';
+  switch (p.stage) {
+    case 'extract': return `📄 ${f} — извлечение текста…`;
+    case 'chunk':   return `✂️ ${f} — разбивка: ${p.pages} стр. → ${p.chunks} чанков`;
+    case 'embed':   return `🔢 ${f} — эмбеддинги: батч ${p.batch} из ${p.total_batches} (${p.chunks} чанков)`;
+    case 'index':   return `💾 ${f} — запись в базу…`;
+    default:        return `⏳ ${f} — ${p.stage}`;
+  }
 }
 
 function setBarIndeterminate(on) {

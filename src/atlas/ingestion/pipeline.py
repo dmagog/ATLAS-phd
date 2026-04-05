@@ -306,6 +306,7 @@ async def process_file(
     raw: RawFile,
     corpus_dir: Path,
     job_id: str,
+    job: "IngestionJob | None" = None,
 ) -> FileResult:
     # Stage 1: Accept
     ok, reason = accept_file(raw)
@@ -318,22 +319,37 @@ async def process_file(
     if existing.scalar_one_or_none():
         return FileResult(filename=raw.filename, status="rejected", reason="DUPLICATE")
 
+    async def _set_progress(stage: str, **kw) -> None:
+        if job is None:
+            return
+        from sqlalchemy.orm.attributes import flag_modified
+        job.progress_info = {"stage": stage, "file": raw.filename, **kw}
+        flag_modified(job, "progress_info")
+        await db.commit()
+
     try:
         # Stage 2+3+4: Extract / Normalize / Chunk — run in thread to not block event loop
+        await _set_progress("extract")
         pages, chunks = await asyncio.to_thread(_extract_and_chunk, raw)
         if not pages:
             return FileResult(filename=raw.filename, status="rejected", reason="EMPTY_CONTENT")
         if not chunks:
             return FileResult(filename=raw.filename, status="failed", reason="CHUNKING_FAILED")
 
+        await _set_progress("chunk", pages=len(pages), chunks=len(chunks))
+
         # Stage 5: Embed in batches of 64, yielding between batches
         all_embeddings: list[list[float]] = []
         batch_size = 64
         texts = [c.text for c in chunks]
+        total_batches = (len(texts) + batch_size - 1) // batch_size
         for i in range(0, len(texts), batch_size):
+            batch_num = i // batch_size + 1
+            await _set_progress("embed", batch=batch_num, total_batches=total_batches, chunks=len(chunks))
             all_embeddings.extend(await embed_chunks(texts[i: i + batch_size]))
-            await asyncio.sleep(0)  # yield to event loop between batches
+            await asyncio.sleep(0)
 
+        await _set_progress("index", chunks=len(chunks))
         # Save raw file to corpus (in thread — file I/O)
         file_path = str(corpus_dir / raw.filename)
         await asyncio.to_thread((corpus_dir / raw.filename).write_bytes, raw.content)
@@ -372,7 +388,7 @@ async def run_ingestion_job(
         logger.info("ingestion_file_start", filename=raw.filename,
                     progress=f"{idx}/{total}", job_id=str(job.id))
 
-        result = await process_file(db, raw, corpus_dir, str(job.id))
+        result = await process_file(db, raw, corpus_dir, str(job.id), job=job)
         entry = {"filename": result.filename, "reason": result.reason}
 
         if result.status in ("processed", "accepted"):

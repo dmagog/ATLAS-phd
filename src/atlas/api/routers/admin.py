@@ -30,6 +30,7 @@ class IngestionJobStatusResponse(BaseModel):
     status: str
     accepted_files: list
     rejected_files: list
+    progress_info: dict | None = None
 
 
 class DocumentInfo(BaseModel):
@@ -100,6 +101,7 @@ async def get_ingestion_job(
         status=job.status,
         accepted_files=job.accepted_files or [],
         rejected_files=job.rejected_files or [],
+        progress_info=job.progress_info,
     )
 
 
