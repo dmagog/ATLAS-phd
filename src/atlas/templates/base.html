@@ -11,6 +11,8 @@
     header h1 { font-size: 1.1rem; font-weight: 600; }
     nav a { color: #a0b4d0; text-decoration: none; font-size: 0.9rem; padding: 4px 10px; border-radius: 4px; }
     nav a:hover, nav a.active { background: #2a2a4e; color: #fff; }
+    nav a.admin-link { color: #fbbf24; }
+    nav a.admin-link:hover, nav a.admin-link.active { background: #78350f; color: #fef3c7; }
     .container { max-width: 860px; margin: 0 auto; padding: 24px 16px; }
     .card { background: #fff; border-radius: 10px; padding: 20px; box-shadow: 0 1px 4px rgba(0,0,0,.08); margin-bottom: 16px; }
     input, textarea, select { width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.95rem; }
@@ -37,7 +39,7 @@
   <nav>
     <a href="/" id="nav-qa">Q&amp;A</a>
     <a href="/self-check" id="nav-sc">Самопроверка</a>
-    <a href="/admin" id="nav-admin">Загрузка материалов</a>
+    <a href="/admin" id="nav-admin" class="admin-link">⚙ Материалы</a>
   </nav>
   <span id="auth-bar">
     <span id="user-label"></span>
