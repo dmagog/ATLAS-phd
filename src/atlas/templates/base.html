@@ -80,6 +80,7 @@ async function checkAuth() {
   if (!token) { showLogin(); return; }
   document.getElementById('login-overlay').classList.add('hidden');
   document.getElementById('user-label').textContent = localStorage.getItem(EMAIL_KEY) || '';
+  if (typeof onAuthReady === 'function') onAuthReady();
 }
 
 function showLogin() {

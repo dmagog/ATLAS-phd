@@ -6,6 +6,7 @@ Supported formats:
   - JSONL               — page-aware format: {"page": N, "text": "...", "source_pdf": "..."}
                           Preserves page numbers in chunk metadata for accurate citations.
 """
+import asyncio
 import hashlib
 import io
 import json
@@ -229,6 +230,17 @@ def _split_long_text(text: str) -> list[str]:
     return chunks if chunks else [text[:CHUNK_MAX]]
 
 
+# ── Thread-safe extract+chunk helper ─────────────────────────────────────────
+
+def _extract_and_chunk(raw: RawFile) -> tuple[list[ChunkMeta], list[ChunkMeta]]:
+    """Synchronous extract + chunk — safe to run in asyncio.to_thread."""
+    pages = extract_pages(raw)
+    if not pages:
+        return [], []
+    chunks = chunk_pages(pages)
+    return pages, chunks
+
+
 # ── Stage 5: Embed ───────────────────────────────────────────────────────────
 
 async def embed_chunks(texts: list[str]) -> list[list[float]]:
@@ -300,27 +312,24 @@ async def process_file(
         return FileResult(filename=raw.filename, status="rejected", reason="DUPLICATE")
 
     try:
-        # Stage 2: Extract (page-aware)
-        pages = extract_pages(raw)
+        # Stage 2+3+4: Extract / Normalize / Chunk — run in thread to not block event loop
+        pages, chunks = await asyncio.to_thread(_extract_and_chunk, raw)
         if not pages:
             return FileResult(filename=raw.filename, status="rejected", reason="EMPTY_CONTENT")
-
-        # Stage 3+4: Normalize + Chunk
-        chunks = chunk_pages(pages)
         if not chunks:
             return FileResult(filename=raw.filename, status="failed", reason="CHUNKING_FAILED")
 
-        # Stage 5: Embed (in batches of 64 to avoid timeout)
+        # Stage 5: Embed in batches of 64, yielding between batches
         all_embeddings: list[list[float]] = []
         batch_size = 64
         texts = [c.text for c in chunks]
         for i in range(0, len(texts), batch_size):
-            batch = texts[i: i + batch_size]
-            all_embeddings.extend(await embed_chunks(batch))
+            all_embeddings.extend(await embed_chunks(texts[i: i + batch_size]))
+            await asyncio.sleep(0)  # yield to event loop between batches
 
-        # Save raw file to corpus
+        # Save raw file to corpus (in thread — file I/O)
         file_path = str(corpus_dir / raw.filename)
-        (corpus_dir / raw.filename).write_bytes(raw.content)
+        await asyncio.to_thread((corpus_dir / raw.filename).write_bytes, raw.content)
 
         # Stage 6: Index
         doc = await index_document(db, raw, sha256, chunks, all_embeddings, file_path, job_id)
