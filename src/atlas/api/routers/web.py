@@ -9,14 +9,14 @@ router = APIRouter(tags=["web"])
 
 @router.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="index.html")
 
 
 @router.get("/self-check", response_class=HTMLResponse)
 async def selfcheck_page(request: Request):
-    return templates.TemplateResponse("selfcheck.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="selfcheck.html")
 
 
 @router.get("/admin", response_class=HTMLResponse)
 async def admin_page(request: Request):
-    return templates.TemplateResponse("admin.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="admin.html")
