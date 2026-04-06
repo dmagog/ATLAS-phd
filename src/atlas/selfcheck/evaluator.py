@@ -47,18 +47,35 @@ class EvaluationPayload:
 _SYSTEM_PROMPT = """You are an academic exam evaluator for PhD-level study.
 Evaluate the student's answers against the questions provided.
 
-Scoring rubric (0-5 scale for each criterion):
-- correctness (40%): factual accuracy of the answer
-- completeness (30%): how fully the question is answered
-- logic (20%): quality of reasoning and argumentation
-- terminology (10%): correct use of domain-specific terms
+SCORING RUBRIC — four weighted criteria, each scored 0-5:
+- correctness  (weight 40%): factual accuracy
+- completeness (weight 30%): how fully the question is answered
+- logic        (weight 20%): quality of reasoning and argumentation
+- terminology  (weight 10%): correct use of domain-specific terms
 
-For multiple-choice questions: score 5 if correct, 0 if wrong.
-For open-ended questions: score each criterion 0-5.
+overall_score = correctness*0.40 + completeness*0.30 + logic*0.20 + terminology*0.10
+
+QUESTION TYPE RULES:
+
+multiple_choice questions:
+  - per-question score: 1.0 if the student chose the correct option, 0.0 otherwise
+  - status: "correct" or "incorrect" (never "partial")
+  - MC answers count only toward the CORRECTNESS criterion; do NOT penalise completeness/logic/terminology for MC
+
+open_ended questions:
+  - per-question score: weighted average of the four criteria for that answer (0-5)
+  - status: "correct" (score >= 4), "partial" (score >= 2), "incorrect" (score < 2)
+  - evaluate all four criteria
+
+CRITERION SCORES (holistic, across the whole attempt):
+  - correctness:  combine MC accuracy AND open-ended correctness
+  - completeness: based only on open-ended answers
+  - logic:        based only on open-ended answers
+  - terminology:  based only on open-ended answers
 
 Return a JSON object with this exact structure:
 {
-  "overall_score": <weighted average 0-5>,
+  "overall_score": <0-5, weighted criterion average>,
   "criterion_scores": {
     "correctness": <0-5>,
     "completeness": <0-5>,
@@ -66,8 +83,8 @@ Return a JSON object with this exact structure:
     "terminology": <0-5>
   },
   "question_results": [
-    {"question_id": "q1", "type": "multiple_choice", "score": <0-5>, "status": "correct|partial|incorrect"},
-    ...
+    {"question_id": "q1", "type": "multiple_choice", "score": <1.0 or 0.0>, "status": "correct|incorrect"},
+    {"question_id": "q2", "type": "open_ended",      "score": <0-5>,        "status": "correct|partial|incorrect"}
   ],
   "error_tags": ["terminology", "incomplete", "logic_gap"],
   "confidence": <0.0-1.0>,
@@ -131,12 +148,14 @@ async def evaluate_answers(
     raw = await llm_client.chat(
         messages=messages,
         temperature=0.1,
-        max_tokens=1500,
+        max_tokens=4096,
         request_id=request_id,
     )
 
     start = raw.find("{")
     end = raw.rfind("}") + 1
+    if start == -1 or end == 0:
+        raise ValueError(f"LLM returned no JSON object. Raw response: {raw[:200]!r}")
     data = json.loads(raw[start:end])
 
     if not _validate_payload(data):
