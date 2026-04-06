@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     retriever_min_top1_score: float = 0.62
     retriever_min_score_threshold: float = 0.55
     retriever_min_chunks_above_threshold: int = 2
+    retriever_hybrid_rrf_k: int = 60  # RRF constant (standard value)
 
 
 settings = Settings()

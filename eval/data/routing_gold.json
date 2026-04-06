@@ -1,0 +1,22 @@
+[
+  {"id": "r01", "message": "Что такое дифракция света?", "expected_route": "qa"},
+  {"id": "r02", "message": "Объясни принцип Гюйгенса-Френеля", "expected_route": "qa"},
+  {"id": "r03", "message": "Что такое интерференция?", "expected_route": "qa"},
+  {"id": "r04", "message": "Как работает лазер?", "expected_route": "qa"},
+  {"id": "r05", "message": "What is diffraction?", "expected_route": "qa"},
+  {"id": "r06", "message": "Explain the Rayleigh criterion", "expected_route": "qa"},
+  {"id": "r07", "message": "Какова физическая природа света?", "expected_route": "qa"},
+  {"id": "r08", "message": "Что такое голография?", "expected_route": "qa"},
+  {"id": "r09", "message": "What is the refractive index?", "expected_route": "qa"},
+  {"id": "r10", "message": "Опиши поляризацию волн", "expected_route": "qa"},
+  {"id": "r11", "message": "Проверь меня по теме дифракции", "expected_route": "self_check"},
+  {"id": "r12", "message": "Хочу самопроверку по интерференции", "expected_route": "self_check"},
+  {"id": "r13", "message": "Протестируй мои знания по оптике", "expected_route": "self_check"},
+  {"id": "r14", "message": "Сделай quiz по теме поляризации", "expected_route": "self_check"},
+  {"id": "r15", "message": "Test me on laser physics", "expected_route": "self_check"},
+  {"id": "r16", "message": "Check my knowledge of holography", "expected_route": "self_check"},
+  {"id": "r17", "message": "Хочу проверить себя по теме когерентности", "expected_route": "self_check"},
+  {"id": "r18", "message": "Начни самопроверку по геометрической оптике", "expected_route": "self_check"},
+  {"id": "r19", "message": "оптика", "expected_route": "clarify"},
+  {"id": "r20", "message": "помоги", "expected_route": "clarify"}
+]

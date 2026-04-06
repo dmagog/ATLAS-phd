@@ -20,14 +20,31 @@
 - `chunk_overlap`: `100-200` символов;
 - chunk сохраняет `document_id`, `document_title`, `section_or_page`, `chunk_order`, `text`, `embedding_version`.
 
-## Поисковый pipeline
+## Поисковый pipeline (гибридный)
 
 1. Нормализовать запрос
 2. Построить embedding запроса
-3. Выполнить vector search c `top_k=8` по умолчанию
-4. Удалить дубликаты / почти идентичные chunk
-5. Ограничить контекст генерации до `max_chunks_in_prompt=4`
-6. Вернуть top candidates и метаданные оценок
+3. Выполнить **vector search** (pgvector cosine) с `top_k=8` по умолчанию
+4. Выполнить **BM25 search** (PostgreSQL FTS `plainto_tsquery('simple', ...)`) с тем же `top_k`
+5. Объединить списки через **Reciprocal Rank Fusion**:
+   `rrf = 1/(k + rank_vector) + 1/(k + rank_bm25)`, где `k=60` (стандартный параметр)
+6. Если BM25 не дал результатов (запрос вне словаря) — автоматический fallback на vector-only
+7. Удалить дубликаты / почти идентичные chunk
+8. Ограничить контекст генерации до `max_chunks_in_prompt=4`
+9. Вернуть top candidates и метаданные оценок
+
+Гибридный поиск особенно важен для текстов по оптике и физике,
+где точные термины (названия эффектов, греческие символы) могут не иметь
+близких embedding-соседей.
+
+## Evidence gate (guardrails)
+
+Retriever выставляет флаг `enough_evidence`, который проверяет `Verifier Node`:
+- `top1_score >= 0.62`
+- минимум 2 фрагмента с `score >= 0.55`
+
+Пороги скалиброваны под модель `paraphrase-multilingual-MiniLM-L12-v2` (384-dim, RU+EN).
+Все параметры вынесены в конфиг (`retriever_min_top1_score`, `retriever_min_score_threshold`, `retriever_min_chunks_above_threshold`).
 
 ## Контракт
 
@@ -49,10 +66,10 @@
 
 ## Ограничения
 
-- По умолчанию `vector-only`
-- Без отдельного reranker в PoC
-- Без автоматического hybrid search
+- Без отдельного cross-encoder reranker в PoC
+- `plainto_tsquery('simple', ...)` без морфологии: не знает падежей и форм слов
 - Качество зависит от chunking и качества исходного текста
+- BM25 требует наличия `text_search_vec` колонки (миграция `0003`)
 
 ## Правило дедупликации
 

@@ -71,6 +71,17 @@ class Session(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
+class QAFeedback(Base):
+    __tablename__ = "qa_feedback"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    request_id = Column(String(64), nullable=False, index=True)
+    rating = Column(String(16), nullable=False)  # "positive" | "negative"
+    question_text = Column(Text, nullable=True)
+    answer_markdown = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
 class SelfCheckAttempt(Base):
     __tablename__ = "selfcheck_attempts"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

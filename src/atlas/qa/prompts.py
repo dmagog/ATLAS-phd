@@ -11,10 +11,19 @@ Rules:
 6. Respond in the same language as the user's question (Russian or English)."""
 
 
-def build_answer_prompt(question: str, chunks: list[dict], response_profile: str = "detailed") -> list[dict]:
+_MAX_HISTORY_TURNS = 5  # last N user+assistant pairs injected into the prompt
+
+
+def build_answer_prompt(
+    question: str,
+    chunks: list[dict],
+    response_profile: str = "detailed",
+    conversation_history: list[dict] | None = None,
+) -> list[dict]:
     """
     Build the messages list for the answer node.
     chunks: list of {"title": str, "section": str|None, "page": int|None, "text": str}
+    conversation_history: list of {"role": "user"|"assistant", "content": str} (session memory)
     """
     profile_instruction = {
         "brief": "Be concise — 2-4 sentences maximum.",
@@ -30,7 +39,16 @@ def build_answer_prompt(question: str, chunks: list[dict], response_profile: str
 
     context_block = "\n\n---\n\n".join(context_parts)
 
-    return [
+    messages: list[dict] = [
         {"role": "system", "content": ANSWER_SYSTEM_PROMPT + f"\n\nResponse style: {profile_instruction}"},
-        {"role": "user", "content": f"Context excerpts:\n\n{context_block}\n\n---\n\nQuestion: {question}"},
     ]
+
+    # Inject the tail of the session history so the model can resolve follow-up questions
+    if conversation_history:
+        max_msgs = _MAX_HISTORY_TURNS * 2  # each turn = 1 user + 1 assistant message
+        messages.extend(conversation_history[-max_msgs:])
+
+    messages.append(
+        {"role": "user", "content": f"Context excerpts:\n\n{context_block}\n\n---\n\nQuestion: {question}"}
+    )
+    return messages

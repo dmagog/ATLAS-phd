@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+{% block title %}История самопроверок{% endblock %}
+{% block content %}
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+    <h2 style="font-size:1rem;font-weight:600">История самопроверок</h2>
+    <a href="/self-check" class="btn-primary" style="text-decoration:none;font-size:.85rem;padding:6px 14px">+ Новая</a>
+  </div>
+  <div id="history-list"><div style="color:#9ca3af;font-size:.9rem">Загрузка…</div></div>
+</div>
+
+<!-- Detail modal -->
+<div id="detail-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;align-items:center;justify-content:center;padding:16px">
+  <div style="background:#fff;border-radius:10px;max-width:680px;width:100%;max-height:88vh;overflow-y:auto;padding:24px;position:relative">
+    <button onclick="closeDetail()" style="position:absolute;top:12px;right:14px;background:none;border:none;font-size:1.2rem;cursor:pointer;color:#6b7280">✕</button>
+    <div id="detail-body">Загрузка…</div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<style>
+.attempt-row {
+  display:flex; align-items:center; gap:12px;
+  padding:12px 14px; border-radius:8px; border:1px solid #e5e7eb;
+  margin-bottom:8px; cursor:pointer; transition:background .15s;
+}
+.attempt-row:hover { background:#f9fafb; }
+.score-badge {
+  font-size:1.1rem; font-weight:700; min-width:42px; text-align:center;
+  padding:4px 8px; border-radius:6px;
+}
+.status-pill {
+  font-size:.72rem; padding:2px 8px; border-radius:10px; font-weight:500;
+}
+.crit-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin:10px 0; }
+.crit-cell {
+  background:#f9fafb; border-radius:6px; padding:8px;
+  border-left:3px solid #e5e7eb;
+}
+</style>
+<script>
+function scoreColor(s) {
+  return s >= 4 ? '#16a34a' : s >= 2.5 ? '#d97706' : '#dc2626';
+}
+function scoreBg(s) {
+  return s >= 4 ? '#f0fdf4' : s >= 2.5 ? '#fefce8' : '#fef2f2';
+}
+function fmtDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return d.toLocaleDateString('ru-RU') + ' ' + d.toLocaleTimeString('ru-RU', {hour:'2-digit',minute:'2-digit'});
+}
+function statusLabel(s) {
+  const map = {
+    created:  ['В процессе', '#2563eb', '#eff6ff'],
+    submitted:['Отправлено', '#d97706', '#fef3c7'],
+    evaluated:['Оценено',    '#16a34a', '#f0fdf4'],
+    invalid_evaluation: ['Ошибка', '#dc2626', '#fef2f2'],
+  };
+  return map[s] || [s, '#6b7280', '#f3f4f6'];
+}
+
+async function loadHistory() {
+  const list = document.getElementById('history-list');
+  try {
+    const res = await fetch('/self-check/history/list', { headers: authHeaders() });
+    if (checkUnauthorized(res)) return;
+    if (!res.ok) throw new Error(res.status);
+    const data = await res.json();
+    if (!data.length) {
+      list.innerHTML = '<div style="color:#9ca3af;font-size:.9rem;padding:8px 0">Попыток пока нет. <a href="/self-check">Начать самопроверку →</a></div>';
+      return;
+    }
+    list.innerHTML = '';
+    data.forEach(a => {
+      const [slabel, scolor, sbg] = statusLabel(a.status);
+      const hasScore = a.overall_score !== null && a.overall_score !== undefined;
+      const scoreHtml = hasScore
+        ? `<div class="score-badge" style="color:${scoreColor(a.overall_score)};background:${scoreBg(a.overall_score)}">${a.overall_score.toFixed(1)}</div>`
+        : `<div class="score-badge" style="color:#9ca3af;background:#f3f4f6">—</div>`;
+
+      const row = document.createElement('div');
+      row.className = 'attempt-row';
+      row.innerHTML = `
+        ${scoreHtml}
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:500;font-size:.92rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${a.topic}</div>
+          <div style="font-size:.78rem;color:#9ca3af;margin-top:2px">${fmtDate(a.created_at)}</div>
+        </div>
+        <span class="status-pill" style="color:${scolor};background:${sbg};border:1px solid ${scolor}33">${slabel}</span>
+        <span style="color:#9ca3af;font-size:.85rem">›</span>`;
+
+      if (a.status === 'evaluated') {
+        row.addEventListener('click', () => openDetail(a.attempt_id));
+      }
+      list.appendChild(row);
+    });
+  } catch(e) {
+    list.innerHTML = '<div style="color:#dc2626;font-size:.9rem">Не удалось загрузить историю.</div>';
+  }
+}
+
+async function openDetail(attemptId) {
+  const overlay = document.getElementById('detail-overlay');
+  const body    = document.getElementById('detail-body');
+  overlay.style.display = 'flex';
+  body.innerHTML = '<div style="color:#9ca3af;text-align:center;padding:24px">Загрузка…</div>';
+
+  try {
+    const res = await fetch(`/self-check/${attemptId}/detail`, { headers: authHeaders() });
+    if (checkUnauthorized(res)) { closeDetail(); return; }
+    if (!res.ok) throw new Error(res.status);
+    const d = await res.json();
+    const sc = d.overall_score;
+    const color = scoreColor(sc);
+    const verdict = sc >= 4 ? 'Отлично' : sc >= 3 ? 'Хорошо' : sc >= 2 ? 'Удовлетворительно' : 'Нужно повторить';
+
+    let html = `
+      <h3 style="font-size:1rem;font-weight:600;margin-bottom:4px">${d.topic}</h3>
+      <div style="font-size:.78rem;color:#9ca3af;margin-bottom:14px">${fmtDate(d.created_at)}</div>
+
+      <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:6px">
+        <span style="font-size:2.2rem;font-weight:700;color:${color}">${sc.toFixed(1)}<span style="font-size:1rem;color:#9ca3af">/5</span></span>
+        <span style="font-size:.9rem;color:#6b7280">${verdict}</span>
+      </div>
+      <div style="height:6px;background:#e5e7eb;border-radius:3px;margin-bottom:14px">
+        <div style="height:100%;width:${sc/5*100}%;background:${color};border-radius:3px"></div>
+      </div>`;
+
+    if (d.criterion_scores) {
+      const cs = d.criterion_scores;
+      const labels = {correctness:'Точность',completeness:'Полнота',logic:'Логика',terminology:'Терминология'};
+      const weights = {correctness:'40%',completeness:'30%',logic:'20%',terminology:'10%'};
+      html += '<div class="crit-grid">';
+      for (const k of Object.keys(labels)) {
+        const v = cs[k] || 0;
+        html += `<div class="crit-cell" style="border-left-color:${scoreColor(v)}">
+          <div style="font-size:.75rem;color:#6b7280">${labels[k]} (${weights[k]})</div>
+          <div style="font-size:1.1rem;font-weight:700;color:${scoreColor(v)}">${v.toFixed(1)}</div>
+        </div>`;
+      }
+      html += '</div>';
+    }
+
+    if (d.evaluator_summary) {
+      html += `<div style="font-size:.88rem;color:#374151;padding:10px;background:#f0f9ff;border-radius:6px;border-left:3px solid #2563eb;margin-bottom:14px">${d.evaluator_summary}</div>`;
+    }
+
+    if (d.error_tags?.length) {
+      html += '<div style="margin-bottom:12px">'
+        + d.error_tags.map(t => `<span class="tag" style="background:#fef2f2;color:#dc2626;border:1px solid #fca5a5;margin-right:4px">${t}</span>`).join('')
+        + '</div>';
+    }
+
+    // Per-question breakdown
+    html += `<div style="font-size:.82rem;font-weight:600;color:#6b7280;margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em">Вопросы</div>`;
+    const bgMap = {correct:'#f0fdf4', partial:'#fefce8', incorrect:'#fef2f2'};
+    (d.question_results || []).forEach((r, i) => {
+      const isMC = r.type === 'multiple_choice';
+      const scoreDisp = isMC
+        ? `<span style="font-size:1.3rem;font-weight:700;color:${r.score>0?'#16a34a':'#dc2626'}">${r.score>0?'✓':'✗'}</span>`
+        : `<span style="font-size:1rem;font-weight:700;color:${scoreColor(r.score)}">${r.score.toFixed(1)}/5</span>`;
+
+      html += `<div style="padding:10px;border-radius:6px;background:${bgMap[r.status]||'#f9fafb'};border:1px solid #e5e7eb;margin-bottom:6px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+          <div style="font-size:.85rem;font-weight:500;flex:1">${i+1}. ${r.prompt}</div>
+          <div>${scoreDisp}</div>
+        </div>`;
+
+      if (isMC && r.correct_answer) {
+        const correctOpt = r.options?.find(o => o.charAt(0) === r.correct_answer) || r.correct_answer;
+        const userOpt    = r.options?.find(o => o.charAt(0) === r.user_answer) || r.user_answer;
+        html += `<div style="margin-top:6px;font-size:.78rem">
+          <span style="color:#166534">✓ ${correctOpt}</span>`;
+        if (r.status === 'incorrect' && r.user_answer) {
+          html += `<span style="color:#991b1b;text-decoration:line-through;margin-left:10px">${userOpt}</span>`;
+        }
+        html += '</div>';
+      } else if (!isMC && r.user_answer) {
+        html += `<div style="margin-top:6px;font-size:.78rem;color:#6b7280;font-style:italic">"${r.user_answer.slice(0, 180)}${r.user_answer.length > 180 ? '…' : ''}"</div>`;
+      }
+      html += '</div>';
+    });
+
+    body.innerHTML = html;
+  } catch(e) {
+    body.innerHTML = '<div style="color:#dc2626;font-size:.9rem">Не удалось загрузить детали.</div>';
+  }
+}
+
+function closeDetail() {
+  document.getElementById('detail-overlay').style.display = 'none';
+}
+document.getElementById('detail-overlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('detail-overlay')) closeDetail();
+});
+
+function onAuthReady() { loadHistory(); }
+</script>
+{% endblock %}

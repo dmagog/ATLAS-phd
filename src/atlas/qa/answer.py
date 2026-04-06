@@ -27,6 +27,7 @@ async def generate_answer(
     candidates: list[ChunkCandidate],
     response_profile: str = "detailed",
     request_id: str = "",
+    conversation_history: list[dict] | None = None,
 ) -> AnswerDraft:
     top_chunks = candidates[: settings.retriever_max_chunks_in_prompt]
 
@@ -40,7 +41,7 @@ async def generate_answer(
         for c in top_chunks
     ]
 
-    messages = build_answer_prompt(question, chunk_dicts, response_profile)
+    messages = build_answer_prompt(question, chunk_dicts, response_profile, conversation_history)
 
     answer_text = await llm_client.chat(
         messages=messages,

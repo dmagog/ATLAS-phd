@@ -112,6 +112,7 @@ async function pollJob(jobId, totalFiles) {
     const res = await fetch(`/admin/ingestion-jobs/${jobId}`, {
       headers: { 'Authorization': 'Bearer ' + getToken() },
     });
+    if (checkUnauthorized(res)) { clearInterval(pollInterval); pollInterval = null; return; }
     if (!res.ok) return;
     const data = await res.json();
 
@@ -213,6 +214,7 @@ async function loadDocuments() {
     const res = await fetch('/admin/documents', {
       headers: { 'Authorization': 'Bearer ' + getToken() },
     });
+    if (checkUnauthorized(res)) return;
     if (!res.ok) { container.innerHTML = '<p style="font-size:.85rem;color:#dc2626">Ошибка загрузки списка.</p>'; return; }
     const docs = await res.json();
     if (!docs.length) {
