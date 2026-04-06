@@ -35,8 +35,8 @@ def upgrade() -> None:
         END;
         $$
     """)
+    op.execute("DROP TRIGGER IF EXISTS trg_chunks_tsv ON chunks")
     op.execute("""
-        DROP TRIGGER IF EXISTS trg_chunks_tsv ON chunks;
         CREATE TRIGGER trg_chunks_tsv
             BEFORE INSERT OR UPDATE OF text ON chunks
             FOR EACH ROW EXECUTE FUNCTION chunks_tsv_update()

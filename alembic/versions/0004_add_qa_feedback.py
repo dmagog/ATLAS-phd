@@ -15,19 +15,20 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.create_table(
-        'qa_feedback',
-        sa.Column('id', postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column('user_id', postgresql.UUID(as_uuid=True),
-                  sa.ForeignKey('users.id', ondelete='CASCADE'), nullable=False),
-        sa.Column('request_id', sa.String(64), nullable=False, index=True),
-        sa.Column('rating', sa.String(16), nullable=False),
-        sa.Column('question_text', sa.Text, nullable=True),
-        sa.Column('answer_markdown', sa.Text, nullable=True),
-        sa.Column('created_at', sa.DateTime, nullable=False,
-                  server_default=sa.func.now()),
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS qa_feedback (
+            id          UUID PRIMARY KEY,
+            user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            request_id  VARCHAR(64) NOT NULL,
+            rating      VARCHAR(16) NOT NULL,
+            question_text    TEXT,
+            answer_markdown  TEXT,
+            created_at  TIMESTAMP NOT NULL DEFAULT now()
+        )
+    """)
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_qa_feedback_request_id ON qa_feedback (request_id)"
     )
-    op.create_index('ix_qa_feedback_request_id', 'qa_feedback', ['request_id'])
 
 
 def downgrade() -> None:
