@@ -74,9 +74,9 @@ function appendMsg(cls, labelText, innerHtml) {
 }
 
 // ── Typing indicator ──────────────────────────────────────────────────────────
-const STEPS_QA   = ['🔍 Планирую запрос…','📚 Ищу в материалах…','✍️ Формирую ответ…','🔎 Проверяю точность…'];
-const STEPS_SC   = ['🎯 Определяю тему…','📚 Ищу в корпусе…','✍️ Составляю вопросы…'];
-const STEPS_PLAN = ['🤔 Анализирую запрос…'];
+const STEPS_QA   = ['<i class="bi bi-search"></i> Планирую запрос…','<i class="bi bi-book-half"></i> Ищу в материалах…','<i class="bi bi-pencil"></i> Формирую ответ…','<i class="bi bi-shield-check"></i> Проверяю точность…'];
+const STEPS_SC   = ['<i class="bi bi-crosshair"></i> Определяю тему…','<i class="bi bi-book-half"></i> Ищу в корпусе…','<i class="bi bi-list-check"></i> Составляю вопросы…'];
+const STEPS_PLAN = ['<i class="bi bi-cpu"></i> Анализирую запрос…'];
 
 function showTyping(steps) {
   const msgs = document.getElementById('messages');
@@ -90,10 +90,10 @@ function showTyping(steps) {
   msgs.scrollTop = msgs.scrollHeight;
 
   let idx = 0;
-  stepEl.textContent = steps[0];
+  stepEl.innerHTML = steps[0];
   wrap._t = setInterval(() => {
     idx = Math.min(idx + 1, steps.length - 1);
-    stepEl.textContent = steps[idx];
+    stepEl.innerHTML = steps[idx];
     msgs.scrollTop = msgs.scrollHeight;
   }, 3500);
   return wrap;
@@ -141,8 +141,8 @@ function renderQA(data, questionText) {
     const rid   = data.request_id || '';
     const feedbackHtml = rid ? `<div class="feedback-row" style="margin-top:10px;display:flex;gap:6px;align-items:center">
       <span style="font-size:.75rem;color:#9ca3af">Полезно?</span>
-      <button class="fb-btn" onclick="sendFeedback(this,'positive','${rid}',${qText},${aText})">👍</button>
-      <button class="fb-btn" onclick="sendFeedback(this,'negative','${rid}',${qText},${aText})">👎</button>
+      <button class="fb-btn" onclick="sendFeedback(this,'positive','${rid}',${qText},${aText})"><i class="bi bi-hand-thumbs-up"></i></button>
+      <button class="fb-btn" onclick="sendFeedback(this,'negative','${rid}',${qText},${aText})"><i class="bi bi-hand-thumbs-down"></i></button>
     </div>` : '';
     appendMsg('msg-atlas', 'ATLAS', mdToHtml(answerText) + citeHtml + feedbackHtml);
   } else {

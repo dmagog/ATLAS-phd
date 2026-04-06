@@ -71,12 +71,12 @@ let currentAttemptId = null;
 let currentQuestions = [];
 let stepTimers = [];
 
-const GENERATE_STEPS = ['🎯 Анализирую тему', '✍️ Составляю вопросы', '📋 Финализирую тест'];
-const EVALUATE_STEPS = ['📝 Проверяю ответы', '📊 Оцениваю по критериям', '💡 Формирую обратную связь'];
+const GENERATE_STEPS = ['<i class="bi bi-crosshair"></i> Анализирую тему', '<i class="bi bi-pencil"></i> Составляю вопросы', '<i class="bi bi-card-checklist"></i> Финализирую тест'];
+const EVALUATE_STEPS = ['<i class="bi bi-check2-square"></i> Проверяю ответы', '<i class="bi bi-bar-chart-line"></i> Оцениваю по критериям', '<i class="bi bi-lightbulb"></i> Формирую обратную связь'];
 
 function startSteps(textEl, stepsEl, steps) {
   stopSteps();
-  textEl.textContent = steps[0];
+  textEl.innerHTML = steps[0];
   stepsEl.innerHTML = steps.map((s, i) =>
     `<span class="step-badge ${i === 0 ? 'active' : ''}" id="step-${i}">${s}</span>`
   ).join('');
@@ -86,7 +86,7 @@ function startSteps(textEl, stepsEl, steps) {
     document.getElementById(`step-${idx}`)?.classList.replace('active', 'done');
     idx = Math.min(idx + 1, steps.length - 1);
     const next = document.getElementById(`step-${idx}`);
-    if (next) { next.classList.add('active'); textEl.textContent = steps[idx]; }
+    if (next) { next.classList.add('active'); textEl.innerHTML = steps[idx]; }
   }, 4000);
   stepTimers.push(t);
 }
@@ -268,7 +268,7 @@ function renderResults(data) {
         if (isCorrect) style += 'background:#dcfce7;color:#166534;font-weight:600;';
         else if (isUser && !isCorrect) style += 'background:#fee2e2;color:#991b1b;text-decoration:line-through;';
         else style += 'color:#6b7280;';
-        const marker = isCorrect ? ' ✓' : (isUser && !isCorrect) ? ' ✗' : '';
+        const marker = isCorrect ? ' <i class="bi bi-check-lg"></i>' : (isUser && !isCorrect) ? ' <i class="bi bi-x-lg"></i>' : '';
         return `<span style="${style}">${opt}${marker}</span>`;
       }).join('');
       if (!r.user_answer) {
@@ -286,7 +286,7 @@ function renderResults(data) {
 
     const isMC = r.type === 'multiple_choice';
     const scoreDisplay = isMC
-      ? `<div style="font-size:1.6rem;font-weight:700;color:${scoreColor(r.score > 0 ? 4 : 0)}">${r.score > 0 ? '✓' : '✗'}</div>`
+      ? `<div style="font-size:1.4rem;font-weight:700;color:${scoreColor(r.score > 0 ? 4 : 0)}">${r.score > 0 ? '<i class="bi bi-check-circle-fill"></i>' : '<i class="bi bi-x-circle-fill"></i>'}</div>`
       : `<div style="font-size:1.3rem;font-weight:700;color:${scoreColor(r.score)}">${r.score.toFixed(1)}<span style="font-size:.8rem;font-weight:400;color:#6b7280">/5</span></div>`;
 
     const div = document.createElement('div');
