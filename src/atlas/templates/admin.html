@@ -48,7 +48,7 @@
 <div class="card">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
     <h3 style="font-size:.95rem">Загруженные материалы</h3>
-    <button class="btn-secondary" id="refresh-docs-btn" style="padding:4px 12px;font-size:.82rem">↻ Обновить</button>
+    <button class="btn-secondary" id="refresh-docs-btn" style="padding:4px 12px;font-size:.82rem"><i class="bi bi-arrow-clockwise"></i> Обновить</button>
   </div>
   <div id="documents-list"><p style="font-size:.85rem;color:#9ca3af">Загрузка...</p></div>
 </div>
@@ -119,18 +119,18 @@ async function pollJob(jobId, totalFiles) {
     const done = data.accepted_files.length + data.rejected_files.length;
     const terminal = ['completed', 'completed_with_errors', 'failed'].includes(data.status);
 
-    document.getElementById('progress-status-label').textContent = statusLabel(data.status);
+    document.getElementById('progress-status-label').innerHTML = statusLabel(data.status);
     renderFileLists(data.accepted_files, data.rejected_files);
 
     // Update progress hint from pipeline stage info
     if (data.progress_info && !terminal) {
-      document.getElementById('progress-hint').textContent = stageLabel(data.progress_info);
+      document.getElementById('progress-hint').innerHTML = stageLabel(data.progress_info);
     }
 
     if (terminal) {
       setBarIndeterminate(false);
       setBarPct(100);
-      document.getElementById('progress-hint').textContent = '';
+      document.getElementById('progress-hint').innerHTML = '';
       clearInterval(pollInterval);
       pollInterval = null;
       document.getElementById('upload-btn').disabled = false;
@@ -144,20 +144,24 @@ async function pollJob(jobId, totalFiles) {
 }
 
 function statusLabel(s) {
-  return { created: 'В очереди…', running: 'Обрабатывается…',
-           completed: '✓ Завершено', completed_with_errors: '⚠ Завершено с ошибками',
-           failed: '✗ Ошибка' }[s] || s;
+  return {
+    created:               '<i class="bi bi-hourglass-split"></i> В очереди…',
+    running:               '<i class="bi bi-arrow-repeat"></i> Обрабатывается…',
+    completed:             '<i class="bi bi-check-circle-fill" style="color:#16a34a"></i> Завершено',
+    completed_with_errors: '<i class="bi bi-exclamation-triangle-fill" style="color:#d97706"></i> Завершено с ошибками',
+    failed:                '<i class="bi bi-x-circle-fill" style="color:#dc2626"></i> Ошибка',
+  }[s] || s;
 }
 
 function stageLabel(p) {
   if (!p) return '';
   const f = p.file || '';
   switch (p.stage) {
-    case 'extract': return `📄 ${f} — извлечение текста…`;
-    case 'chunk':   return `✂️ ${f} — разбивка: ${p.pages} стр. → ${p.chunks} чанков`;
-    case 'embed':   return `🔢 ${f} — эмбеддинги: батч ${p.batch} из ${p.total_batches} (${p.chunks} чанков)`;
-    case 'index':   return `💾 ${f} — запись в базу…`;
-    default:        return `⏳ ${f} — ${p.stage}`;
+    case 'extract': return `<i class="bi bi-file-earmark-text"></i> ${f} — извлечение текста…`;
+    case 'chunk':   return `<i class="bi bi-scissors"></i> ${f} — разбивка: ${p.pages} стр. → ${p.chunks} чанков`;
+    case 'embed':   return `<i class="bi bi-hash"></i> ${f} — эмбеддинги: батч ${p.batch} из ${p.total_batches} (${p.chunks} чанков)`;
+    case 'index':   return `<i class="bi bi-database"></i> ${f} — запись в базу…`;
+    default:        return `<i class="bi bi-hourglass-split"></i> ${f} — ${p.stage}`;
   }
 }
 
@@ -180,7 +184,7 @@ function setBarPct(pct) {
 function renderFileLists(accepted, rejected) {
   document.getElementById('accepted-list').innerHTML = accepted.length
     ? `<div style="margin-bottom:10px">
-        <b style="color:#16a34a;font-size:.88rem">✓ Принято (${accepted.length})</b>` +
+        <b style="color:#16a34a;font-size:.88rem"><i class="bi bi-check-circle-fill"></i> Принято (${accepted.length})</b>` +
       accepted.map(f =>
         `<div style="font-size:.82rem;padding:3px 0;border-bottom:1px solid #f0fdf4;display:flex;justify-content:space-between">
           <span>${f.filename}</span>
@@ -191,7 +195,7 @@ function renderFileLists(accepted, rejected) {
 
   document.getElementById('rejected-list').innerHTML = rejected.length
     ? `<div>
-        <b style="color:#dc2626;font-size:.88rem">✗ Пропущено / ошибка (${rejected.length})</b>` +
+        <b style="color:#dc2626;font-size:.88rem"><i class="bi bi-x-circle-fill"></i> Пропущено / ошибка (${rejected.length})</b>` +
       rejected.map(f =>
         `<div style="font-size:.82rem;padding:3px 0;border-bottom:1px solid #fef2f2;display:flex;justify-content:space-between">
           <span>${f.filename}</span>
