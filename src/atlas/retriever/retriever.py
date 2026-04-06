@@ -199,6 +199,9 @@ async def retrieve(
                 reason=str(exc),
                 request_id=request_id,
             )
+            # asyncpg marks the transaction as aborted after any error;
+            # must rollback before executing another query.
+            await db.rollback()
             use_hybrid = False
             mode = "vector_fallback"
 
