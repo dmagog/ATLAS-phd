@@ -118,6 +118,7 @@ document.getElementById('start-btn').addEventListener('click', async () => {
     });
     stopSteps();
     statusEl.style.display = 'none';
+    if (checkUnauthorized(res)) { btn.disabled = false; return; }
     if (!res.ok) {
       let msg = 'Ошибка генерации вопросов.';
       try { const e = await res.json(); if (e.detail) msg = e.detail; } catch(_) {}
@@ -192,6 +193,7 @@ document.getElementById('submit-btn').addEventListener('click', async () => {
     });
     stopSteps();
     statusEl.style.display = 'none';
+    if (checkUnauthorized(res)) { btn.disabled = false; return; }
     if (!res.ok) {
       let msg = 'Ошибка оценки.';
       try { const e = await res.json(); if (e.detail) msg = e.detail; } catch(_) {}
