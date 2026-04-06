@@ -11,7 +11,9 @@ from sqlalchemy import select
 
 from atlas.core.logging import logger
 from atlas.db.models import SelfCheckAttempt
+from atlas.llm.embeddings import get_embedding
 from atlas.orchestrator.states import RequestState
+from atlas.retriever.retriever import retrieve
 from atlas.selfcheck.generator import QuestionSet, generate_question_set
 from atlas.selfcheck.evaluator import EvaluationPayload, evaluate_answers
 
@@ -26,7 +28,29 @@ async def start_selfcheck(
     request_id = request_id or str(uuid.uuid4())
     logger.info("sc_flow_start", state=RequestState.REQUEST_RECEIVED, request_id=request_id)
 
-    question_set = await generate_question_set(topic=topic, language=language, request_id=request_id)
+    # Retrieve corpus chunks relevant to the topic
+    query_embedding = await get_embedding(topic, request_id=request_id)
+    retrieval = await retrieve(
+        query_embedding=query_embedding,
+        db=db,
+        top_k=12,
+        query_text=topic,
+        request_id=request_id,
+    )
+    context_chunks = [c.text for c in retrieval.candidates]
+    logger.info(
+        "sc_flow_retrieval",
+        chunks_found=len(context_chunks),
+        enough_evidence=retrieval.enough_evidence,
+        request_id=request_id,
+    )
+
+    question_set = await generate_question_set(
+        topic=topic,
+        language=language,
+        context_chunks=context_chunks,
+        request_id=request_id,
+    )
 
     attempt = SelfCheckAttempt(
         id=uuid.uuid4(),
@@ -40,7 +64,7 @@ async def start_selfcheck(
                 "type": q.type,
                 "prompt": q.prompt,
                 "options": q.options,
-                # correct_option intentionally omitted from stored JSON (not sent to user)
+                "correct_option": q.correct_option,  # stored server-side, not sent to user during quiz
             }
             for q in question_set.questions
         ],

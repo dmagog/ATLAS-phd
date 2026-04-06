@@ -19,7 +19,7 @@
 {% endblock %}
 {% block scripts %}
 <script>
-function renderMsg(role, html, citations=[]) {
+function renderMsg(role, html, citations=[], requestId=null, questionText=null, answerText=null) {
   const wrap = document.createElement('div');
   wrap.style.cssText = 'padding:12px 14px;border-radius:8px;max-width:88%;line-height:1.55';
   if (role === 'user') {
@@ -36,12 +36,32 @@ function renderMsg(role, html, citations=[]) {
         + citations.map(c => `<span class="tag">${c.document_title}${c.page ? ', с.'+c.page : ''}</span>`).join(' ')
         + '</div>';
     }
-    wrap.innerHTML = `<div style="font-size:.88rem;color:#6b7280;margin-bottom:4px">ATLAS</div>${html}${citeHtml}`;
+    let feedbackHtml = '';
+    if (requestId) {
+      feedbackHtml = `<div class="feedback-row" style="margin-top:10px;display:flex;gap:6px;align-items:center">
+        <span style="font-size:.75rem;color:#9ca3af">Полезно?</span>
+        <button class="fb-btn" title="Да" onclick="sendFeedback(this,'positive','${requestId}',${JSON.stringify(questionText||'')},${JSON.stringify(answerText||'')})">👍</button>
+        <button class="fb-btn" title="Нет" onclick="sendFeedback(this,'negative','${requestId}',${JSON.stringify(questionText||'')},${JSON.stringify(answerText||'')})">👎</button>
+      </div>`;
+    }
+    wrap.innerHTML = `<div style="font-size:.88rem;color:#6b7280;margin-bottom:4px">ATLAS</div>${html}${citeHtml}${feedbackHtml}`;
   }
   const msgs = document.getElementById('messages');
   msgs.appendChild(wrap);
   msgs.scrollTop = msgs.scrollHeight;
   if (window.renderMathInElement) renderMathInElement(wrap);
+}
+
+async function sendFeedback(btn, rating, requestId, questionText, answerText) {
+  const row = btn.closest('.feedback-row');
+  try {
+    await fetch('/qa/feedback', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ request_id: requestId, rating, question_text: questionText, answer_markdown: answerText }),
+    });
+  } catch(_) {}
+  row.innerHTML = '<span style="font-size:.75rem;color:#9ca3af">Спасибо за оценку!</span>';
 }
 
 function mdToHtml(text) {
@@ -54,6 +74,43 @@ function mdToHtml(text) {
     .replace(/\n/g,'<br>');
 }
 
+const QA_STEPS = [
+  '🔍 Ищу релевантные фрагменты…',
+  '📚 Анализирую источники…',
+  '✍️ Формирую ответ…',
+  '🔎 Проверяю точность…',
+];
+
+function showTyping() {
+  const msgs = document.getElementById('messages');
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'padding:12px 14px;border-radius:8px;max-width:88%;line-height:1.55;background:#f9fafb;border:1px solid #e5e7eb;align-self:flex-start';
+  const stepEl = document.createElement('span');
+  stepEl.style.cssText = 'font-size:.88rem;color:#6b7280';
+  wrap.innerHTML = '<div style="font-size:.88rem;color:#6b7280;margin-bottom:6px">ATLAS</div>';
+  wrap.appendChild(stepEl);
+  msgs.appendChild(wrap);
+  msgs.scrollTop = msgs.scrollHeight;
+
+  let idx = 0;
+  stepEl.textContent = QA_STEPS[0];
+  wrap._stepTimer = setInterval(() => {
+    idx = (idx + 1) % QA_STEPS.length;
+    stepEl.textContent = QA_STEPS[idx];
+    msgs.scrollTop = msgs.scrollHeight;
+  }, 4000);
+  return wrap;
+}
+
+function removeTyping(wrap) {
+  if (wrap && wrap._stepTimer) clearInterval(wrap._stepTimer);
+  if (wrap && wrap.parentNode) wrap.parentNode.removeChild(wrap);
+}
+
+// Session conversation history: [{role, content}]
+const conversationHistory = [];
+const MAX_HISTORY = 10; // keep last 10 messages (5 turns)
+
 async function sendQuestion() {
   const input = document.getElementById('question-input');
   const q = input.value.trim();
@@ -61,7 +118,9 @@ async function sendQuestion() {
   input.value = '';
   const btn = document.getElementById('send-btn');
   btn.disabled = true;
+  btn.textContent = '…';
   renderMsg('user', mdToHtml(q));
+  const typingEl = showTyping();
   try {
     const res = await fetch('/qa/message', {
       method: 'POST',
@@ -69,19 +128,28 @@ async function sendQuestion() {
       body: JSON.stringify({
         message_text: q,
         response_profile: document.getElementById('profile-select').value,
+        conversation_history: conversationHistory.slice(-MAX_HISTORY),
       }),
     });
+    if (checkUnauthorized(res)) { removeTyping(typingEl); btn.disabled = false; btn.textContent = 'Отправить'; return; }
     const data = await res.json();
+    removeTyping(typingEl);
     if (data.status === 'answered') {
-      renderMsg('atlas', mdToHtml(data.answer_markdown || ''), data.citations || []);
+      const answerText = data.answer_markdown || '';
+      renderMsg('atlas', mdToHtml(answerText), data.citations || [], data.request_id, q, answerText);
+      // Save to session history
+      conversationHistory.push({ role: 'user', content: q });
+      conversationHistory.push({ role: 'assistant', content: answerText });
     } else {
       const msg = data.refusal_message || 'Не удалось получить ответ.';
       renderMsg('atlas', `<span style="color:#dc2626">${mdToHtml(msg)}</span>`);
     }
   } catch(e) {
+    removeTyping(typingEl);
     renderMsg('atlas', '<span style="color:#dc2626">Ошибка соединения.</span>');
   }
   btn.disabled = false;
+  btn.textContent = 'Отправить';
   input.focus();
 }
 

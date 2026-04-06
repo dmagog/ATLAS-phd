@@ -1,0 +1,402 @@
+{% extends "base.html" %}
+{% block title %}Чат{% endblock %}
+{% block content %}
+<div class="card" style="display:flex;flex-direction:column;height:calc(100vh - 140px);min-height:420px">
+
+  <!-- Profile selector -->
+  <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;flex-shrink:0">
+    <label style="font-size:.85rem;color:#6b7280">Режим:</label>
+    <select id="profile-select" style="width:auto">
+      <option value="detailed">Подробный</option>
+      <option value="brief">Краткий</option>
+      <option value="study">Учебный</option>
+    </select>
+    <label style="font-size:.85rem;color:#6b7280;margin-left:8px">Язык проверки:</label>
+    <select id="lang-select" style="width:auto">
+      <option value="ru">RU</option>
+      <option value="en">EN</option>
+    </select>
+    <span id="planner-badge" style="display:none;margin-left:auto;font-size:.78rem;padding:2px 8px;border-radius:10px;background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe"></span>
+  </div>
+
+  <!-- Messages area -->
+  <div id="messages" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:12px;margin-bottom:12px;padding-right:4px"></div>
+
+  <!-- Input -->
+  <div style="display:flex;gap:8px;flex-shrink:0">
+    <textarea id="chat-input"
+      placeholder="Задайте вопрос или напишите «Проверь меня по теме…»"
+      style="flex:1;min-height:48px;max-height:140px;resize:none"></textarea>
+    <button class="btn-primary" id="send-btn" style="align-self:flex-end;white-space:nowrap">Отправить</button>
+  </div>
+
+</div>
+{% endblock %}
+{% block scripts %}
+<style>
+@keyframes spin { to { transform: rotate(360deg); } }
+.msg-user  { background:#eff6ff; align-self:flex-end; max-width:82% }
+.msg-atlas { background:#f9fafb; border:1px solid #e5e7eb; align-self:flex-start; max-width:90% }
+.msg-wrap  { padding:12px 14px; border-radius:8px; line-height:1.55 }
+.msg-label { font-size:.82rem; color:#6b7280; margin-bottom:4px }
+.quiz-option { display:block; padding:6px 10px; border-radius:6px; margin:4px 0;
+               cursor:pointer; font-size:.88rem; border:1px solid #e5e7eb; background:#fff;
+               transition:background .15s }
+.quiz-option:hover { background:#eff6ff }
+.quiz-option.selected { background:#dbeafe; border-color:#93c5fd }
+.quiz-opt-correct { background:#dcfce7 !important; border-color:#86efac !important; color:#166534; font-weight:600 }
+.quiz-opt-wrong   { background:#fee2e2 !important; border-color:#fca5a5 !important; color:#991b1b; text-decoration:line-through }
+</style>
+<script>
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function mdToHtml(text) {
+  return text
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/\*\*(.+?)\*\*/g,'<b>$1</b>')
+    .replace(/\*(.+?)\*/g,'<i>$1</i>')
+    .replace(/`([^`]+)`/g,'<code style="background:#f3f4f6;padding:1px 4px;border-radius:3px">$1</code>')
+    .replace(/\n/g,'<br>');
+}
+
+function scoreColor(s) {
+  return s >= 4 ? '#16a34a' : s >= 2.5 ? '#d97706' : '#dc2626';
+}
+
+function appendMsg(cls, labelText, innerHtml) {
+  const msgs = document.getElementById('messages');
+  const wrap = document.createElement('div');
+  wrap.className = `msg-wrap ${cls}`;
+  wrap.innerHTML = `<div class="msg-label">${labelText}</div>${innerHtml}`;
+  msgs.appendChild(wrap);
+  msgs.scrollTop = msgs.scrollHeight;
+  if (window.renderMathInElement) renderMathInElement(wrap);
+  return wrap;
+}
+
+// ── Typing indicator ──────────────────────────────────────────────────────────
+const STEPS_QA   = ['🔍 Планирую запрос…','📚 Ищу в материалах…','✍️ Формирую ответ…','🔎 Проверяю точность…'];
+const STEPS_SC   = ['🎯 Определяю тему…','📚 Ищу в корпусе…','✍️ Составляю вопросы…'];
+const STEPS_PLAN = ['🤔 Анализирую запрос…'];
+
+function showTyping(steps) {
+  const msgs = document.getElementById('messages');
+  const wrap = document.createElement('div');
+  wrap.className = 'msg-wrap msg-atlas';
+  const stepEl = document.createElement('span');
+  stepEl.style.cssText = 'font-size:.88rem;color:#9ca3af';
+  wrap.innerHTML = '<div class="msg-label">ATLAS</div>';
+  wrap.appendChild(stepEl);
+  msgs.appendChild(wrap);
+  msgs.scrollTop = msgs.scrollHeight;
+
+  let idx = 0;
+  stepEl.textContent = steps[0];
+  wrap._t = setInterval(() => {
+    idx = Math.min(idx + 1, steps.length - 1);
+    stepEl.textContent = steps[idx];
+    msgs.scrollTop = msgs.scrollHeight;
+  }, 3500);
+  return wrap;
+}
+
+function removeTyping(wrap) {
+  if (wrap?._t) clearInterval(wrap._t);
+  wrap?.parentNode?.removeChild(wrap);
+}
+
+// ── Badge ─────────────────────────────────────────────────────────────────────
+function setBadge(route) {
+  const b = document.getElementById('planner-badge');
+  const labels = { qa: '→ Q&A', self_check: '→ Самопроверка', clarify: '→ Уточнение' };
+  b.textContent = labels[route] || route;
+  b.style.display = 'inline';
+  setTimeout(() => { b.style.display = 'none'; }, 4000);
+}
+
+// ── Feedback ──────────────────────────────────────────────────────────────────
+async function sendFeedback(btn, rating, requestId, questionText, answerText) {
+  const row = btn.closest('.feedback-row');
+  try {
+    await fetch('/qa/feedback', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ request_id: requestId, rating, question_text: questionText, answer_markdown: answerText }),
+    });
+  } catch(_) {}
+  row.innerHTML = '<span style="font-size:.75rem;color:#9ca3af">Спасибо за оценку!</span>';
+}
+
+// ── Q&A response ──────────────────────────────────────────────────────────────
+function renderQA(data, questionText) {
+  if (data.status === 'answered') {
+    const answerText = data.answer_markdown || '';
+    let citeHtml = '';
+    if (data.citations?.length) {
+      citeHtml = '<div style="margin-top:10px;font-size:.8rem;color:#6b7280"><b>Источники:</b> '
+        + data.citations.map(c => `<span class="tag">${c.document_title}${c.page ? ', с.'+c.page : ''}</span>`).join(' ')
+        + '</div>';
+    }
+    const qText = JSON.stringify(questionText || '');
+    const aText = JSON.stringify(answerText);
+    const rid   = data.request_id || '';
+    const feedbackHtml = rid ? `<div class="feedback-row" style="margin-top:10px;display:flex;gap:6px;align-items:center">
+      <span style="font-size:.75rem;color:#9ca3af">Полезно?</span>
+      <button class="fb-btn" onclick="sendFeedback(this,'positive','${rid}',${qText},${aText})">👍</button>
+      <button class="fb-btn" onclick="sendFeedback(this,'negative','${rid}',${qText},${aText})">👎</button>
+    </div>` : '';
+    appendMsg('msg-atlas', 'ATLAS', mdToHtml(answerText) + citeHtml + feedbackHtml);
+  } else {
+    const msg = data.refusal_message || 'Не удалось получить ответ.';
+    appendMsg('msg-atlas', 'ATLAS', `<span style="color:#dc2626">${mdToHtml(msg)}</span>`);
+  }
+}
+
+// ── Self-check inline quiz ─────────────────────────────────────────────────────
+function renderQuiz(data) {
+  const msgs = document.getElementById('messages');
+  const card = document.createElement('div');
+  card.className = 'msg-wrap msg-atlas';
+  card.style.maxWidth = '100%';
+
+  const questions = data.questions;
+  const attemptId = data.attempt_id;
+  const topic = data.topic;
+
+  // Build questions HTML
+  let qHtml = `<div class="msg-label">ATLAS — Самопроверка</div>
+    <div style="font-weight:600;margin-bottom:12px">Тема: ${topic}</div>`;
+
+  questions.forEach((q, i) => {
+    qHtml += `<div style="margin-bottom:14px;padding:12px;border:1px solid #e5e7eb;border-radius:8px;background:#fff">
+      <div style="font-weight:500;margin-bottom:8px;font-size:.92rem">${i+1}. ${q.prompt}</div>`;
+
+    if (q.type === 'multiple_choice') {
+      q.options.forEach(opt => {
+        const letter = opt.charAt(0);
+        qHtml += `<label class="quiz-option" data-qid="${q.question_id}" data-letter="${letter}">
+          <input type="radio" name="q_${q.question_id}" value="${letter}"
+                 style="display:none" onchange="selectOption(this)"> ${opt}
+        </label>`;
+      });
+    } else {
+      qHtml += `<textarea data-qid="${q.question_id}"
+                  placeholder="Ваш ответ…"
+                  style="margin-top:4px;min-height:64px"></textarea>`;
+    }
+    qHtml += '</div>';
+  });
+
+  qHtml += `<button class="btn-primary" id="quiz-submit-${attemptId}"
+              onclick="submitQuiz('${attemptId}', ${JSON.stringify(questions).replace(/'/g, "\\'")})"
+              style="margin-top:4px">Отправить ответы</button>
+             <div id="quiz-status-${attemptId}" style="display:none;margin-top:8px;font-size:.85rem;color:#2563eb">
+               ⏳ Оцениваю ответы…
+             </div>`;
+
+  card.innerHTML = qHtml;
+  msgs.appendChild(card);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function selectOption(radio) {
+  const qid = radio.closest('label').dataset.qid;
+  document.querySelectorAll(`label[data-qid="${qid}"]`).forEach(l => l.classList.remove('selected'));
+  radio.closest('label').classList.add('selected');
+}
+
+async function submitQuiz(attemptId, questions) {
+  const btn = document.getElementById(`quiz-submit-${attemptId}`);
+  const statusEl = document.getElementById(`quiz-status-${attemptId}`);
+  btn.disabled = true;
+  statusEl.style.display = 'block';
+
+  const answers = questions.map(q => {
+    let answer_text = '';
+    if (q.type === 'multiple_choice') {
+      const sel = document.querySelector(`input[name="q_${q.question_id}"]:checked`);
+      answer_text = sel ? sel.value : '';
+    } else {
+      const ta = document.querySelector(`textarea[data-qid="${q.question_id}"]`);
+      answer_text = ta ? ta.value.trim() : '';
+    }
+    return { question_id: q.question_id, answer_text };
+  });
+
+  try {
+    const res = await fetch(`/self-check/${attemptId}/submit`, {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify(answers),
+    });
+    statusEl.style.display = 'none';
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({}));
+      appendMsg('msg-atlas', 'ATLAS', `<span style="color:#dc2626">${e.detail || 'Ошибка оценки.'}</span>`);
+      btn.disabled = false; return;
+    }
+    const data = await res.json();
+    renderQuizResults(data, questions);
+    // Hide the quiz card submit area
+    btn.remove(); statusEl.remove();
+  } catch(e) {
+    statusEl.style.display = 'none';
+    appendMsg('msg-atlas', 'ATLAS', '<span style="color:#dc2626">Ошибка соединения.</span>');
+    btn.disabled = false;
+  }
+}
+
+function renderQuizResults(data, questions) {
+  const score = data.overall_score;
+  const color = scoreColor(score);
+  const verdict = score >= 4 ? 'Отлично' : score >= 3 ? 'Хорошо' : score >= 2 ? 'Удовлетворительно' : 'Нужно повторить';
+  const qMap = Object.fromEntries(questions.map(q => [q.question_id, q]));
+
+  // Mark options in original quiz card
+  (data.question_results || []).forEach(r => {
+    const q = qMap[r.question_id];
+    if (!q || q.type !== 'multiple_choice') return;
+    document.querySelectorAll(`label[data-qid="${r.question_id}"]`).forEach(lbl => {
+      const letter = lbl.dataset.letter;
+      const userAnswer = data.question_results.find(x => x.question_id === r.question_id);
+      // correct_answer comes from the full result object
+      if (letter === data.question_results.find(x=>x.question_id===r.question_id)?.correct_answer
+                     || r.correct_answer && letter === r.correct_answer) {
+        lbl.classList.add('quiz-opt-correct');
+      }
+    });
+    // Mark user's wrong answer
+    if (r.status === 'incorrect') {
+      const checked = document.querySelector(`input[name="q_${r.question_id}"]:checked`);
+      if (checked) checked.closest('label').classList.add('quiz-opt-wrong');
+    }
+  });
+
+  // Results summary card
+  let html = `
+    <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:6px">
+      <span style="font-size:2rem;font-weight:700;color:${color}">${score.toFixed(1)}<span style="font-size:1rem;color:#6b7280">/5</span></span>
+      <span style="font-size:.9rem;color:#6b7280">${verdict}</span>
+    </div>
+    <div style="height:6px;background:#e5e7eb;border-radius:3px;margin-bottom:12px">
+      <div style="height:100%;width:${score/5*100}%;background:${color};border-radius:3px;transition:width .4s"></div>
+    </div>`;
+
+  // Criterion grid
+  const cs = data.criterion_scores;
+  const labels = {correctness:'Точность',completeness:'Полнота',logic:'Логика',terminology:'Терминология'};
+  const weights = {correctness:'40%',completeness:'30%',logic:'20%',terminology:'10%'};
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">';
+  for (const k of Object.keys(labels)) {
+    const v = cs[k] || 0;
+    html += `<div style="background:#f9fafb;border-radius:6px;padding:8px;border-left:3px solid ${scoreColor(v)}">
+      <div style="font-size:.75rem;color:#6b7280">${labels[k]} (${weights[k]})</div>
+      <div style="font-size:1.1rem;font-weight:700;color:${scoreColor(v)}">${v.toFixed(1)}</div>
+    </div>`;
+  }
+  html += '</div>';
+
+  if (data.evaluator_summary) {
+    html += `<div style="font-size:.88rem;color:#374151;padding:10px;background:#f0f9ff;border-radius:6px;border-left:3px solid #2563eb;margin-bottom:10px">${data.evaluator_summary}</div>`;
+  }
+
+  // Per-question results with correct answers
+  (data.question_results || []).forEach((r, i) => {
+    const q = qMap[r.question_id];
+    if (!q) return;
+    const bgMap = {correct:'#f0fdf4',partial:'#fefce8',incorrect:'#fef2f2'};
+    const iconMap = {correct:'✓',partial:'~',incorrect:'✗'};
+    const isMC = r.type === 'multiple_choice';
+    const scoreDisp = isMC
+      ? `<span style="font-size:1.4rem;font-weight:700;color:${r.score>0?'#16a34a':'#dc2626'}">${r.score>0?'✓':'✗'}</span>`
+      : `<span style="font-size:1.1rem;font-weight:700;color:${scoreColor(r.score)}">${r.score.toFixed(1)}/5</span>`;
+
+    let detail = '';
+    if (isMC && r.correct_answer) {
+      const correctOpt = q.options?.find(o => o.charAt(0) === r.correct_answer) || r.correct_answer;
+      detail = `<div style="font-size:.8rem;margin-top:6px;color:#166534">✓ Верный ответ: ${correctOpt}</div>`;
+    }
+
+    html += `<div style="padding:10px;border-radius:6px;background:${bgMap[r.status]||'#f9fafb'};border:1px solid #e5e7eb;margin-bottom:6px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+        <div style="font-size:.85rem;font-weight:500;flex:1">${i+1}. ${q.prompt}</div>
+        <div style="text-align:center;flex-shrink:0">${scoreDisp}</div>
+      </div>${detail}
+    </div>`;
+  });
+
+  appendMsg('msg-atlas', 'ATLAS — Результаты', html);
+}
+
+// ── Session memory ────────────────────────────────────────────────────────────
+// Only Q&A exchanges are tracked (self_check and clarify are not stored).
+const conversationHistory = [];
+const MAX_HISTORY = 10; // last 10 messages = 5 turns
+
+// ── Send ──────────────────────────────────────────────────────────────────────
+async function sendMessage() {
+  const input = document.getElementById('chat-input');
+  const msg = input.value.trim();
+  if (!msg) return;
+  input.value = '';
+
+  const btn = document.getElementById('send-btn');
+  btn.disabled = true; btn.textContent = '…';
+
+  appendMsg('msg-user', 'Вы', mdToHtml(msg));
+
+  // Show typing — start with planning steps, then extend based on route
+  const typingEl = showTyping(STEPS_PLAN);
+
+  try {
+    const res = await fetch('/chat/message', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({
+        message_text: msg,
+        response_profile: document.getElementById('profile-select').value,
+        language: document.getElementById('lang-select').value,
+        conversation_history: conversationHistory.slice(-MAX_HISTORY),
+      }),
+    });
+
+    if (checkUnauthorized(res)) { removeTyping(typingEl); btn.disabled = false; btn.textContent = 'Отправить'; return; }
+    if (!res.ok) {
+      removeTyping(typingEl);
+      const e = await res.json().catch(() => ({}));
+      appendMsg('msg-atlas', 'ATLAS', `<span style="color:#dc2626">${e.detail || 'Ошибка сервера.'}</span>`);
+      return;
+    }
+
+    const data = await res.json();
+    removeTyping(typingEl);
+    setBadge(data.route);
+
+    if (data.route === 'clarify') {
+      appendMsg('msg-atlas', 'ATLAS', mdToHtml(data.clarify_message || 'Уточните запрос.'));
+    } else if (data.route === 'self_check') {
+      renderQuiz(data);
+    } else {
+      // Save Q&A exchange to session history
+      if (data.status === 'answered' && data.answer_markdown) {
+        conversationHistory.push({ role: 'user', content: msg });
+        conversationHistory.push({ role: 'assistant', content: data.answer_markdown });
+      }
+      renderQA(data, msg);
+    }
+
+  } catch(e) {
+    removeTyping(typingEl);
+    appendMsg('msg-atlas', 'ATLAS', '<span style="color:#dc2626">Ошибка соединения.</span>');
+  }
+
+  btn.disabled = false; btn.textContent = 'Отправить';
+  input.focus();
+}
+
+document.getElementById('send-btn').addEventListener('click', sendMessage);
+document.getElementById('chat-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+});
+
+function onAuthReady() {}
+</script>
+{% endblock %}
