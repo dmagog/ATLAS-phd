@@ -36,6 +36,8 @@ Rules:
 - Questions must be academically rigorous and test deep understanding
 - Multiple choice options must be plausible (no obviously wrong answers)
 - Respond in the same language as the topic (Russian or English)
+- Write ALL mathematical formulas and expressions in LaTeX notation enclosed in $...$ for inline or $$...$$ for display math (e.g. $k^2 = -\gamma^2$, $$\sin\theta = \frac{\lambda}{d}$$)
+- Never write formulas as plain text substitutes (no "k^2", no "sin(theta)", no unicode subscripts)
 
 Return a JSON object with this exact structure (ONLY JSON, no markdown, no explanation):
 {
@@ -65,6 +67,8 @@ Rules:
 - Questions must be academically rigorous and test deep understanding
 - Multiple choice options must be plausible (no obviously wrong answers)
 - Respond in the same language as the topic (Russian or English)
+- Write ALL mathematical formulas and expressions in LaTeX notation enclosed in $...$ for inline or $$...$$ for display math (e.g. $k^2 = -\gamma^2$, $$\sin\theta = \frac{\lambda}{d}$$)
+- Never write formulas as plain text substitutes (no "k^2", no "sin(theta)", no unicode subscripts)
 
 Return a JSON object with this exact structure (ONLY JSON, no markdown, no explanation):
 {

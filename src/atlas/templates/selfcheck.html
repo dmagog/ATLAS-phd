@@ -138,6 +138,12 @@ document.getElementById('start-btn').addEventListener('click', async () => {
   btn.disabled = false;
 });
 
+const _KATEX_OPTS = {delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]};
+
+function renderMath(el) {
+  if (typeof renderMathInElement === 'function') renderMathInElement(el, _KATEX_OPTS);
+}
+
 function renderQuestions(questions, topic) {
   document.getElementById('topic-label').textContent = topic;
   const container = document.getElementById('questions-list');
@@ -158,6 +164,7 @@ function renderQuestions(questions, topic) {
     div.innerHTML = inner;
     container.appendChild(div);
   });
+  renderMath(container);
 }
 
 // ── Submit ────────────────────────────────────────────────────────────────────
@@ -303,6 +310,7 @@ function renderResults(data) {
       </div>`;
     breakdown.appendChild(div);
   });
+  renderMath(document.getElementById('results-card'));
 }
 
 document.getElementById('restart-btn').addEventListener('click', () => {
