@@ -114,17 +114,27 @@ function setBadge(route) {
 }
 
 // ── Feedback ──────────────────────────────────────────────────────────────────
-async function sendFeedback(btn, rating, requestId, questionText, answerText) {
+const _fbData = {}; // requestId → {questionText, answerText}
+
+async function sendFeedback(btn) {
+  const rid    = btn.dataset.rid;
+  const rating = btn.dataset.rating;
+  const { questionText = '', answerText = '' } = _fbData[rid] || {};
   const row = btn.closest('.feedback-row');
+  row.innerHTML = '<span style="font-size:.75rem;color:#9ca3af">Спасибо за оценку!</span>';
   try {
     await fetch('/qa/feedback', {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ request_id: requestId, rating, question_text: questionText, answer_markdown: answerText }),
+      body: JSON.stringify({ request_id: rid, rating, question_text: questionText, answer_markdown: answerText }),
     });
   } catch(_) {}
-  row.innerHTML = '<span style="font-size:.75rem;color:#9ca3af">Спасибо за оценку!</span>';
 }
+
+document.addEventListener('click', e => {
+  const btn = e.target.closest('.fb-btn[data-rid]');
+  if (btn) sendFeedback(btn);
+});
 
 // ── Q&A response ──────────────────────────────────────────────────────────────
 function renderQA(data, questionText) {
@@ -136,13 +146,12 @@ function renderQA(data, questionText) {
         + data.citations.map(c => `<span class="tag">${c.document_title}${c.page ? ', с.'+c.page : ''}</span>`).join(' ')
         + '</div>';
     }
-    const qText = JSON.stringify(questionText || '');
-    const aText = JSON.stringify(answerText);
-    const rid   = data.request_id || '';
+    const rid = data.request_id || '';
+    if (rid) _fbData[rid] = { questionText: questionText || '', answerText };
     const feedbackHtml = rid ? `<div class="feedback-row" style="margin-top:10px;display:flex;gap:6px;align-items:center">
       <span style="font-size:.75rem;color:#9ca3af">Полезно?</span>
-      <button class="fb-btn" onclick="sendFeedback(this,'positive','${rid}',${qText},${aText})"><i class="bi bi-hand-thumbs-up"></i></button>
-      <button class="fb-btn" onclick="sendFeedback(this,'negative','${rid}',${qText},${aText})"><i class="bi bi-hand-thumbs-down"></i></button>
+      <button class="fb-btn" data-rid="${rid}" data-rating="positive"><i class="bi bi-hand-thumbs-up"></i></button>
+      <button class="fb-btn" data-rid="${rid}" data-rating="negative"><i class="bi bi-hand-thumbs-down"></i></button>
     </div>` : '';
     appendMsg('msg-atlas', 'ATLAS', mdToHtml(answerText) + citeHtml + feedbackHtml);
   } else {
