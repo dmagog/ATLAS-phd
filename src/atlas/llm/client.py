@@ -14,8 +14,17 @@ _OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 def _should_retry(exc: BaseException) -> bool:
     if isinstance(exc, httpx.HTTPStatusError):
-        return exc.response.status_code in (429, 500, 502, 503, 504)
-    if isinstance(exc, httpx.TimeoutException):
+        # Standard HTTP error codes worth retrying
+        if exc.response.status_code in (429, 500, 502, 503, 504):
+            return True
+        # OpenRouter wraps upstream rate-limits as 200 + {"error": ...};
+        # we re-raise them as HTTPStatusError — catch by message.
+        if "rate" in str(exc).lower():
+            return True
+    # Network-level failures: dropped connection, incomplete read, timeout
+    if isinstance(exc, (httpx.TimeoutException,
+                        httpx.RemoteProtocolError,
+                        httpx.ReadError)):
         return True
     return False
 
@@ -37,8 +46,8 @@ class LLMClient:
 
     @retry(
         retry=retry_if_exception(_should_retry),
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=2, max=10),
+        stop=stop_after_attempt(5),
+        wait=wait_exponential(multiplier=2, min=5, max=60),
         reraise=True,
     )
     async def chat(

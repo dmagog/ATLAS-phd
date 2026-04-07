@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     admin_email: str
     admin_password: str
     log_level: str = "INFO"
-    request_timeout_ms: int = 25000
+    request_timeout_ms: int = 180000  # 3 min — reasoning models need time to think
     retriever_top_k: int = 8
     retriever_max_chunks_in_prompt: int = 4
     retriever_min_top1_score: float = 0.62
