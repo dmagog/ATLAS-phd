@@ -196,5 +196,8 @@ document.getElementById('detail-overlay').addEventListener('click', e => {
 });
 
 function onAuthReady() { loadHistory(); }
+// base.html calls checkAuth() before this script runs, so onAuthReady
+// was not yet defined at that point. Re-trigger auth flow now.
+checkAuth();
 </script>
 {% endblock %}
