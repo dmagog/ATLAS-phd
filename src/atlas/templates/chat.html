@@ -27,7 +27,10 @@
     <textarea id="chat-input"
       placeholder="Задайте вопрос или напишите «Проверь меня по теме…»"
       style="flex:1;min-height:48px;max-height:140px;resize:none"></textarea>
-    <button class="btn-primary" id="send-btn" style="align-self:flex-end;white-space:nowrap">Отправить</button>
+    <div style="display:flex;flex-direction:column;gap:4px;align-self:flex-end">
+      <button class="btn-primary" id="send-btn" style="white-space:nowrap">Отправить</button>
+      <button class="btn-secondary" id="clear-btn" style="font-size:.78rem;padding:4px 10px">Очистить</button>
+    </div>
   </div>
 
 </div>
@@ -62,7 +65,7 @@ function scoreColor(s) {
   return s >= 4 ? '#16a34a' : s >= 2.5 ? '#d97706' : '#dc2626';
 }
 
-function appendMsg(cls, labelText, innerHtml) {
+function appendMsg(cls, labelText, innerHtml, save = true) {
   const msgs = document.getElementById('messages');
   const wrap = document.createElement('div');
   wrap.className = `msg-wrap ${cls}`;
@@ -70,6 +73,7 @@ function appendMsg(cls, labelText, innerHtml) {
   msgs.appendChild(wrap);
   msgs.scrollTop = msgs.scrollHeight;
   if (window.renderMathInElement) renderMathInElement(wrap);
+  if (save) { _chatLog.push({cls, label: labelText, html: innerHtml}); _saveSession(); }
   return wrap;
 }
 
@@ -336,9 +340,38 @@ function renderQuizResults(data, questions) {
 }
 
 // ── Session memory ────────────────────────────────────────────────────────────
-// Only Q&A exchanges are tracked (self_check and clarify are not stored).
-const conversationHistory = [];
-const MAX_HISTORY = 10; // last 10 messages = 5 turns
+const _SS_HISTORY = 'atlas_conv_history';
+const _SS_LOG     = 'atlas_chat_log';
+const MAX_HISTORY = 10;
+
+const conversationHistory = JSON.parse(sessionStorage.getItem(_SS_HISTORY) || '[]');
+let   _chatLog            = JSON.parse(sessionStorage.getItem(_SS_LOG)     || '[]');
+
+function _saveSession() {
+  sessionStorage.setItem(_SS_HISTORY, JSON.stringify(conversationHistory.slice(-MAX_HISTORY)));
+  sessionStorage.setItem(_SS_LOG,     JSON.stringify(_chatLog.slice(-60)));
+}
+
+function _restoreChat() {
+  if (!_chatLog.length) return;
+  const msgs = document.getElementById('messages');
+  _chatLog.forEach(({cls, label, html}) => {
+    const wrap = document.createElement('div');
+    wrap.className = `msg-wrap ${cls}`;
+    wrap.innerHTML = `<div class="msg-label">${label}</div>${html}`;
+    msgs.appendChild(wrap);
+    if (window.renderMathInElement) renderMathInElement(wrap);
+  });
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function clearChat() {
+  sessionStorage.removeItem(_SS_HISTORY);
+  sessionStorage.removeItem(_SS_LOG);
+  conversationHistory.length = 0;
+  _chatLog = [];
+  document.getElementById('messages').innerHTML = '';
+}
 
 // ── Send ──────────────────────────────────────────────────────────────────────
 async function sendMessage() {
@@ -388,6 +421,7 @@ async function sendMessage() {
       if (data.status === 'answered' && data.answer_markdown) {
         conversationHistory.push({ role: 'user', content: msg });
         conversationHistory.push({ role: 'assistant', content: data.answer_markdown });
+        _saveSession();
       }
       renderQA(data, msg);
     }
@@ -406,6 +440,13 @@ document.getElementById('chat-input').addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
 });
 
-function onAuthReady() {}
+function onAuthReady() {
+  _restoreChat();
+}
+
+document.getElementById('clear-btn').addEventListener('click', () => {
+  clearChat();
+});
+checkAuth();
 </script>
 {% endblock %}
