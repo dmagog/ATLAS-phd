@@ -74,18 +74,21 @@ let stepTimers = [];
 const GENERATE_STEPS = ['<i class="bi bi-crosshair"></i> Анализирую тему', '<i class="bi bi-pencil"></i> Составляю вопросы', '<i class="bi bi-card-checklist"></i> Финализирую тест'];
 const EVALUATE_STEPS = ['<i class="bi bi-check2-square"></i> Проверяю ответы', '<i class="bi bi-bar-chart-line"></i> Оцениваю по критериям', '<i class="bi bi-lightbulb"></i> Формирую обратную связь'];
 
+let _stepSeq = 0; // unique prefix per startSteps call avoids id collisions
+
 function startSteps(textEl, stepsEl, steps) {
   stopSteps();
+  const prefix = 'step-' + (++_stepSeq) + '-';
   textEl.innerHTML = steps[0];
   stepsEl.innerHTML = steps.map((s, i) =>
-    `<span class="step-badge ${i === 0 ? 'active' : ''}" id="step-${i}">${s}</span>`
+    `<span class="step-badge ${i === 0 ? 'active' : ''}" id="${prefix}${i}">${s}</span>`
   ).join('');
 
   let idx = 0;
   const t = setInterval(() => {
-    document.getElementById(`step-${idx}`)?.classList.replace('active', 'done');
+    stepsEl.querySelector(`#${prefix}${idx}`)?.classList.replace('active', 'done');
     idx = Math.min(idx + 1, steps.length - 1);
-    const next = document.getElementById(`step-${idx}`);
+    const next = stepsEl.querySelector(`#${prefix}${idx}`);
     if (next) { next.classList.add('active'); textEl.innerHTML = steps[idx]; }
   }, 4000);
   stepTimers.push(t);
@@ -153,11 +156,16 @@ function renderQuestions(questions, topic) {
     div.style.cssText = 'border:1px solid #e5e7eb;border-radius:8px;padding:14px';
     let inner = `<div style="font-weight:500;margin-bottom:8px">${i+1}. ${q.prompt}</div>`;
     if (q.type === 'multiple_choice') {
-      inner += q.options.map(opt =>
-        `<label style="display:block;margin:4px 0;cursor:pointer">
-          <input type="radio" name="q_${q.question_id}" value="${opt.charAt(0)}" style="width:auto;margin-right:6px">${opt}
+      const maxLen = Math.max(...q.options.map(o => o.length));
+      const twoCol = maxLen <= 48;
+      const gridStyle = twoCol
+        ? 'display:grid;grid-template-columns:1fr 1fr;gap:2px 12px;margin-top:4px'
+        : 'margin-top:4px';
+      inner += `<div style="${gridStyle}">` + q.options.map(opt =>
+        `<label style="display:flex;align-items:center;gap:6px;padding:4px 0;cursor:pointer">
+          <input type="radio" name="q_${q.question_id}" value="${opt.charAt(0)}" style="width:auto;flex-shrink:0">${opt}
         </label>`
-      ).join('');
+      ).join('') + '</div>';
     } else {
       inner += `<textarea data-qid="${q.question_id}" placeholder="Ваш ответ..." style="margin-top:6px"></textarea>`;
     }
