@@ -1,4 +1,4 @@
-# ATLAS phd: System Design (Milestone 2)
+# ATLAS phd: System Design
 
 ## 1. Назначение документа
 
@@ -190,8 +190,9 @@ PoC использует конечный автомат со следующим
 
 | Endpoint | Назначение | Основной ответ |
 |---|---|---|
-| `POST /qa/message` | Один `Q&A` запрос | `answer` или `refusal` |
-| `POST /self-check/start` | Создание новой попытки self-check | `attempt_id` + `QuestionSet` |
+| `POST /chat/message` | Единый чат — Planner маршрутизирует в qa / self_check / clarify | `route` + qa-ответ или вопросы или уточнение |
+| `POST /qa/message` | Прямой Q&A (без Planner, для тестирования) | `answer` или `refusal` |
+| `POST /self-check/start` | Прямой запуск self-check (без Planner, для тестирования) | `attempt_id` + `QuestionSet` |
 | `POST /self-check/{attempt_id}/submit` | Отправка ответов на оценку | `EvaluationResult` |
 | `POST /admin/ingestion-jobs` | Запуск пакетной загрузки документов | `job_id` + статусы файлов |
 
@@ -224,13 +225,13 @@ PoC использует конечный автомат со следующим
 
 ### 7.3 Решение answer / refuse
 
-Для ответа должны выполняться guardrails из ТЗ:
-- `top1_score >= 0.70`
-- минимум 2 фрагмента с `score >= 0.60`
+Для ответа должны выполняться guardrails:
+- `top1_score >= 0.62` (скалибровано под `paraphrase-multilingual-MiniLM-L12-v2`)
+- минимум 2 фрагмента с `score >= 0.55`
 
 Если условия не выполнены:
-- `Answer Node` не считается достаточным основанием для публикации;
-- `Verifier Node` возвращает `REFUSAL_SENT` с reason code.
+- `Verifier Node` инициирует одну попытку re-generation с `top_k × 2`;
+- если re-generation также не проходит — возвращается `REFUSAL_SENT` с reason code.
 
 ### 7.4 Ограничения retrieval в PoC
 
@@ -269,7 +270,7 @@ PoC использует конечный автомат со следующим
 |---|---|---|
 | Недостаточный retrieval evidence | `top1/top_k` ниже порога | Осознанный отказ с reason code |
 | Ambiguous intent | Planner confidence ниже порога или конфликт категорий | Запрос уточнения |
-| LLM timeout / `429` / `5xx` | Ошибка внешнего API | До 2 retry с backoff, затем controlled error |
+| LLM timeout / `429` / `5xx` | Ошибка внешнего API | До 5 retry с экспоненциальным backoff (5→10→20→40→60 сек), затем controlled error |
 | Invalid self-check evaluation | Схема payload невалидна | Не публиковать результат, вернуть controlled refusal/error |
 | Prompt injection | Policy violation или suspicious pattern | Игнорировать инструкцию, логировать, при необходимости отказать |
 | Unsupported document format | MIME/extension validation | Отклонить файл до ingestion |
@@ -289,7 +290,7 @@ PoC использует конечный автомат со следующим
 - Целевой `error rate`: `<= 3%`
 - Таймаут retrieval: `<= 2 sec`
 - Таймаут одного LLM-вызова: `<= 25 sec`
-- Retry policy для generation/evaluation: до 2 повторов при `429/5xx`
+- Retry policy для generation/evaluation: до 5 повторов при `429/5xx` с экспоненциальным backoff
 
 ### 10.2 Стоимость
 
