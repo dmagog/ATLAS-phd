@@ -183,6 +183,9 @@ async function openDetail(attemptId) {
     });
 
     body.innerHTML = html;
+    if (typeof renderMathInElement === 'function') {
+      renderMathInElement(body, {delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]});
+    }
   } catch(e) {
     body.innerHTML = '<div style="color:#dc2626;font-size:.9rem">Не удалось загрузить детали.</div>';
   }
