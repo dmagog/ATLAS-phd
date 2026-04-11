@@ -124,9 +124,19 @@ LOG_LEVEL=INFO
 docker compose up -d
 ```
 
-Сервис поднимет три контейнера: `postgres` (pgvector), `embeddings` (sentence-transformers sidecar), `app` (FastAPI).
+Поднимаются три контейнера: `postgres` (pgvector), `embeddings` (sentence-transformers sidecar), `app` (FastAPI).
 
-При старте `app` автоматически применяет все pending Alembic-миграции и создаёт admin-пользователя из переменных `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
+> **Первый запуск занимает 5–10 минут** — Docker собирает образы и embeddings-сервис скачивает модель `paraphrase-multilingual-MiniLM-L12-v2` (~100 МБ). При повторных запусках всё кэшировано и стартует за секунды.
+
+При старте `app` автоматически применяет все Alembic-миграции и создаёт admin-пользователя из `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
+
+### 3. Проверить готовность
+
+```bash
+docker compose logs -f app
+```
+
+Дождитесь строки `Application startup complete.` Это значит все три сервиса запущены.
 
 ### 4. Открыть интерфейс
 
@@ -136,18 +146,23 @@ http://127.0.0.1:8731
 
 > Используйте `127.0.0.1`, а не `localhost` — некоторые сетевые конфигурации туннелируют `localhost` через внешний резолвер.
 
-### 5. Загрузить материалы
+Войдите под `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
 
-1. Войти под admin-аккаунтом.
-2. Перейти на страницу **⚙ Материалы**.
-3. Загрузить файлы (PDF / DOCX / TXT / MD / JSONL).
-4. Дождаться завершения ingestion-job (progress bar на странице).
+### 5. Загрузить учебные материалы
+
+1. Перейти на страницу **Материалы** (иконка шестерёнки в навигации).
+2. Загрузить файлы (PDF / DOCX / TXT / MD / JSONL).
+3. Дождаться завершения ingestion-job — прогресс виден на странице.
+
+После загрузки система готова отвечать на вопросы, строить самопроверки и цитировать источники.
 
 ### 6. Smoke-check
 
-После загрузки материалов прогнать базовые сценарии из [`docs/acceptance_tests.md`](docs/acceptance_tests.md) (`AT-01`, `AT-03`, `AT-06`).
+Прогнать базовые сценарии из [`docs/acceptance_tests.md`](docs/acceptance_tests.md): `AT-01` (Q&A с цитатами), `AT-03` (отказ при отсутствии evidence), `AT-06` (самопроверка).
 
 ## Разработка (hot-reload)
+
+Команда та же:
 
 ```bash
 docker compose up -d
