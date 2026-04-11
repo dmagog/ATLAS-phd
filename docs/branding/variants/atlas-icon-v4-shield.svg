@@ -1,0 +1,12 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">ATLAS icon variant v4 shield</title>
+  <desc id="desc">Minimal shield with A and check symbol.</desc>
+
+  <circle cx="256" cy="256" r="232" fill="#1A1A2E"/>
+  <circle cx="256" cy="256" r="220" fill="none" stroke="#2563EB" stroke-width="16"/>
+
+  <path d="M256 128L350 172V264C350 332 308 378 256 396C204 378 162 332 162 264V172L256 128Z" fill="none" stroke="#FFFFFF" stroke-width="14" stroke-linejoin="round"/>
+
+  <path d="M206 312L256 184L306 312" fill="none" stroke="#FFFFFF" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M228 256L245 273L276 242" fill="none" stroke="#2563EB" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
