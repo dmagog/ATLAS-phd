@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/branding/variants/atlas-icon-v5-shield-no-ring-calm-blue-inverted-preview-dark-1024.png" alt="ATLAS phd" width="120">
+</p>
+
 # ATLAS phd
 
 ![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)
