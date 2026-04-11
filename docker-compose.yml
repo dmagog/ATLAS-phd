@@ -1,0 +1,53 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: atlas
+      POSTGRES_USER: atlas
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-atlas_dev}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U atlas"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  embeddings:
+    build:
+      context: .
+      dockerfile: docker/embeddings.Dockerfile
+    environment:
+      MODEL_NAME: paraphrase-multilingual-MiniLM-L12-v2
+      PORT: 8001
+    ports:
+      - "8001:8001"
+    volumes:
+      - embeddings_cache:/root/.cache/huggingface
+
+  app:
+    build:
+      context: .
+      dockerfile: docker/app.Dockerfile
+    environment:
+      DATABASE_URL: postgresql+asyncpg://atlas:${POSTGRES_PASSWORD:-atlas_dev}@postgres:5432/atlas
+      EMBEDDINGS_URL: http://embeddings:8001
+      LLM_API_KEY: ${LLM_API_KEY}
+      LLM_MODEL_ID: ${LLM_MODEL_ID:-qwen/qwen3-8b:free}
+      JWT_SECRET: ${JWT_SECRET}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    ports:
+      - "8731:8731"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      embeddings:
+        condition: service_started
+
+volumes:
+  postgres_data:
+  embeddings_cache:

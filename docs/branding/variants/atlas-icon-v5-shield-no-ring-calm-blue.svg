@@ -1,0 +1,8 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">ATLAS icon v5 calm blue</title>
+  <desc id="desc">Shield with stylized A and integrated checkmark using a restrained blue accent.</desc>
+
+  <path d="M256 88L368 140V248C368 331 318 389 256 412C194 389 144 331 144 248V140L256 88Z" fill="none" stroke="#1E293B" stroke-width="18" stroke-linejoin="round"/>
+  <path d="M206 320L256 184L306 320" fill="none" stroke="#1D4ED8" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M228 257L246 275L278 243" fill="none" stroke="#1D4ED8" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -1,4 +1,4 @@
-# ATLAS Agent: Governance (Milestone 1)
+# ATLAS phd: Governance
 
 ## 1. Risk Register
 
@@ -74,4 +74,4 @@
 
 - Product and grading quality are reviewed on a pilot eval set.
 - Risky failures (`policy_blocked`, `invalid_evaluation`, suspected leakage) are reviewed manually.
-- The governance document is expected to evolve after Milestone 1 based on implementation findings.
+- The governance document is expected to evolve as the system is implemented and used in practice.

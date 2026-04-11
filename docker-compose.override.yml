@@ -1,0 +1,13 @@
+# Development overrides — auto-applied by docker compose automatically.
+# Mounts source code into the container and enables uvicorn --reload.
+# Do NOT commit secrets or use in production.
+
+services:
+  app:
+    volumes:
+      - ./src:/app/src
+      - ./alembic:/app/alembic
+      - ./corpus:/app/corpus
+    command: uvicorn atlas.api.main:app --host 0.0.0.0 --port 8731 --reload --reload-dir /app/src --timeout-graceful-shutdown 1
+    environment:
+      APP_ENV: development

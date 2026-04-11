@@ -1,0 +1,334 @@
+{% extends "base.html" %}
+{% block title %}Самопроверка{% endblock %}
+{% block content %}
+<div class="card" id="start-card">
+  <h2 style="font-size:1rem;margin-bottom:14px">Самопроверка по теме</h2>
+  <div style="display:flex;gap:8px">
+    <input id="topic-input" placeholder="Введите тему (например: «Метод наименьших квадратов»)">
+    <select id="lang-select" style="width:auto">
+      <option value="ru">RU</option>
+      <option value="en">EN</option>
+    </select>
+    <button class="btn-primary" id="start-btn" style="white-space:nowrap">Начать</button>
+  </div>
+  <div id="start-status" style="display:none;margin-top:14px;padding:12px 14px;background:#eff6ff;border-radius:8px;border:1px solid #bfdbfe">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+      <span style="display:inline-block;width:16px;height:16px;border:2px solid #bfdbfe;border-top-color:#2563eb;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0"></span>
+      <span id="start-status-text" style="font-size:.9rem;font-weight:500;color:#1d4ed8"></span>
+    </div>
+    <div id="start-steps" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+  </div>
+  <div id="start-error" class="error hidden"></div>
+</div>
+
+<div id="questions-card" class="card hidden">
+  <h2 style="font-size:1rem;margin-bottom:14px">Вопросы по теме: <span id="topic-label"></span></h2>
+  <div id="questions-list" style="display:flex;flex-direction:column;gap:16px"></div>
+  <button class="btn-primary" id="submit-btn" style="margin-top:16px">Отправить ответы</button>
+  <div id="submit-status" style="display:none;margin-top:12px;padding:12px 14px;background:#eff6ff;border-radius:8px;border:1px solid #bfdbfe">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+      <span style="display:inline-block;width:16px;height:16px;border:2px solid #bfdbfe;border-top-color:#2563eb;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0"></span>
+      <span id="submit-status-text" style="font-size:.9rem;font-weight:500;color:#1d4ed8"></span>
+    </div>
+    <div id="submit-steps" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+  </div>
+  <div id="submit-error" class="error hidden"></div>
+</div>
+
+<div id="results-card" class="card hidden">
+  <h2 style="font-size:1rem;margin-bottom:14px">Результаты</h2>
+  <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:4px">
+    <div id="score-display" style="font-size:2.4rem;font-weight:700;color:#2563eb"></div>
+    <div id="score-label" style="font-size:.9rem;color:#6b7280"></div>
+  </div>
+  <div id="score-bar" style="height:8px;background:#e5e7eb;border-radius:4px;margin-bottom:16px">
+    <div id="score-fill" style="height:100%;border-radius:4px;transition:width .4s"></div>
+  </div>
+  <div id="criteria-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px"></div>
+  <div id="feedback-text" style="font-size:.9rem;line-height:1.6;color:#374151;margin-bottom:10px;padding:12px;background:#f9fafb;border-radius:6px;border-left:3px solid #2563eb"></div>
+  <div id="error-tags" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px"></div>
+
+  <!-- Per-question breakdown -->
+  <h3 style="font-size:.95rem;margin-bottom:12px;border-top:1px solid #e5e7eb;padding-top:14px">Разбор по вопросам</h3>
+  <div id="questions-breakdown" style="display:flex;flex-direction:column;gap:12px"></div>
+
+  <button class="btn-secondary" id="restart-btn" style="margin-top:20px">Новая проверка</button>
+</div>
+{% endblock %}
+{% block scripts %}
+<style>
+@keyframes spin { to { transform: rotate(360deg); } }
+.step-badge {
+  font-size:.78rem;padding:2px 8px;border-radius:12px;
+  background:#dbeafe;color:#1e40af;white-space:nowrap;
+  transition:background .3s,color .3s;
+}
+.step-badge.active { background:#2563eb;color:#fff; }
+.step-badge.done   { background:#dcfce7;color:#166534; }
+</style>
+<script>
+let currentAttemptId = null;
+let currentQuestions = [];
+let stepTimers = [];
+
+const GENERATE_STEPS = ['<i class="bi bi-crosshair"></i> Анализирую тему', '<i class="bi bi-pencil"></i> Составляю вопросы', '<i class="bi bi-card-checklist"></i> Финализирую тест'];
+const EVALUATE_STEPS = ['<i class="bi bi-check2-square"></i> Проверяю ответы', '<i class="bi bi-bar-chart-line"></i> Оцениваю по критериям', '<i class="bi bi-lightbulb"></i> Формирую обратную связь'];
+
+let _stepSeq = 0; // unique prefix per startSteps call avoids id collisions
+
+function startSteps(textEl, stepsEl, steps) {
+  stopSteps();
+  const prefix = 'step-' + (++_stepSeq) + '-';
+  textEl.innerHTML = steps[0];
+  stepsEl.innerHTML = steps.map((s, i) =>
+    `<span class="step-badge ${i === 0 ? 'active' : ''}" id="${prefix}${i}">${s}</span>`
+  ).join('');
+
+  let idx = 0;
+  const t = setInterval(() => {
+    stepsEl.querySelector(`#${prefix}${idx}`)?.classList.replace('active', 'done');
+    idx = Math.min(idx + 1, steps.length - 1);
+    const next = stepsEl.querySelector(`#${prefix}${idx}`);
+    if (next) { next.classList.add('active'); textEl.innerHTML = steps[idx]; }
+  }, 4000);
+  stepTimers.push(t);
+}
+
+function stopSteps() {
+  stepTimers.forEach(t => clearInterval(t));
+  stepTimers = [];
+}
+
+// ── Start ─────────────────────────────────────────────────────────────────────
+document.getElementById('start-btn').addEventListener('click', async () => {
+  const topic = document.getElementById('topic-input').value.trim();
+  if (!topic) return;
+  const btn = document.getElementById('start-btn');
+  const errEl = document.getElementById('start-error');
+  const statusEl = document.getElementById('start-status');
+  btn.disabled = true;
+  errEl.classList.add('hidden');
+  statusEl.style.display = 'block';
+  startSteps(
+    document.getElementById('start-status-text'),
+    document.getElementById('start-steps'),
+    GENERATE_STEPS,
+  );
+  try {
+    const res = await fetch('/self-check/start', {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify({topic, language: document.getElementById('lang-select').value}),
+    });
+    stopSteps();
+    statusEl.style.display = 'none';
+    if (checkUnauthorized(res)) { btn.disabled = false; return; }
+    if (!res.ok) {
+      let msg = 'Ошибка генерации вопросов.';
+      try { const e = await res.json(); if (e.detail) msg = e.detail; } catch(_) {}
+      errEl.textContent = msg; errEl.classList.remove('hidden'); btn.disabled = false; return;
+    }
+    const data = await res.json();
+    currentAttemptId = data.attempt_id;
+    currentQuestions = data.questions;
+    renderQuestions(data.questions, topic);
+    document.getElementById('start-card').classList.add('hidden');
+    document.getElementById('questions-card').classList.remove('hidden');
+  } catch(e) {
+    stopSteps();
+    statusEl.style.display = 'none';
+    errEl.textContent = 'Ошибка соединения.'; errEl.classList.remove('hidden');
+  }
+  btn.disabled = false;
+});
+
+const _KATEX_OPTS = {delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]};
+
+function renderMath(el) {
+  if (typeof renderMathInElement === 'function') renderMathInElement(el, _KATEX_OPTS);
+}
+
+function renderQuestions(questions, topic) {
+  document.getElementById('topic-label').textContent = topic;
+  const container = document.getElementById('questions-list');
+  container.innerHTML = '';
+  questions.forEach((q, i) => {
+    const div = document.createElement('div');
+    div.style.cssText = 'border:1px solid #e5e7eb;border-radius:8px;padding:14px';
+    let inner = `<div style="font-weight:500;margin-bottom:8px">${i+1}. ${q.prompt}</div>`;
+    if (q.type === 'multiple_choice') {
+      const maxLen = Math.max(...q.options.map(o => o.length));
+      const twoCol = maxLen <= 48;
+      const gridStyle = twoCol
+        ? 'display:grid;grid-template-columns:1fr 1fr;gap:2px 12px;margin-top:4px'
+        : 'margin-top:4px';
+      inner += `<div style="${gridStyle}">` + q.options.map(opt =>
+        `<label style="display:flex;align-items:center;gap:6px;padding:4px 0;cursor:pointer">
+          <input type="radio" name="q_${q.question_id}" value="${opt.charAt(0)}" style="width:auto;flex-shrink:0">${opt}
+        </label>`
+      ).join('') + '</div>';
+    } else {
+      inner += `<textarea data-qid="${q.question_id}" placeholder="Ваш ответ..." style="margin-top:6px"></textarea>`;
+    }
+    div.innerHTML = inner;
+    container.appendChild(div);
+  });
+  renderMath(container);
+}
+
+// ── Submit ────────────────────────────────────────────────────────────────────
+document.getElementById('submit-btn').addEventListener('click', async () => {
+  const btn = document.getElementById('submit-btn');
+  const errEl = document.getElementById('submit-error');
+  const statusEl = document.getElementById('submit-status');
+  btn.disabled = true;
+  errEl.classList.add('hidden');
+  statusEl.style.display = 'block';
+  startSteps(
+    document.getElementById('submit-status-text'),
+    document.getElementById('submit-steps'),
+    EVALUATE_STEPS,
+  );
+
+  const answers = currentQuestions.map(q => {
+    let answer_text = '';
+    if (q.type === 'multiple_choice') {
+      const sel = document.querySelector(`input[name="q_${q.question_id}"]:checked`);
+      answer_text = sel ? sel.value : '';
+    } else {
+      const ta = document.querySelector(`textarea[data-qid="${q.question_id}"]`);
+      answer_text = ta ? ta.value.trim() : '';
+    }
+    return {question_id: q.question_id, answer_text};
+  });
+
+  try {
+    const res = await fetch(`/self-check/${currentAttemptId}/submit`, {
+      method: 'POST', headers: authHeaders(),
+      body: JSON.stringify(answers),
+    });
+    stopSteps();
+    statusEl.style.display = 'none';
+    if (checkUnauthorized(res)) { btn.disabled = false; return; }
+    if (!res.ok) {
+      let msg = 'Ошибка оценки.';
+      try { const e = await res.json(); if (e.detail) msg = e.detail; } catch(_) {}
+      errEl.textContent = msg; errEl.classList.remove('hidden'); btn.disabled = false; return;
+    }
+    const data = await res.json();
+    renderResults(data);
+    document.getElementById('questions-card').classList.add('hidden');
+    document.getElementById('results-card').classList.remove('hidden');
+  } catch(e) {
+    stopSteps();
+    statusEl.style.display = 'none';
+    errEl.textContent = 'Ошибка соединения.'; errEl.classList.remove('hidden');
+  }
+  btn.disabled = false;
+});
+
+// ── Results ───────────────────────────────────────────────────────────────────
+function scoreColor(s) {
+  if (s >= 4) return '#16a34a';
+  if (s >= 2.5) return '#d97706';
+  return '#dc2626';
+}
+
+function renderResults(data) {
+  const score = data.overall_score.toFixed(1);
+  const color = scoreColor(data.overall_score);
+  document.getElementById('score-display').textContent = `${score} / 5`;
+  document.getElementById('score-display').style.color = color;
+  document.getElementById('score-fill').style.background = color;
+  document.getElementById('score-fill').style.width = (data.overall_score / 5 * 100) + '%';
+
+  const verdict = data.overall_score >= 4 ? 'Отлично' : data.overall_score >= 3 ? 'Хорошо' : data.overall_score >= 2 ? 'Удовлетворительно' : 'Нужно повторить';
+  document.getElementById('score-label').textContent = verdict;
+
+  const cs = data.criterion_scores;
+  const labels = {correctness:'Точность', completeness:'Полнота', logic:'Логика', terminology:'Терминология'};
+  const weights = {correctness:'40%', completeness:'30%', logic:'20%', terminology:'10%'};
+  document.getElementById('criteria-grid').innerHTML = Object.keys(labels).map(k => {
+    const v = cs[k] || 0;
+    return `<div style="background:#f9fafb;border-radius:6px;padding:10px;border-left:3px solid ${scoreColor(v)}">
+      <div style="font-size:.78rem;color:#6b7280">${labels[k]} (${weights[k]})</div>
+      <div style="font-size:1.3rem;font-weight:700;color:${scoreColor(v)}">${v.toFixed(1)}</div>
+    </div>`;
+  }).join('');
+
+  if (data.evaluator_summary) {
+    document.getElementById('feedback-text').textContent = data.evaluator_summary;
+  }
+
+  const tags = data.error_tags || [];
+  document.getElementById('error-tags').innerHTML = tags.map(t =>
+    `<span class="tag" style="background:#fef3c7;color:#92400e">${t}</span>`
+  ).join('');
+
+  // ── Per-question breakdown ────────────────────────────────────────────────
+  const breakdown = document.getElementById('questions-breakdown');
+  breakdown.innerHTML = '';
+  (data.question_results || []).forEach((r, i) => {
+    const statusColors = {correct:'#dcfce7', partial:'#fef9c3', incorrect:'#fee2e2'};
+    const statusIcons  = {correct:'✓', partial:'~', incorrect:'✗'};
+    const statusText   = {correct:'Верно', partial:'Частично', incorrect:'Неверно'};
+    const bg = statusColors[r.status] || '#f9fafb';
+    const icon = statusIcons[r.status] || '?';
+
+    let body = `<div style="font-weight:500;margin-bottom:10px;font-size:.92rem">${i+1}. ${r.prompt}</div>`;
+
+    if (r.type === 'multiple_choice') {
+      body += r.options.map(opt => {
+        const letter = opt.charAt(0);
+        const isCorrect = letter === r.correct_answer;
+        const isUser    = letter === r.user_answer;
+        let style = 'display:block;padding:4px 8px;border-radius:4px;margin:3px 0;font-size:.85rem;';
+        if (isCorrect) style += 'background:#dcfce7;color:#166534;font-weight:600;';
+        else if (isUser && !isCorrect) style += 'background:#fee2e2;color:#991b1b;text-decoration:line-through;';
+        else style += 'color:#6b7280;';
+        const marker = isCorrect ? ' <i class="bi bi-check-lg"></i>' : (isUser && !isCorrect) ? ' <i class="bi bi-x-lg"></i>' : '';
+        return `<span style="${style}">${opt}${marker}</span>`;
+      }).join('');
+      if (!r.user_answer) {
+        body += '<div style="font-size:.8rem;color:#9ca3af;margin-top:4px">Ответ не выбран</div>';
+      }
+    } else {
+      // open-ended
+      body += `<div style="margin-top:6px">
+        <div style="font-size:.78rem;color:#6b7280;margin-bottom:2px">Ваш ответ:</div>
+        <div style="font-size:.85rem;padding:6px 10px;background:#fff;border-radius:4px;border:1px solid #e5e7eb;color:#374151">
+          ${r.user_answer || '<span style="color:#9ca3af">Не заполнено</span>'}
+        </div>
+      </div>`;
+    }
+
+    const isMC = r.type === 'multiple_choice';
+    const scoreDisplay = isMC
+      ? `<div style="font-size:1.4rem;font-weight:700;color:${scoreColor(r.score > 0 ? 4 : 0)}">${r.score > 0 ? '<i class="bi bi-check-circle-fill"></i>' : '<i class="bi bi-x-circle-fill"></i>'}</div>`
+      : `<div style="font-size:1.3rem;font-weight:700;color:${scoreColor(r.score)}">${r.score.toFixed(1)}<span style="font-size:.8rem;font-weight:400;color:#6b7280">/5</span></div>`;
+
+    const div = document.createElement('div');
+    div.style.cssText = `border-radius:8px;padding:14px;background:${bg};border:1px solid #e5e7eb`;
+    div.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+        <div style="flex:1">${body}</div>
+        <div style="text-align:center;flex-shrink:0;min-width:52px">
+          ${scoreDisplay}
+          <div style="font-size:.72rem;color:#6b7280">${statusText[r.status] || r.status}</div>
+        </div>
+      </div>`;
+    breakdown.appendChild(div);
+  });
+  renderMath(document.getElementById('results-card'));
+}
+
+document.getElementById('restart-btn').addEventListener('click', () => {
+  document.getElementById('results-card').classList.add('hidden');
+  document.getElementById('start-card').classList.remove('hidden');
+  document.getElementById('topic-input').value = '';
+  currentAttemptId = null;
+  currentQuestions = [];
+});
+
+function onAuthReady() {}
+</script>
+{% endblock %}
