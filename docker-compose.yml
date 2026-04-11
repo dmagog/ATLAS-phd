@@ -40,10 +40,6 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
-    volumes:
-      - ./corpus:/app/corpus
-      - ./src:/app/src
-      - ./alembic:/app/alembic
     ports:
       - "8731:8731"
     depends_on:
