@@ -6,3 +6,7 @@ __pycache__/
 .venv/
 .env
 .claude/
+
+# Eval runtime artifacts — keep folder structure (.gitkeep), not the runs.
+eval/results/*
+!eval/results/.gitkeep
