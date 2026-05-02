@@ -1,0 +1,12 @@
+# Treatment config — full agentic loop (verifier on, self-check on).
+# Текущее состояние ATLAS-сервиса = treatment (verifier hard-gate включён в M2).
+# Baseline (verifier off) — отдельный конфиг + переключатель в API (M3.D).
+
+name = "treatment"
+base_url = "http://127.0.0.1:8731"
+delay_seconds = 0.5
+timeout_seconds = 60
+
+# Mode передаётся в API через header X-ATLAS-Eval-Mode. Treatment = full agentic
+# loop (текущее поведение ATLAS).
+mode = "treatment"

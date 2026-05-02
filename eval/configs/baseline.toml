@@ -1,0 +1,13 @@
+# Baseline config — verifier OFF, self-check OFF (plain retrieval + answer).
+# Сравнивается с treatment.toml для измерения вклада агентного контура (M3.D A/B).
+
+name = "baseline"
+base_url = "http://127.0.0.1:8731"
+delay_seconds = 0.5
+timeout_seconds = 60
+
+# Mode для backend: при `mode = "baseline"` API должен пропускать verifier и
+# self-check generator — возвращать сырой ответ от Answer Node.
+# ВАЖНО: на M2 эта поддержка отсутствует. См. eval/configs/README.md
+# про необходимое расширение `/qa/message` и `/selfcheck/start`.
+mode = "baseline"
