@@ -7,6 +7,9 @@ __pycache__/
 .env
 .claude/
 
-# Eval runtime artifacts — keep folder structure (.gitkeep), not the runs.
+# Eval runtime artifacts — keep folder structure (.gitkeep) and final reports,
+# not the per-run dumps.
 eval/results/*
 !eval/results/.gitkeep
+!eval/results/*.md
+!eval/results/*.json

@@ -108,6 +108,8 @@ async def run_qa_flow(
         logger.info("qa_flow_state", state=RequestState.QA_RETRIEVAL_DONE, request_id=request_id)
 
         # Early refusal if corpus returned nothing at all
+        # NB: empty candidates ≠ low evidence. Even baseline cannot answer if there
+        # is literally nothing to cite — this gate stays on regardless of toggle.
         if not retrieval.candidates:
             logger.info(
                 "qa_flow_state",
@@ -119,11 +121,13 @@ async def run_qa_flow(
             return _refusal_response(request_id, RefusalReasonCode.LOW_EVIDENCE)
 
         # ── Hard-gate at retrieval layer (M3.A.0) ─────────────────────────────
-        # If the first retrieval has insufficient evidence, try one regen with a wider
-        # top_k window. If that ALSO fails enough_evidence — refuse without ever calling
-        # the LLM. This keeps refusal correctness independent of LLM availability and
-        # avoids burning tokens on off-topic queries.
-        if not retrieval.enough_evidence:
+        # In treatment mode (default), insufficient evidence triggers refusal at the
+        # retrieval layer, before any LLM call.
+        # In baseline mode (settings.verifier_enabled=False), this gate is bypassed —
+        # the system always proceeds to LLM and returns whatever it generates. This
+        # is the M3.D A/B contrast: how much faithfulness/refusal-correctness the
+        # agentic verifier loop adds vs plain retrieval+answer.
+        if settings.verifier_enabled and not retrieval.enough_evidence:
             logger.info(
                 "qa_flow_regen",
                 stage="retrieval",
@@ -162,6 +166,21 @@ async def run_qa_flow(
         logger.info("qa_flow_state", state=RequestState.QA_ANSWER_DRAFTED, request_id=request_id)
 
         # ── Verify ────────────────────────────────────────────────────────────
+        # Baseline mode: skip post-answer verification entirely — return draft as-is.
+        if not settings.verifier_enabled:
+            logger.info(
+                "qa_flow_state",
+                state=RequestState.RESPONSE_SENT,
+                gate="baseline_no_verify",
+                request_id=request_id,
+            )
+            return QAResponse(
+                request_id=request_id,
+                state=RequestState.RESPONSE_SENT,
+                answer_markdown=draft.answer_markdown,
+                citations=draft.citations,
+            )
+
         decision = verify(draft=draft, retrieval=retrieval, request_id=request_id)
 
         if decision.passed:

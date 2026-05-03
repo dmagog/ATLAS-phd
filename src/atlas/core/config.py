@@ -21,5 +21,14 @@ class Settings(BaseSettings):
     retriever_min_chunks_above_threshold: int = 2
     retriever_hybrid_rrf_k: int = 60  # RRF constant (standard value)
 
+    # M3 eval-harness A/B toggle (M3.D protocol).
+    # treatment (default): full agentic loop with verifier hard-gate.
+    # baseline (verifier_enabled=false): plain retrieval + LLM answer, no
+    # hard-gate refusal, no post-answer citation check. Used by eval/runner.py
+    # with config eval/configs/baseline.toml. The toggle is env-driven (set
+    # ATLAS_VERIFIER_ENABLED=false in app environment + restart) — header-level
+    # per-request switching deferred to a follow-up.
+    verifier_enabled: bool = True
+
 
 settings = Settings()
