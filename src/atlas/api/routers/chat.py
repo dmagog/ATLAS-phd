@@ -99,9 +99,12 @@ async def chat_message(
     if decision.route == "self_check":
         topic = decision.topic or body.message_text
         try:
+            from atlas.db.tenant_helpers import resolve_tenant_id_for_user
+            tenant_id = await resolve_tenant_id_for_user(current_user, db)
             attempt_id, question_set = await start_selfcheck(
                 topic=topic,
                 user_id=str(current_user.id),
+                tenant_id=tenant_id,
                 db=db,
                 language=body.language,
                 request_id=request_id,

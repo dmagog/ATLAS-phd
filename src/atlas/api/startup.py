@@ -16,7 +16,8 @@ async def seed_admin(db: AsyncSession) -> None:
         id=uuid.uuid4(),
         email=settings.admin_email,
         hashed_password=hash_password(settings.admin_password),
-        role=UserRole.admin,
+        role=UserRole.super_admin.value,
+        # tenant_id stays NULL — super-admin is cross-tenant.
     )
     db.add(admin)
     await db.commit()

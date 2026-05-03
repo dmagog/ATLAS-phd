@@ -270,9 +270,11 @@ async def index_document(
     embeddings: list[list[float]],
     file_path: str,
     job_id: str,
+    tenant_id: "uuid.UUID",
 ) -> Document:
     doc = Document(
         id=uuid.uuid4(),
+        tenant_id=tenant_id,
         title=Path(raw.filename).stem,
         filename=raw.filename,
         sha256=sha256,
@@ -286,6 +288,7 @@ async def index_document(
         db.add(Chunk(
             id=uuid.uuid4(),
             document_id=doc.id,
+            tenant_id=tenant_id,  # denormalized for retrieval (M4.A)
             chunk_index=i,
             text=chunk.text,
             page=chunk.page,
@@ -354,8 +357,16 @@ async def process_file(
         file_path = str(corpus_dir / raw.filename)
         await asyncio.to_thread((corpus_dir / raw.filename).write_bytes, raw.content)
 
-        # Stage 6: Index
-        doc = await index_document(db, raw, sha256, chunks, all_embeddings, file_path, job_id)
+        # Stage 6: Index — propagate tenant_id from the job context.
+        if job is None:
+            # Defensive: caller must pass job for multi-tenant correctness.
+            from atlas.db.tenant_helpers import get_default_tenant_id
+            tenant_id = await get_default_tenant_id(db)
+        else:
+            tenant_id = job.tenant_id
+        doc = await index_document(
+            db, raw, sha256, chunks, all_embeddings, file_path, job_id, tenant_id
+        )
 
         return FileResult(
             filename=raw.filename,

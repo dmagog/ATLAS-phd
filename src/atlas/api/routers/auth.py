@@ -25,5 +25,9 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)) -> Token
     user = result.scalar_one_or_none()
     if not user or not verify_password(body.password, user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
-    token = create_access_token(str(user.id), user.role.value)
+    if user.deleted_at is not None:
+        # Soft-deleted users (BDD 7.3) cannot log in.
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+    # role is TEXT (M4.A), no .value needed.
+    token = create_access_token(str(user.id), user.role)
     return TokenResponse(access_token=token)

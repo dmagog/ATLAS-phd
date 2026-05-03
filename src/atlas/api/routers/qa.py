@@ -101,8 +101,11 @@ async def qa_feedback(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="rating must be 'positive' or 'negative'",
         )
+    from atlas.db.tenant_helpers import resolve_tenant_id_for_user
+    tenant_id = await resolve_tenant_id_for_user(current_user, db)
     feedback = QAFeedback(
         id=uuid.uuid4(),
+        tenant_id=tenant_id,
         user_id=current_user.id,
         request_id=body.request_id,
         rating=body.rating,

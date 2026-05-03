@@ -21,6 +21,7 @@ from atlas.selfcheck.evaluator import EvaluationPayload, evaluate_answers
 async def start_selfcheck(
     topic: str,
     user_id: str,
+    tenant_id: "uuid.UUID",
     db: AsyncSession,
     language: str = "ru",
     request_id: str | None = None,
@@ -54,10 +55,11 @@ async def start_selfcheck(
 
     attempt = SelfCheckAttempt(
         id=uuid.uuid4(),
+        tenant_id=tenant_id,
         user_id=user_id,
         topic=topic,
         language=language,
-        status="created",
+        status="in_progress",
         question_set=[
             {
                 "question_id": q.question_id,
