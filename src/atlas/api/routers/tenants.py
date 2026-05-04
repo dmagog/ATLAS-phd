@@ -18,6 +18,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from atlas.core.deps import require_super_admin, require_tenant_admin
 from atlas.db.audit import write_audit
 from atlas.db.models import (
+    Document,
+    MaterialTopic,
     Program,
     ProgramTopic,
     Tenant,
@@ -284,6 +286,192 @@ async def upload_program(
             )
             for t in topic_rows
         ],
+    )
+
+
+# ─── M4.5.C: attach materials to topics ──────────────────────────────────
+
+
+class AttachTopicsRequest(BaseModel):
+    """external_ids of topics in the active program (e.g. ["1.3", "2.1"]).
+
+    Idempotent: re-posting the same set is a no-op. Sending an empty list
+    detaches the material from all topics.
+    """
+
+    topic_external_ids: list[str]
+
+
+class MaterialTopicsOut(BaseModel):
+    material_id: str
+    filename: str
+    topic_external_ids: list[str]
+
+
+@router.post(
+    "/{slug}/materials/{material_id}/topics",
+    response_model=MaterialTopicsOut,
+)
+async def attach_material_topics(
+    slug: str,
+    material_id: str,
+    body: AttachTopicsRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_tenant_admin),
+) -> MaterialTopicsOut:
+    """Set the topics that a material belongs to (BDD 4.3, BDD 1.2 retrieval).
+
+    The trigger `material_topics_sync_chunk_topics` (M4.5.B) propagates
+    the change to chunk_topics for every chunk in the material.
+
+    Idempotent — POSTing the same set leaves DB unchanged.
+    """
+    tenant = await _resolve_tenant_by_slug(slug, db)
+    _ensure_can_manage(tenant, current_user)
+
+    # Material must exist in this tenant.
+    try:
+        material_uuid = uuid.UUID(material_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"material_id is not a valid UUID: {material_id}",
+        )
+    mat_result = await db.execute(
+        select(Document).where(
+            Document.id == material_uuid, Document.tenant_id == tenant.id
+        )
+    )
+    material = mat_result.scalar_one_or_none()
+    if material is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Material not found in this tenant",
+        )
+
+    # Resolve external_ids → topic_id within the tenant's active program.
+    if body.topic_external_ids:
+        active_prog_result = await db.execute(
+            select(Program).where(
+                Program.tenant_id == tenant.id, Program.status == "active"
+            )
+        )
+        active_prog = active_prog_result.scalar_one_or_none()
+        if active_prog is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="No active program — upload program.md before attaching topics",
+            )
+        topics_result = await db.execute(
+            select(ProgramTopic).where(
+                ProgramTopic.program_id == active_prog.id,
+                ProgramTopic.external_id.in_(body.topic_external_ids),
+            )
+        )
+        topics = topics_result.scalars().all()
+        found_eids = {t.external_id for t in topics}
+        missing = set(body.topic_external_ids) - found_eids
+        if missing:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Unknown external_ids in active program: {sorted(missing)}",
+            )
+        target_topic_ids = {t.id for t in topics}
+    else:
+        target_topic_ids = set()
+
+    # Read current set, compute delta — issue minimum INSERT/DELETE so
+    # the trigger doesn't fire spuriously.
+    current_result = await db.execute(
+        select(MaterialTopic).where(MaterialTopic.material_id == material.id)
+    )
+    current_topic_ids = {row.topic_id for row in current_result.scalars().all()}
+
+    to_add = target_topic_ids - current_topic_ids
+    to_remove = current_topic_ids - target_topic_ids
+
+    for tid in to_add:
+        db.add(MaterialTopic(material_id=material.id, topic_id=tid))
+    if to_remove:
+        from sqlalchemy import delete as sa_delete
+
+        await db.execute(
+            sa_delete(MaterialTopic).where(
+                MaterialTopic.material_id == material.id,
+                MaterialTopic.topic_id.in_(to_remove),
+            )
+        )
+
+    if to_add or to_remove:
+        await db.flush()
+        await write_audit(
+            db,
+            action="material.topics.set",
+            actor_id=current_user.id,
+            actor_role=current_user.role,
+            tenant_id=tenant.id,
+            target_type="material",
+            target_id=str(material.id),
+            details={
+                "topic_external_ids": sorted(body.topic_external_ids),
+                "added_count": len(to_add),
+                "removed_count": len(to_remove),
+            },
+            flush_only=True,
+        )
+    await db.commit()
+
+    return MaterialTopicsOut(
+        material_id=str(material.id),
+        filename=material.filename,
+        topic_external_ids=sorted(body.topic_external_ids),
+    )
+
+
+@router.get(
+    "/{slug}/materials/{material_id}/topics",
+    response_model=MaterialTopicsOut,
+)
+async def get_material_topics(
+    slug: str,
+    material_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_tenant_admin),
+) -> MaterialTopicsOut:
+    """List topics this material is attached to (their external_ids)."""
+    tenant = await _resolve_tenant_by_slug(slug, db)
+    _ensure_can_manage(tenant, current_user)
+    try:
+        material_uuid = uuid.UUID(material_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"material_id is not a valid UUID: {material_id}",
+        )
+    mat_result = await db.execute(
+        select(Document).where(
+            Document.id == material_uuid, Document.tenant_id == tenant.id
+        )
+    )
+    material = mat_result.scalar_one_or_none()
+    if material is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Material not found in this tenant",
+        )
+
+    # Get external_ids via JOIN.
+    result = await db.execute(
+        select(ProgramTopic.external_id)
+        .join(MaterialTopic, MaterialTopic.topic_id == ProgramTopic.id)
+        .where(MaterialTopic.material_id == material.id)
+    )
+    eids = sorted(r[0] for r in result.all())
+    return MaterialTopicsOut(
+        material_id=str(material.id),
+        filename=material.filename,
+        topic_external_ids=eids,
     )
 
 
