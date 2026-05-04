@@ -174,16 +174,23 @@ curl -X POST https://atlas.<your-domain>/auth/login \
 
 Должен прийти JWT с role=super-admin.
 
-Загружаем программу и материалы (см. `docs/welcome/tenant-admin.md`):
+**Bootstrap пилотного тенанта одной командой** — [`scripts/pilot_seed.py`](../../scripts/pilot_seed.py):
+
 ```bash
-TOKEN=...
-curl -X POST https://atlas.<your-domain>/tenants/optics-kafedra/program \
-  -H "Authorization: Bearer $TOKEN" \
-  -H 'Content-Type: application/json' \
-  --data-binary @- <<EOF
-{"text": "$(cat corpus/optics-kafedra/program.md)"}
-EOF
+# создать (или подтвердить) тенант, загрузить программу, выписать 5 invites
+python3 scripts/pilot_seed.py \
+    --tenant optics-kafedra \
+    --display-name "Кафедра оптики (пилот)" \
+    --program corpus/optics-kafedra/program.md \
+    --invites 5
 ```
+
+Скрипт идемпотентен по тенанту (409 conflict = уже есть, OK), всё пишет
+в `audit_log`, печатает invite-коды markdown-таблицей готовой к копи-пасте.
+Поддерживает `--role tenant-admin|supervisor|student`, `--json` для
+парсинга, `--expires-in-days N` (default 7).
+
+Если предпочитаешь руками — отдельные curl'ы есть в [`docs/welcome/tenant-admin.md`](../welcome/tenant-admin.md).
 
 ## Step 7 — Monitoring
 

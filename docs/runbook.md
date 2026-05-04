@@ -137,20 +137,35 @@ docker compose exec -T app alembic downgrade -1
 
 ## 8. Add a tenant-admin / supervisor / student
 
-Все три потока — через invite-flow tenant-admin'а (BDD 4.6):
+Все три потока — через invite-flow tenant-admin'а (BDD 4.6).
 
+**Самый быстрый путь — [`scripts/pilot_seed.py`](../scripts/pilot_seed.py)** (под super-admin'ом):
+```bash
+# 5 student invites одним запросом
+python3 scripts/pilot_seed.py --invites 5
+
+# 1 tenant-admin invite (методист)
+python3 scripts/pilot_seed.py --invites 1 --role tenant-admin
+
+# 1 supervisor invite (научрук)
+python3 scripts/pilot_seed.py --invites 1 --role supervisor
+```
+
+Скрипт печатает markdown-табличку с кодами + ttl, готовую к рассылке.
+
+**Ручной curl** (если скрипт недоступен):
 ```bash
 TOKEN=$(curl -sS -X POST https://atlas.<domain>/auth/login \
     -H 'Content-Type: application/json' \
     -d '{"email":"<tenant-admin>","password":"..."}' \
     | jq -r .access_token)
 
-# выпустить invite (роль из множества: tenant-admin, supervisor, student)
 curl -sS -X POST https://atlas.<domain>/invites \
     -H "Authorization: Bearer $TOKEN" \
+    -H "X-Atlas-Tenant: optics-kafedra" \
     -H 'Content-Type: application/json' \
-    -d '{"email":"new@user","role":"student"}'
-# → {"code":"<24-char>","expires_at":"..."}
+    -d '{"role":"student"}'
+# → {"code":"<32-char>","expires_at":"..."}
 ```
 
 Передать `code` пользователю по любому защищённому каналу. Срок жизни — 7 дней (BDD 4.6).
