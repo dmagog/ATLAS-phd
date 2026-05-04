@@ -429,6 +429,259 @@ async def attach_material_topics(
     )
 
 
+# ─── M4.5.D: coverage report ──────────────────────────────────────────────
+
+
+class CoverageRow(BaseModel):
+    external_id: str
+    section: str
+    title: str
+    coverage_chunks: int
+    bucket: str  # "red" | "yellow" | "green"
+
+
+class CoverageReport(BaseModel):
+    program_version: str
+    program_status: str
+    K_self_check: int
+    K_qa: int
+    topics: list[CoverageRow]
+    summary: dict  # totals per bucket
+
+
+# Defaults match roadmap §M4.5.D.
+_K_SELF_CHECK_DEFAULT = 5
+_K_QA_DEFAULT = 2
+
+
+def _coverage_bucket(n: int, k_qa: int, k_self: int) -> str:
+    if n < k_qa:
+        return "red"
+    if n < k_self:
+        return "yellow"
+    return "green"
+
+
+@router.get("/{slug}/coverage", response_model=CoverageReport)
+async def coverage_report(
+    slug: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_tenant_admin),
+) -> CoverageReport:
+    """Per-topic coverage for the active program (BDD 4.4).
+
+    Reads the denormalized `program_topics.coverage_chunks` counter
+    (maintained by triggers in M4.5.B) and buckets each topic into
+    red / yellow / green relative to the K thresholds:
+      red    : coverage < K_qa  (Q&A topic-mode falls back to corpus-wide)
+      yellow : K_qa ≤ coverage < K_self (Q&A works, self-check blocked)
+      green  : coverage ≥ K_self
+    Thresholds come from `tenants.config.coverage` JSONB if present,
+    otherwise the M4.5.D defaults (K_qa=2, K_self_check=5).
+    """
+    tenant = await _resolve_tenant_by_slug(slug, db)
+    _ensure_can_manage(tenant, current_user)
+
+    cfg = (tenant.config or {}).get("coverage") or {}
+    k_qa = int(cfg.get("k_qa", _K_QA_DEFAULT))
+    k_self = int(cfg.get("k_self_check", _K_SELF_CHECK_DEFAULT))
+
+    prog_result = await db.execute(
+        select(Program).where(
+            Program.tenant_id == tenant.id, Program.status == "active"
+        )
+    )
+    program = prog_result.scalar_one_or_none()
+    if program is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No active program for this tenant",
+        )
+
+    topics_result = await db.execute(
+        select(ProgramTopic)
+        .where(ProgramTopic.program_id == program.id)
+        .order_by(ProgramTopic.ordinal)
+    )
+    rows: list[CoverageRow] = []
+    summary = {"red": 0, "yellow": 0, "green": 0}
+    for t in topics_result.scalars().all():
+        bucket = _coverage_bucket(t.coverage_chunks, k_qa, k_self)
+        summary[bucket] += 1
+        rows.append(
+            CoverageRow(
+                external_id=t.external_id,
+                section=t.section,
+                title=t.title,
+                coverage_chunks=t.coverage_chunks,
+                bucket=bucket,
+            )
+        )
+
+    return CoverageReport(
+        program_version=program.version,
+        program_status=program.status,
+        K_self_check=k_self,
+        K_qa=k_qa,
+        topics=rows,
+        summary=summary,
+    )
+
+
+# ─── M4.5.D: quality-score formula on materials ──────────────────────────
+# A simple structural heuristic — three components averaged:
+#   * fraction of chunks with text length in [200, 2000] characters
+#   * fraction of chunks WITHOUT >=4 consecutive newlines (an OCR artifact)
+#   * fraction of chunks WITH detectable Cyrillic OR Latin content (≥50%
+#     letter-to-total ratio)
+# The threshold for low_quality flag lives in tenants.config.quality
+# (default 0.6).
+
+
+def _quality_score_for_chunks(texts: list[str]) -> float:
+    if not texts:
+        return 0.0
+
+    def _is_reasonable_length(t: str) -> bool:
+        n = len(t)
+        return 200 <= n <= 2000
+
+    def _no_ocr_artifacts(t: str) -> bool:
+        # 4+ consecutive newlines = page-break / OCR garbage marker.
+        return "\n\n\n\n" not in t
+
+    def _detect_language(t: str) -> bool:
+        # ≥50% characters are letters (cyrillic OR latin) → looks like text.
+        if not t:
+            return False
+        letters = sum(1 for c in t if c.isalpha())
+        return letters / max(len(t), 1) >= 0.5
+
+    n = len(texts)
+    a = sum(1 for t in texts if _is_reasonable_length(t)) / n
+    b = sum(1 for t in texts if _no_ocr_artifacts(t)) / n
+    c = sum(1 for t in texts if _detect_language(t)) / n
+    return round((a + b + c) / 3, 4)
+
+
+class QualityScoreOut(BaseModel):
+    material_id: str
+    filename: str
+    quality_score: float
+    low_quality: bool
+    threshold: float
+    components: dict  # {length, no_ocr_artifacts, language}
+
+
+@router.post(
+    "/{slug}/materials/{material_id}/quality-score",
+    response_model=QualityScoreOut,
+)
+async def compute_quality_score(
+    slug: str,
+    material_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_tenant_admin),
+) -> QualityScoreOut:
+    """Compute and persist the quality_score for a material (BDD 4.8).
+
+    Heuristic-based; result stored on documents.quality_score. Material
+    is flagged as low_quality if score < tenants.config.quality.low_quality_threshold
+    (default 0.6). Low-quality materials are NOT removed from retrieval —
+    they're surfaced in the tenant-admin UI for manual review.
+    """
+    tenant = await _resolve_tenant_by_slug(slug, db)
+    _ensure_can_manage(tenant, current_user)
+
+    try:
+        material_uuid = uuid.UUID(material_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"material_id is not a valid UUID: {material_id}",
+        )
+    mat_result = await db.execute(
+        select(Document).where(
+            Document.id == material_uuid, Document.tenant_id == tenant.id
+        )
+    )
+    material = mat_result.scalar_one_or_none()
+    if material is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Material not found in this tenant",
+        )
+
+    # Pull chunk texts. Use raw SQL — we don't need ORM hydration overhead
+    # for what's potentially a few thousand rows.
+    from sqlalchemy import text as sql_text  # local import — small surface
+
+    rows = await db.execute(
+        sql_text("SELECT text FROM chunks WHERE document_id = :mid"),
+        {"mid": material.id},
+    )
+    chunk_texts = [r[0] for r in rows.all()]
+
+    score = _quality_score_for_chunks(chunk_texts)
+
+    # Recompute components for transparency in response.
+    if chunk_texts:
+        n = len(chunk_texts)
+        components = {
+            "length": round(
+                sum(1 for t in chunk_texts if 200 <= len(t) <= 2000) / n, 4
+            ),
+            "no_ocr_artifacts": round(
+                sum(1 for t in chunk_texts if "\n\n\n\n" not in t) / n, 4
+            ),
+            "language": round(
+                sum(
+                    1
+                    for t in chunk_texts
+                    if (sum(1 for c in t if c.isalpha()) / max(len(t), 1)) >= 0.5
+                )
+                / n,
+                4,
+            ),
+        }
+    else:
+        components = {"length": 0.0, "no_ocr_artifacts": 0.0, "language": 0.0}
+
+    cfg = (tenant.config or {}).get("quality") or {}
+    threshold = float(cfg.get("low_quality_threshold", 0.6))
+    low_quality = score < threshold
+
+    material.quality_score = score
+    await db.flush()
+    await write_audit(
+        db,
+        action="material.quality_score.compute",
+        actor_id=current_user.id,
+        actor_role=current_user.role,
+        tenant_id=tenant.id,
+        target_type="material",
+        target_id=str(material.id),
+        details={
+            "score": score,
+            "threshold": threshold,
+            "low_quality": low_quality,
+            "components": components,
+            "n_chunks": len(chunk_texts),
+        },
+        flush_only=True,
+    )
+    await db.commit()
+
+    return QualityScoreOut(
+        material_id=str(material.id),
+        filename=material.filename,
+        quality_score=score,
+        low_quality=low_quality,
+        threshold=threshold,
+        components=components,
+    )
+
+
 @router.get(
     "/{slug}/materials/{material_id}/topics",
     response_model=MaterialTopicsOut,
