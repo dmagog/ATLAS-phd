@@ -127,6 +127,7 @@ async def list_tenants(
 
 
 class TopicOut(BaseModel):
+    id: str  # uuid; needed by supervisor drilldown
     external_id: str
     section: str
     title: str
@@ -277,6 +278,7 @@ async def upload_program(
         loaded_at=new_program.loaded_at,
         topics=[
             TopicOut(
+                id=str(t.id),
                 external_id=t.external_id,
                 section=t.section,
                 title=t.title,
@@ -758,6 +760,7 @@ async def get_active_program(
         loaded_at=program.loaded_at,
         topics=[
             TopicOut(
+                id=str(t.id),
                 external_id=t.external_id,
                 section=t.section,
                 title=t.title,
