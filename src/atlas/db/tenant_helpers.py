@@ -1,9 +1,11 @@
-"""Tenant resolution helpers (M4.A + M4.C).
+"""Tenant resolution helpers (M4.A + M4.C + M4.5).
 
 Bound users (student/supervisor/tenant-admin) operate in their own tenant.
 Super-admin is cross-tenant — by default they fall through to the
-'default' tenant, but they can override per-request via the
-`X-Atlas-Tenant: <slug>` header (M4.C).
+pilot tenant (configured via `settings.pilot_tenant_slug`, default
+'optics-kafedra' from M4.5; legacy 'default' if M4.5 migration hasn't
+been run yet). They can override per-request via the `X-Atlas-Tenant:
+<slug>` header (M4.C).
 """
 from __future__ import annotations
 
@@ -13,31 +15,41 @@ from fastapi import HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from atlas.core.config import settings
 from atlas.db.models import Tenant, User, UserRole
 
-_DEFAULT_TENANT_ID: UUID | None = None
+_PILOT_TENANT_ID: UUID | None = None
 
 # HTTP header for super-admin to operate inside a specific tenant.
 TENANT_HEADER = "X-Atlas-Tenant"
 
 
 async def get_default_tenant_id(db: AsyncSession) -> UUID:
-    """Cached lookup of the 'default' tenant ID.
+    """Cached lookup of the pilot-tenant ID.
 
-    Cached at module level — the default tenant is created in migration
-    0005 and never deleted.
+    Reads `settings.pilot_tenant_slug` (default 'optics-kafedra' as of
+    M4.5). Falls back to legacy 'default' if configured slug isn't
+    found — this handles the brief window after deploying M4.5 code
+    against a DB that hasn't yet run migration 0007.
     """
-    global _DEFAULT_TENANT_ID
-    if _DEFAULT_TENANT_ID is not None:
-        return _DEFAULT_TENANT_ID
-    result = await db.execute(select(Tenant.id).where(Tenant.slug == "default"))
-    tid = result.scalar_one_or_none()
-    if tid is None:
-        raise RuntimeError(
-            "default tenant not found — was migration 0005_m4a_multitenancy applied?"
-        )
-    _DEFAULT_TENANT_ID = tid
-    return tid
+    global _PILOT_TENANT_ID
+    if _PILOT_TENANT_ID is not None:
+        return _PILOT_TENANT_ID
+
+    # Try configured pilot slug first, then legacy 'default' as fallback.
+    candidates = [settings.pilot_tenant_slug]
+    if "default" not in candidates:
+        candidates.append("default")
+    for slug in candidates:
+        result = await db.execute(select(Tenant.id).where(Tenant.slug == slug))
+        tid = result.scalar_one_or_none()
+        if tid is not None:
+            _PILOT_TENANT_ID = tid
+            return tid
+
+    raise RuntimeError(
+        f"pilot tenant not found (tried {candidates}) — was migration 0005/0007 applied?"
+    )
 
 
 async def _tenant_id_from_slug(slug: str, db: AsyncSession) -> UUID:

@@ -30,5 +30,12 @@ class Settings(BaseSettings):
     # per-request switching deferred to a follow-up.
     verifier_enabled: bool = True
 
+    # M4.5: which tenant a super-admin without X-Atlas-Tenant header acts in,
+    # and which tenant `tenant_helpers.get_default_tenant_id` returns. Default
+    # was 'default' through M4; renamed to 'optics-kafedra' as part of the
+    # M4.5 handoff (migration 0007). Override via PILOT_TENANT_SLUG env var
+    # for staging or future direction switches.
+    pilot_tenant_slug: str = "optics-kafedra"
+
 
 settings = Settings()

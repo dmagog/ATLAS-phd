@@ -43,6 +43,9 @@ services:
       # M3 A/B toggle: set to "false" for baseline (no verifier hard-gate, no
       # post-answer citation check). Default true = current production behavior.
       VERIFIER_ENABLED: ${VERIFIER_ENABLED:-true}
+      # M4.5 pilot tenant slug — what super-admin without X-Atlas-Tenant
+      # header operates against. Default optics-kafedra after migration 0007.
+      PILOT_TENANT_SLUG: ${PILOT_TENANT_SLUG:-optics-kafedra}
     ports:
       - "8731:8731"
     depends_on:
