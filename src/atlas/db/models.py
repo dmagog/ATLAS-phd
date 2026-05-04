@@ -214,6 +214,85 @@ class InviteCode(Base):
     redeemed_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
 
 
+# ─── M4.5: Programs / topics / mappings ───────────────────────────────────
+
+
+class ProgramStatus(str, enum.Enum):
+    active = "active"
+    archived = "archived"
+
+
+class Program(Base):
+    """Kandekzamen-программа for one tenant. Append+archive — never delete.
+    BDD 7.4: only one row with status='active' per tenant (partial unique
+    index `programs_one_active` enforces it).
+    """
+
+    __tablename__ = "programs"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
+    version = Column(Text, nullable=False)
+    status = Column(Text, default=ProgramStatus.active.value, nullable=False)
+    source_doc = Column(Text, nullable=True)
+    loaded_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    loaded_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+
+
+class ProgramTopic(Base):
+    """A billet (тема программы). external_id is the human-readable slug
+    from program.md (e.g. "1.3"); coverage_chunks is denormalized counter
+    maintained by triggers.
+    """
+
+    __tablename__ = "program_topics"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    program_id = Column(UUID(as_uuid=True), ForeignKey("programs.id"), nullable=False)
+    external_id = Column(Text, nullable=False)
+    section = Column(Text, nullable=False)
+    title = Column(Text, nullable=False)
+    ordinal = Column(Integer, nullable=False)
+    # ARRAY type via Postgres-specific.
+    from sqlalchemy.dialects.postgresql import ARRAY  # noqa: WPS433
+    key_concepts = Column(ARRAY(Text), default=list, nullable=False)
+    coverage_chunks = Column(Integer, default=0, nullable=False)
+    __table_args__ = (UniqueConstraint("program_id", "external_id"),)
+
+
+class MaterialTopic(Base):
+    """Many-to-many between documents (materials) and program topics.
+    Composite PK enforces (material_id, topic_id) uniqueness."""
+
+    __tablename__ = "material_topics"
+    material_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("documents.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    topic_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("program_topics.id", ondelete="RESTRICT"),
+        primary_key=True,
+    )
+
+
+class ChunkTopic(Base):
+    """Denormalized inheritance: every chunk inherits all topics of its
+    parent material. Maintained by Postgres triggers (see migration 0008);
+    application code rarely writes here directly."""
+
+    __tablename__ = "chunk_topics"
+    chunk_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("chunks.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    topic_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("program_topics.id", ondelete="RESTRICT"),
+        primary_key=True,
+    )
+
+
 class AuditLog(Base):
     """Append-only audit trail. tenant_id NULL for platform-level events
     (e.g. tenant.create by super-admin). BDD 7.1 / 7.6.
