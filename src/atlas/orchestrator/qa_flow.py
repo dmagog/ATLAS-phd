@@ -86,6 +86,7 @@ class QAResponse:
 async def run_qa_flow(
     question: str,
     db: AsyncSession,
+    tenant_id: uuid.UUID,
     response_profile: str = "detailed",
     request_id: str | None = None,
     conversation_history: list[dict] | None = None,
@@ -102,6 +103,7 @@ async def run_qa_flow(
         retrieval: RetrievalResult = await retrieve(
             query_embedding=query_embedding,
             db=db,
+            tenant_id=tenant_id,
             query_text=question,
             request_id=request_id,
         )
@@ -138,6 +140,7 @@ async def run_qa_flow(
             regen_retrieval: RetrievalResult = await retrieve(
                 query_embedding=query_embedding,
                 db=db,
+                tenant_id=tenant_id,
                 top_k=settings.retriever_top_k * _REGEN_TOP_K_MULTIPLIER,
                 query_text=question,
                 request_id=request_id,

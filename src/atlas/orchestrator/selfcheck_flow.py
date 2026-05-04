@@ -29,11 +29,12 @@ async def start_selfcheck(
     request_id = request_id or str(uuid.uuid4())
     logger.info("sc_flow_start", state=RequestState.REQUEST_RECEIVED, request_id=request_id)
 
-    # Retrieve corpus chunks relevant to the topic
+    # Retrieve corpus chunks relevant to the topic (M4.B: tenant-scoped)
     query_embedding = await get_embedding(topic, request_id=request_id)
     retrieval = await retrieve(
         query_embedding=query_embedding,
         db=db,
+        tenant_id=tenant_id,
         top_k=12,
         query_text=topic,
         request_id=request_id,

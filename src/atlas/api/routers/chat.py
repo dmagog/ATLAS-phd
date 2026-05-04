@@ -138,9 +138,14 @@ async def chat_message(
 
     # ── Route: qa (default) ───────────────────────────────────────────────────
     history = [{"role": m.role, "content": m.content} for m in body.conversation_history]
+    # tenant_id may already be resolved above (in the self_check branch) — do
+    # it here too for safety; resolve_tenant_id_for_user is cheap (cached).
+    from atlas.db.tenant_helpers import resolve_tenant_id_for_user
+    tenant_id = await resolve_tenant_id_for_user(current_user, db)
     result = await run_qa_flow(
         question=body.message_text,
         db=db,
+        tenant_id=tenant_id,
         response_profile=body.response_profile,
         request_id=request_id,
         conversation_history=history or None,

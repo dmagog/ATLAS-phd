@@ -82,6 +82,7 @@ WITH vector_ranked AS (
         1 - (c.embedding <=> CAST(:embedding AS vector))                        AS vscore
     FROM chunks c
     WHERE c.embedding IS NOT NULL
+      AND c.tenant_id = :tenant_id
     ORDER BY c.embedding <=> CAST(:embedding AS vector)
     LIMIT :top_k
 ),
@@ -93,6 +94,7 @@ bm25_ranked AS (
          plainto_tsquery('simple', :query_text) query
     WHERE c.text_search_vec IS NOT NULL
       AND c.text_search_vec @@ query
+      AND c.tenant_id = :tenant_id
     ORDER BY ts_rank(c.text_search_vec, query) DESC
     LIMIT :top_k
 ),
@@ -119,6 +121,7 @@ SELECT
 FROM merged m
 JOIN chunks  c ON c.id = m.id
 JOIN documents d ON d.id = c.document_id
+WHERE d.status = 'active'
 ORDER BY m.rrf_score DESC
 LIMIT :top_k
 """)
@@ -137,6 +140,8 @@ SELECT
 FROM chunks c
 JOIN documents d ON d.id = c.document_id
 WHERE c.embedding IS NOT NULL
+  AND c.tenant_id = :tenant_id
+  AND d.status = 'active'
 ORDER BY c.embedding <=> CAST(:embedding AS vector)
 LIMIT :top_k
 """)
@@ -147,16 +152,26 @@ LIMIT :top_k
 async def retrieve(
     query_embedding: list[float],
     db: AsyncSession,
+    tenant_id: uuid.UUID,
     top_k: int | None = None,
     query_text: str | None = None,
     request_id: str = "",
 ) -> RetrievalResult:
     """
-    Retrieve top_k chunks.
+    Retrieve top_k chunks scoped to one tenant.
+
+    M4.B: tenant_id is REQUIRED. Cross-tenant retrieval is forbidden by
+    design (BDD 1.4, 8.2). Caller must resolve via
+    `atlas.db.tenant_helpers.resolve_tenant_id_for_user`.
 
     If query_text is provided, runs hybrid (vector + BM25 via RRF).
-    Otherwise runs vector-only search.
+    Otherwise runs vector-only search. Both filter chunks by
+    `c.tenant_id = :tenant_id` and skip chunks belonging to documents
+    with `status != 'active'` (superseded / deleted).
     """
+    if tenant_id is None:
+        raise ValueError("retrieve() requires tenant_id (M4.B tenant isolation)")
+
     k = top_k or settings.retriever_top_k
     embedding_str = "[" + ",".join(str(v) for v in query_embedding) + "]"
     rrf_k = settings.retriever_hybrid_rrf_k
@@ -174,6 +189,7 @@ async def retrieve(
                         "query_text": query_text,
                         "top_k": k,
                         "rrf_k": rrf_k,
+                        "tenant_id": tenant_id,
                     },
                 )
             ).fetchall()
@@ -209,7 +225,7 @@ async def retrieve(
         rows = (
             await db.execute(
                 _VECTOR_ONLY_SQL,
-                {"embedding": embedding_str, "top_k": k},
+                {"embedding": embedding_str, "top_k": k, "tenant_id": tenant_id},
             )
         ).fetchall()
         candidates = [
@@ -244,6 +260,7 @@ async def retrieve(
     logger.info(
         "retrieval_done",
         mode=mode,
+        tenant_id=str(tenant_id),
         request_id=request_id,
         top1_vscore=round(top1_vscore, 4),
         chunks_returned=len(candidates),
