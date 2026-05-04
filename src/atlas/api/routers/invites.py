@@ -91,6 +91,21 @@ async def issue_invite(
         expires_at=expires_at,
     )
     db.add(invite)
+    await db.flush()
+
+    # Audit (BDD 7.1).
+    from atlas.db.audit import write_audit
+    await write_audit(
+        db,
+        action="invite.issue",
+        actor_id=current_user.id,
+        actor_role=current_user.role,
+        tenant_id=tenant_id,
+        target_type="invite",
+        target_id=code,
+        details={"role": body.role, "expires_at": expires_at.isoformat()},
+        flush_only=True,
+    )
     await db.commit()
 
     return InviteResponse(
@@ -208,6 +223,31 @@ async def redeem_invite(
 
     invite.redeemed_at = now
     invite.redeemed_by = new_user.id
+
+    # Audit (BDD 7.1): two events — invite redeemed + role granted to user.
+    from atlas.db.audit import write_audit
+    await write_audit(
+        db,
+        action="invite.redeem",
+        actor_id=new_user.id,
+        actor_role=new_user.role,
+        tenant_id=invite.tenant_id,
+        target_type="invite",
+        target_id=invite.code,
+        details={"role": invite.role, "consent_recorded_at": now.isoformat()},
+        flush_only=True,
+    )
+    await write_audit(
+        db,
+        action="user.role.grant",
+        actor_id=invite.created_by,
+        actor_role=None,  # creator's role at issue time isn't tracked here
+        tenant_id=invite.tenant_id,
+        target_type="user",
+        target_id=str(new_user.id),
+        details={"granted_role": new_user.role, "via_invite": invite.code},
+        flush_only=True,
+    )
 
     await db.commit()
     await db.refresh(new_user)

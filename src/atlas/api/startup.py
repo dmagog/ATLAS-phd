@@ -40,6 +40,21 @@ async def seed_admin(db: AsyncSession) -> None:
         # tenant_id stays NULL — super-admin is cross-tenant.
     )
     db.add(admin)
+    await db.flush()  # ensure user.id exists before we reference it in audit.
+
+    # Audit (BDD 7.1): super-admin creation is a platform-level event;
+    # tenant_id stays NULL.
+    from atlas.db.audit import write_audit
+    await write_audit(
+        db,
+        action="user.bootstrap",
+        actor_id=admin.id,
+        actor_role=admin.role,
+        target_type="user",
+        target_id=str(admin.id),
+        details={"email": admin.email, "source": "ENV"},
+        flush_only=True,
+    )
     await db.commit()
     logger.info("admin_seeded", email=settings.admin_email)
 
