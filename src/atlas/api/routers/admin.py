@@ -1,7 +1,7 @@
 import asyncio
 import uuid
 from pathlib import Path
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -60,13 +60,14 @@ async def _run_job_background(job_id: str, raw_files: list[RawFile]) -> None:
 @router.post("/ingestion-jobs", response_model=IngestionJobStartResponse)
 async def create_ingestion_job(
     background_tasks: BackgroundTasks,
+    request: Request,
     files: list[UploadFile] = File(...),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin),
 ) -> IngestionJobStartResponse:
     """Start an ingestion job. Returns immediately with job_id; processing runs in background."""
     from atlas.db.tenant_helpers import resolve_tenant_id_for_user
-    tenant_id = await resolve_tenant_id_for_user(current_user, db)
+    tenant_id = await resolve_tenant_id_for_user(current_user, db, request)
     job = IngestionJob(
         id=uuid.uuid4(),
         tenant_id=tenant_id,

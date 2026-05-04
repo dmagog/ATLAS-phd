@@ -8,7 +8,7 @@ POST /chat/message
   → clarify    : returns a follow-up question from the planner
 """
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -79,6 +79,7 @@ class ChatResponse(BaseModel):
 @router.post("/message", response_model=ChatResponse)
 async def chat_message(
     body: ChatRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> ChatResponse:
@@ -100,7 +101,7 @@ async def chat_message(
         topic = decision.topic or body.message_text
         try:
             from atlas.db.tenant_helpers import resolve_tenant_id_for_user
-            tenant_id = await resolve_tenant_id_for_user(current_user, db)
+            tenant_id = await resolve_tenant_id_for_user(current_user, db, request)
             attempt_id, question_set = await start_selfcheck(
                 topic=topic,
                 user_id=str(current_user.id),
@@ -141,7 +142,7 @@ async def chat_message(
     # tenant_id may already be resolved above (in the self_check branch) — do
     # it here too for safety; resolve_tenant_id_for_user is cheap (cached).
     from atlas.db.tenant_helpers import resolve_tenant_id_for_user
-    tenant_id = await resolve_tenant_id_for_user(current_user, db)
+    tenant_id = await resolve_tenant_id_for_user(current_user, db, request)
     result = await run_qa_flow(
         question=body.message_text,
         db=db,

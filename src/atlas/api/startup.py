@@ -9,9 +9,29 @@ from atlas.db.models import IngestionJob, User, UserRole
 
 
 async def seed_admin(db: AsyncSession) -> None:
-    result = await db.execute(select(User).where(User.email == settings.admin_email))
-    if result.scalar_one_or_none():
+    """Bootstrap a super-admin from ENV on first start (BDD 4.9).
+
+    Idempotent: when *any* super-admin already exists, ENV is ignored —
+    so a re-deploy with a different ADMIN_PASSWORD will NOT silently
+    overwrite the live password. Password rotation must go through a
+    UI/API path (M4.C will add it as a separate endpoint).
+    """
+    # Look for any existing super-admin (not just by email — covers the
+    # case where someone changes ADMIN_EMAIL on re-deploy).
+    result = await db.execute(
+        select(User).where(User.role == UserRole.super_admin.value)
+    )
+    existing_super_admin = result.scalar_one_or_none()
+    if existing_super_admin is not None:
+        logger.info(
+            "admin_seed_skipped",
+            reason="super-admin already exists",
+            existing_email=existing_super_admin.email,
+            env_email=settings.admin_email,
+            note="ENV ADMIN_PASSWORD is ignored to prevent silent overwrites",
+        )
         return
+
     admin = User(
         id=uuid.uuid4(),
         email=settings.admin_email,

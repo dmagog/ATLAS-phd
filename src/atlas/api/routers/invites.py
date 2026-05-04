@@ -17,7 +17,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -69,6 +69,7 @@ class InviteResponse(BaseModel):
 @router.post("", response_model=InviteResponse, status_code=201)
 async def issue_invite(
     body: IssueInviteRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_tenant_admin),
 ) -> InviteResponse:
@@ -77,7 +78,7 @@ async def issue_invite(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="role must be tenant-admin, supervisor, or student",
         )
-    tenant_id = await resolve_tenant_id_for_user(current_user, db)
+    tenant_id = await resolve_tenant_id_for_user(current_user, db, request)
     ttl = body.expires_in_days if body.expires_in_days is not None else DEFAULT_TTL_DAYS
     expires_at = datetime.now(timezone.utc) + timedelta(days=ttl)
 
@@ -107,6 +108,7 @@ async def issue_invite(
 
 @router.get("", response_model=list[InviteResponse])
 async def list_invites(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_tenant_admin),
 ) -> list[InviteResponse]:
@@ -115,7 +117,7 @@ async def list_invites(
     Note: codes are visible in this listing — by design, since a tenant-admin
     is the issuer and may need to re-share the link.
     """
-    tenant_id = await resolve_tenant_id_for_user(current_user, db)
+    tenant_id = await resolve_tenant_id_for_user(current_user, db, request)
     result = await db.execute(
         select(InviteCode).where(InviteCode.tenant_id == tenant_id)
     )

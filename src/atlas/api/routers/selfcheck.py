@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,13 +37,14 @@ class SelfCheckStartResponse(BaseModel):
 @router.post("/start", response_model=SelfCheckStartResponse)
 async def selfcheck_start(
     body: SelfCheckStartRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> SelfCheckStartResponse:
     request_id = str(uuid.uuid4())
     try:
         from atlas.db.tenant_helpers import resolve_tenant_id_for_user
-        tenant_id = await resolve_tenant_id_for_user(current_user, db)
+        tenant_id = await resolve_tenant_id_for_user(current_user, db, request)
         attempt_id, question_set = await start_selfcheck(
             topic=body.topic,
             user_id=str(current_user.id),

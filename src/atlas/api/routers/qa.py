@@ -1,5 +1,5 @@
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -44,13 +44,14 @@ class QAResponse(BaseModel):
 @router.post("/message", response_model=QAResponse)
 async def qa_message(
     body: QARequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> QAResponse:
     request_id = str(uuid.uuid4())
     history = [{"role": m.role, "content": m.content} for m in body.conversation_history]
     from atlas.db.tenant_helpers import resolve_tenant_id_for_user
-    tenant_id = await resolve_tenant_id_for_user(current_user, db)
+    tenant_id = await resolve_tenant_id_for_user(current_user, db, request)
     result = await run_qa_flow(
         question=body.message_text,
         db=db,
@@ -96,6 +97,7 @@ class FeedbackRequest(BaseModel):
 @router.post("/feedback", status_code=204)
 async def qa_feedback(
     body: FeedbackRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> None:
@@ -105,7 +107,7 @@ async def qa_feedback(
             detail="rating must be 'positive' or 'negative'",
         )
     from atlas.db.tenant_helpers import resolve_tenant_id_for_user
-    tenant_id = await resolve_tenant_id_for_user(current_user, db)
+    tenant_id = await resolve_tenant_id_for_user(current_user, db, request)
     feedback = QAFeedback(
         id=uuid.uuid4(),
         tenant_id=tenant_id,
