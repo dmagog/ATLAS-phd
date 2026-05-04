@@ -102,12 +102,28 @@ sudo systemctl reload caddy
 
 ## Step 4 — Запуск ATLAS
 
+**Первый запуск (cold start)** — собираем локально, потому что app image в GHCR ещё может не быть опубликован для конкретного коммита, а embeddings всё равно собирается на месте:
 ```bash
 cd /home/atlas/atlas
 docker compose up -d --build
 ```
 
 Первый запуск: 5–10 мин на сборку embeddings image (torch + sentence-transformers).
+
+**Последующие деплои** — через [`scripts/deploy.sh`](../../scripts/deploy.sh), который подтягивает уже собранный app image из GHCR (см. workflow [`build-image.yml`](../../.github/workflows/build-image.yml)):
+
+```bash
+# по умолчанию pull'ит latest
+./scripts/deploy.sh
+
+# pin конкретного коммита (для воспроизводимости / rollback)
+./scripts/deploy.sh --tag sha-abc1234
+
+# без git pull (если правки уже в дереве)
+./scripts/deploy.sh --no-pull
+```
+
+deploy.sh делает: snapshot БД → git pull → docker compose pull → alembic upgrade head (отдельным one-shot, ДО рестарта) → up -d → health-check + smoke. При ошибке миграции сервис не перезапускается, показывается rollback-инструкция.
 
 Healthcheck:
 ```bash
@@ -120,6 +136,12 @@ curl -f https://atlas.<your-domain>/health
 docker compose ps
 docker compose logs app | tail -50
 ```
+
+**Pin image tag в `.env`** для воспроизводимости:
+```env
+IMAGE_TAG=sha-abc1234   # или latest для convenience-pull'ов
+```
+Без этой строки compose возьмёт `latest`. Для production пилота рекомендуется pin'ить конкретный SHA — чтобы случайный новый push в main не подменил картинку на следующем `docker compose up`.
 
 ## Step 5 — Бэкапы
 

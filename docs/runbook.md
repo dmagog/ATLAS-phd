@@ -93,18 +93,24 @@ docker stop atlas-temp
 
 ## 6. Image rollback
 
-В `.env` зафиксирован тег image'а (`IMAGE_TAG=...`). Откат:
+В `.env` зафиксирован тег image'а (`IMAGE_TAG=...`). Откат — proще всего через [`scripts/deploy.sh`](../scripts/deploy.sh) с `--tag`:
 
 ```bash
-# 1. посмотреть, какие теги доступны (если используется GHCR)
-gh api /orgs/<org>/packages/container/atlas/versions | jq '.[].metadata.container.tags'
+# 1. посмотреть, какие теги доступны
+gh api /users/dmagog/packages/container/atlas-phd-app/versions \
+    | jq '.[].metadata.container.tags'
 
-# 2. поправить .env
-vi .env  # IMAGE_TAG=<previous-sha>
+# 2. откатиться на конкретный SHA — скрипт подменит IMAGE_TAG в .env,
+#    подтянет образ, прогонит миграции и сделает up -d с health-check
+./scripts/deploy.sh --no-pull --tag sha-abc1234
+```
 
-# 3. перезапустить
-docker compose pull
+Ручной вариант (если deploy.sh недоступен):
+```bash
+vi .env  # IMAGE_TAG=sha-abc1234
+docker compose pull app
 docker compose up -d
+curl -fsS http://localhost:8731/health
 ```
 
 ⚠️ Если за откатываемым релизом была применена migration — нужно либо `alembic downgrade` (если reversible), либо restore БД из dump'а на момент перед миграцией. См. §5.

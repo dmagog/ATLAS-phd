@@ -28,6 +28,10 @@ services:
       - embeddings_cache:/root/.cache/huggingface
 
   app:
+    # In dev: docker compose up --build → собирается локально по Dockerfile.
+    # In prod: после `docker compose pull` берётся опубликованный image из GHCR
+    # с тегом из .env (см. scripts/deploy.sh, docs/runbook.md §6 "Image rollback").
+    image: ghcr.io/dmagog/atlas-phd-app:${IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: docker/app.Dockerfile
