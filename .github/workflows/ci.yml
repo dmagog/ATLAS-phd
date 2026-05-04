@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-collect:
+    # Lightweight check that doesn't need the full ATLAS stack: just verify
+    # Python / Bash / TOML syntax and that pytest can collect the suite.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install minimal test deps
+        run: |
+          pip install --upgrade pip
+          pip install pytest pytest-asyncio httpx pydantic pydantic-settings sqlalchemy
+      - name: Python syntax check (src + tests)
+        run: |
+          python -m compileall -q src tests scripts || exit 1
+      - name: Bash syntax check
+        run: |
+          for f in $(find scripts -name "*.sh"); do bash -n "$f" || exit 1; done
+      - name: Pytest collection (no execution — just imports work)
+        run: |
+          # tests can't run without a live ATLAS stack; just collect to
+          # prove imports + syntax. The skipif guard inside each test
+          # will handle "no live stack" gracefully if pytest is run.
+          PYTHONPATH=src python -m pytest --collect-only tests/ || exit 1
+
+  integration-test-cross-tenant:
+    # Full integration: spins up postgres+pgvector+embeddings+app via
+    # docker compose, runs the M4.D cross-tenant test against it. Skipped
+    # if it can't reach /health (e.g. when secrets aren't configured).
+    runs-on: ubuntu-latest
+    needs: lint-and-collect
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install test deps
+        run: |
+          pip install pytest pytest-asyncio httpx
+      - name: Compose up (with placeholder LLM_API_KEY)
+        env:
+          LLM_API_KEY: sk-or-CI-PLACEHOLDER
+          POSTGRES_PASSWORD: ci_password_test
+          JWT_SECRET: ci_jwt_secret_test_long_enough
+          ADMIN_EMAIL: ci-admin@example.com
+          ADMIN_PASSWORD: ci-admin-pass-test
+        run: |
+          # Write env file (env_file in compose.yml expects this)
+          cat > .env <<EOF
+          LLM_API_KEY=${LLM_API_KEY}
+          LLM_MODEL_ID=meta-llama/llama-3.3-70b-instruct:free
+          POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+          JWT_SECRET=${JWT_SECRET}
+          ADMIN_EMAIL=${ADMIN_EMAIL}
+          ADMIN_PASSWORD=${ADMIN_PASSWORD}
+          LOG_LEVEL=INFO
+          EOF
+          docker compose up -d --build
+          # Wait for app to become healthy (max ~3 min — first build pulls
+          # torch + sentence-transformers).
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:8731/health 2>/dev/null | grep -q ok; then
+              echo "[ready after ${i} polls]"
+              break
+            fi
+            sleep 5
+          done
+      - name: Run cross-tenant test
+        env:
+          ATLAS_TEST_BASE_URL: http://127.0.0.1:8731
+          ADMIN_EMAIL: ci-admin@example.com
+          ADMIN_PASSWORD: ci-admin-pass-test
+        run: |
+          pytest tests/test_m4d_cross_tenant_isolation.py -v
+      - name: Compose logs (always)
+        if: always()
+        run: |
+          docker compose logs app --tail 200 || true
+      - name: Compose down
+        if: always()
+        run: docker compose down -v
