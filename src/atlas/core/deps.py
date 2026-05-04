@@ -29,6 +29,17 @@ async def get_current_user(
     user = result.scalar_one_or_none()
     if not user or user.deleted_at is not None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    # M4.C JWT versioning (BDD 7.5): role revocation / forced logout bumps
+    # users.jwt_version. Tokens issued before that point carry stale `jv`
+    # and are rejected here. Tokens minted before M4.C didn't have `jv`
+    # — treat missing `jv` as version 1 to avoid breaking existing sessions
+    # at first deploy of this change.
+    token_jv = int(payload.get("jv", 1))
+    if token_jv != user.jwt_version:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token revoked — please sign in again",
+        )
     return user
 
 

@@ -28,6 +28,7 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)) -> Token
     if user.deleted_at is not None:
         # Soft-deleted users (BDD 7.3) cannot log in.
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
-    # role is TEXT (M4.A), no .value needed.
-    token = create_access_token(str(user.id), user.role)
+    # role is TEXT (M4.A), no .value needed. jwt_version snapshots into the
+    # token so role-revocation (M4.C) can invalidate it (BDD 7.5).
+    token = create_access_token(str(user.id), user.role, user.jwt_version)
     return TokenResponse(access_token=token)
