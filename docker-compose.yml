@@ -28,13 +28,16 @@ services:
       - embeddings_cache:/root/.cache/huggingface
 
   app:
-    # In dev: docker compose up --build → собирается локально по Dockerfile.
-    # In prod: после `docker compose pull` берётся опубликованный image из GHCR
-    # с тегом из .env (см. scripts/deploy.sh, docs/runbook.md §6 "Image rollback").
+    # In dev: docker compose up --build → собирает stage `dev` (hot-reload,
+    # dev-deps, auto-migrate в CMD).
+    # In prod: после `docker compose pull` берётся образ из GHCR с тегом из
+    # .env (см. scripts/deploy.sh, docs/runbook.md §6 "Image rollback") —
+    # это stage `production` (no --reload, no auto-migrate, non-root).
     image: ghcr.io/dmagog/atlas-phd-app:${IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: docker/app.Dockerfile
+      target: ${APP_BUILD_TARGET:-dev}
     environment:
       DATABASE_URL: postgresql+asyncpg://atlas:${POSTGRES_PASSWORD:-atlas_dev}@postgres:5432/atlas
       EMBEDDINGS_URL: http://embeddings:8001
