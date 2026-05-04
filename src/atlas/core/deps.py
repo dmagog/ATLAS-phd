@@ -47,3 +47,46 @@ async def require_admin(user: User = Depends(get_current_user)) -> User:
     if user.role not in _ADMIN_ROLES:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
     return user
+
+
+def require_role(*allowed: str):
+    """Build a dependency that allows only the given roles.
+
+    Use as `Depends(require_role(UserRole.super_admin.value, UserRole.tenant_admin.value))`.
+    Mirrors the M4.C RBAC matrix from roadmap §M4.C — endpoints declare what
+    they accept, and any other role gets 403 with no info leak.
+    """
+    allowed_set = set(allowed)
+
+    async def _dep(user: User = Depends(get_current_user)) -> User:
+        if user.role not in allowed_set:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Forbidden: insufficient role",
+            )
+        return user
+
+    return _dep
+
+
+async def require_super_admin(user: User = Depends(get_current_user)) -> User:
+    """Cross-tenant super-admin only (tenant management, exports, platform ops)."""
+    if user.role != UserRole.super_admin.value:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Super-admin access required",
+        )
+    return user
+
+
+async def require_tenant_admin(user: User = Depends(get_current_user)) -> User:
+    """tenant-admin OR super-admin (tenant content management).
+
+    super-admin is admitted as cross-tenant superset of tenant-admin powers.
+    """
+    if user.role not in {UserRole.tenant_admin.value, UserRole.super_admin.value}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tenant-admin access required",
+        )
+    return user
