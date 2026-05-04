@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from atlas.core.logging import configure_logging
 from atlas.db.session import AsyncSessionLocal
 from atlas.api.startup import seed_admin, reset_stale_jobs
-from atlas.api.routers import auth, admin, qa, selfcheck, web, chat, invites, tenants
+from atlas.api.routers import auth, admin, qa, selfcheck, web, chat, invites, tenants, me
 from atlas.llm.client import llm_client
 
 _STATIC_DIR = Path(__file__).parent.parent / "static"
@@ -32,6 +32,7 @@ app.include_router(selfcheck.router)
 app.include_router(chat.router)
 app.include_router(invites.router)
 app.include_router(tenants.router)
+app.include_router(me.router)
 app.include_router(web.router)
 
 
