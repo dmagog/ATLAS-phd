@@ -74,6 +74,10 @@ async def set_visibility(
     Idempotent: setting to the current value is allowed and updates the
     timestamp (so the audit trail still records the click).
     """
+    if current_user.tenant_id is not None:
+        from atlas.db.tenant_helpers import assert_tenant_writable
+        await assert_tenant_writable(current_user.tenant_id, db, current_user)
+
     new_value = body.visibility
     now = datetime.now(timezone.utc)
     old_value = current_user.supervisor_visibility

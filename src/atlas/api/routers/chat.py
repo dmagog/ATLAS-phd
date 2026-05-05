@@ -85,6 +85,15 @@ async def chat_message(
 ) -> ChatResponse:
     request_id = str(uuid.uuid4())
 
+    # M4.A: блокируем write-операции на read-only / archived тенанте до начала
+    # дорогих стадий (planner / retrieval / LLM). Clarify-route ниже — это в
+    # сущности read (просим уточнить), поэтому он остаётся доступным даже на
+    # read-only; но self_check / qa оба пишут (attempts / qa-сессии) и должны
+    # фейлиться сразу с 423.
+    from atlas.db.tenant_helpers import assert_tenant_writable, resolve_tenant_id_for_user
+    tenant_id = await resolve_tenant_id_for_user(current_user, db, request)
+    await assert_tenant_writable(tenant_id, db, current_user)
+
     # ── Planner ───────────────────────────────────────────────────────────────
     decision = await plan(message=body.message_text, request_id=request_id)
 

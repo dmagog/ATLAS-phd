@@ -43,8 +43,9 @@ async def selfcheck_start(
 ) -> SelfCheckStartResponse:
     request_id = str(uuid.uuid4())
     try:
-        from atlas.db.tenant_helpers import resolve_tenant_id_for_user
+        from atlas.db.tenant_helpers import assert_tenant_writable, resolve_tenant_id_for_user
         tenant_id = await resolve_tenant_id_for_user(current_user, db, request)
+        await assert_tenant_writable(tenant_id, db, current_user)
         attempt_id, question_set = await start_selfcheck(
             topic=body.topic,
             user_id=str(current_user.id),
@@ -120,10 +121,14 @@ class SelfCheckSubmitResponse(BaseModel):
 async def selfcheck_submit(
     attempt_id: str,
     answers: list[AnswerIn],
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> SelfCheckSubmitResponse:
     request_id = str(uuid.uuid4())
+    from atlas.db.tenant_helpers import assert_tenant_writable, resolve_tenant_id_for_user
+    tenant_id = await resolve_tenant_id_for_user(current_user, db, request)
+    await assert_tenant_writable(tenant_id, db, current_user)
     try:
         payload = await submit_selfcheck(
             attempt_id=attempt_id,

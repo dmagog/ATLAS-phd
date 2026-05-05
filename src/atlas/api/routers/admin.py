@@ -66,8 +66,9 @@ async def create_ingestion_job(
     current_user: User = Depends(require_admin),
 ) -> IngestionJobStartResponse:
     """Start an ingestion job. Returns immediately with job_id; processing runs in background."""
-    from atlas.db.tenant_helpers import resolve_tenant_id_for_user
+    from atlas.db.tenant_helpers import assert_tenant_writable, resolve_tenant_id_for_user
     tenant_id = await resolve_tenant_id_for_user(current_user, db, request)
+    await assert_tenant_writable(tenant_id, db, current_user)
     job = IngestionJob(
         id=uuid.uuid4(),
         tenant_id=tenant_id,

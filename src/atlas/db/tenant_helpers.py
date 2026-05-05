@@ -16,7 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from atlas.core.config import settings
-from atlas.db.models import Tenant, User, UserRole
+from atlas.db.models import Tenant, TenantStatus, User, UserRole
 
 _PILOT_TENANT_ID: UUID | None = None
 
@@ -108,3 +108,57 @@ async def resolve_tenant_id_for_user(
             detail="User missing tenant binding",
         )
     return user.tenant_id
+
+
+async def assert_tenant_writable(
+    tenant_id: UUID,
+    db: AsyncSession,
+    current_user: User,
+) -> None:
+    """Block writes when tenant.status != 'active'.
+
+    M4.A роудмап-чеклист «Tenant status active ↔ read-only works»: write-операции
+    в read-only / archived тенанте должны блокироваться. Super-admin обходит
+    эту проверку — иначе мы бы запирали себя из read-only (никто не сможет
+    обратно перевести в active).
+
+    Возвращает 423 Locked + объяснение, чтобы UI мог показать осмысленное
+    сообщение, а не «something went wrong».
+
+    Это helper-функция (а не FastAPI dependency), потому что write-эндпоинты
+    уже резолвят tenant_id вручную через `resolve_tenant_id_for_user` — проще
+    добавить одну строку вызова, чем перестраивать сигнатуры.
+    """
+    if current_user.role == UserRole.super_admin.value:
+        return
+
+    result = await db.execute(select(Tenant.status).where(Tenant.id == tenant_id))
+    tenant_status = result.scalar_one_or_none()
+
+    if tenant_status is None:
+        # Tenant исчез между resolve и assert — редкая гонка; защитимся 404'ой.
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tenant not found",
+        )
+
+    if tenant_status == TenantStatus.active.value:
+        return
+
+    if tenant_status == TenantStatus.read_only.value:
+        raise HTTPException(
+            status_code=status.HTTP_423_LOCKED,
+            detail="Tenant is in read-only mode; writes are blocked. Contact super-admin.",
+        )
+
+    if tenant_status == TenantStatus.archived.value:
+        raise HTTPException(
+            status_code=status.HTTP_423_LOCKED,
+            detail="Tenant is archived; writes are blocked.",
+        )
+
+    # Unknown status — fail safe (не разрешаем write на неизвестный статус).
+    raise HTTPException(
+        status_code=status.HTTP_423_LOCKED,
+        detail=f"Tenant status '{tenant_status}' does not allow writes.",
+    )

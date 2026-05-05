@@ -23,10 +23,11 @@ from atlas.db.models import (
     Program,
     ProgramTopic,
     Tenant,
+    TenantStatus,
     User,
 )
 from atlas.db.session import get_db
-from atlas.db.tenant_helpers import resolve_tenant_id_for_user
+from atlas.db.tenant_helpers import assert_tenant_writable, resolve_tenant_id_for_user
 from atlas.programs.parser import ProgramParseError, parse_program
 
 router = APIRouter(prefix="/tenants", tags=["tenants"])
@@ -123,6 +124,79 @@ async def list_tenants(
     ]
 
 
+# ─── M4.A: tenant status (active / read-only / archived) ─────────────────
+
+
+_VALID_STATUSES = {s.value for s in TenantStatus}
+
+
+class UpdateStatusRequest(BaseModel):
+    status: str = Field(min_length=1, max_length=32)
+
+
+@router.patch("/{slug}/status", response_model=TenantOut)
+async def update_tenant_status(
+    slug: str,
+    body: UpdateStatusRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_super_admin),
+) -> TenantOut:
+    """Super-admin может перевести тенант между active / read-only / archived.
+
+    Используется в incident-response (см. docs/pilot/incident-runbook.md §1):
+    при подозрении на leak — flip в read-only, чтобы остановить запись, потом
+    разбираться. Read-only блокирует write-операции для всех ролей кроме
+    super-admin (см. assert_tenant_writable).
+    """
+    if body.status not in _VALID_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"status must be one of {sorted(_VALID_STATUSES)}",
+        )
+
+    result = await db.execute(select(Tenant).where(Tenant.slug == slug))
+    tenant = result.scalar_one_or_none()
+    if tenant is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"Tenant not found: {slug}"
+        )
+
+    if tenant.status == body.status:
+        return TenantOut(
+            id=str(tenant.id),
+            slug=tenant.slug,
+            display_name=tenant.display_name,
+            status=tenant.status,
+            created_at=tenant.created_at,
+        )
+
+    old_status = tenant.status
+    tenant.status = body.status
+
+    await write_audit(
+        db,
+        action="tenant.status.change",
+        actor_id=current_user.id,
+        actor_role=current_user.role,
+        tenant_id=tenant.id,
+        target_type="tenant",
+        target_id=str(tenant.id),
+        details={"from": old_status, "to": body.status},
+        flush_only=True,
+    )
+    await db.commit()
+    await db.refresh(tenant)
+
+    return TenantOut(
+        id=str(tenant.id),
+        slug=tenant.slug,
+        display_name=tenant.display_name,
+        status=tenant.status,
+        created_at=tenant.created_at,
+    )
+
+
 # ─── M4.5.A: program upload ───────────────────────────────────────────────
 
 
@@ -191,6 +265,7 @@ async def upload_program(
         )
     tenant = await _resolve_tenant_by_slug(slug, db)
     _ensure_can_manage(tenant, current_user)
+    await assert_tenant_writable(tenant.id, db, current_user)
 
     try:
         parsed = parse_program(body["text"])
@@ -331,6 +406,7 @@ async def attach_material_topics(
     """
     tenant = await _resolve_tenant_by_slug(slug, db)
     _ensure_can_manage(tenant, current_user)
+    await assert_tenant_writable(tenant.id, db, current_user)
 
     # Material must exist in this tenant.
     try:
@@ -594,6 +670,7 @@ async def compute_quality_score(
     """
     tenant = await _resolve_tenant_by_slug(slug, db)
     _ensure_can_manage(tenant, current_user)
+    await assert_tenant_writable(tenant.id, db, current_user)
 
     try:
         material_uuid = uuid.UUID(material_id)

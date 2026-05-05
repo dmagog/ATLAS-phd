@@ -50,8 +50,9 @@ async def qa_message(
 ) -> QAResponse:
     request_id = str(uuid.uuid4())
     history = [{"role": m.role, "content": m.content} for m in body.conversation_history]
-    from atlas.db.tenant_helpers import resolve_tenant_id_for_user
+    from atlas.db.tenant_helpers import assert_tenant_writable, resolve_tenant_id_for_user
     tenant_id = await resolve_tenant_id_for_user(current_user, db, request)
+    await assert_tenant_writable(tenant_id, db, current_user)
     result = await run_qa_flow(
         question=body.message_text,
         db=db,
@@ -106,8 +107,9 @@ async def qa_feedback(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="rating must be 'positive' or 'negative'",
         )
-    from atlas.db.tenant_helpers import resolve_tenant_id_for_user
+    from atlas.db.tenant_helpers import assert_tenant_writable, resolve_tenant_id_for_user
     tenant_id = await resolve_tenant_id_for_user(current_user, db, request)
+    await assert_tenant_writable(tenant_id, db, current_user)
     feedback = QAFeedback(
         id=uuid.uuid4(),
         tenant_id=tenant_id,

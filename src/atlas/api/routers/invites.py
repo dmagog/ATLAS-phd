@@ -26,7 +26,7 @@ from atlas.core.deps import get_current_user, require_tenant_admin
 from atlas.core.security import create_access_token, hash_password
 from atlas.db.models import InviteCode, User, UserRole
 from atlas.db.session import get_db
-from atlas.db.tenant_helpers import resolve_tenant_id_for_user
+from atlas.db.tenant_helpers import assert_tenant_writable, resolve_tenant_id_for_user
 
 router = APIRouter(prefix="/invites", tags=["invites"])
 
@@ -79,6 +79,7 @@ async def issue_invite(
             detail="role must be tenant-admin, supervisor, or student",
         )
     tenant_id = await resolve_tenant_id_for_user(current_user, db, request)
+    await assert_tenant_writable(tenant_id, db, current_user)
     ttl = body.expires_in_days if body.expires_in_days is not None else DEFAULT_TTL_DAYS
     expires_at = datetime.now(timezone.utc) + timedelta(days=ttl)
 
@@ -197,6 +198,17 @@ async def redeem_invite(
         raise HTTPException(status_code=status.HTTP_410_GONE, detail="Invite already redeemed")
     if invite.expires_at is not None and invite.expires_at <= now:
         raise HTTPException(status_code=status.HTTP_410_GONE, detail="Invite expired")
+
+    # Block redeem if tenant is read-only / archived. We can't reuse
+    # assert_tenant_writable here (no current_user yet), so check directly.
+    from atlas.db.models import Tenant, TenantStatus
+    tstatus_q = await db.execute(select(Tenant.status).where(Tenant.id == invite.tenant_id))
+    tstatus = tstatus_q.scalar_one_or_none()
+    if tstatus and tstatus != TenantStatus.active.value:
+        raise HTTPException(
+            status_code=status.HTTP_423_LOCKED,
+            detail=f"Tenant is {tstatus}; cannot accept new users.",
+        )
 
     # Reject if email already exists.
     existing = await db.execute(select(User).where(User.email == body.email))
