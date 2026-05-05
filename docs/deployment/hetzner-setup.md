@@ -174,6 +174,24 @@ curl -X POST https://atlas.<your-domain>/auth/login \
 
 Должен прийти JWT с role=super-admin.
 
+**После загрузки материалов** — привязать их к топикам программы. Без этого
+`coverage_chunks=0` для всех топиков → Q&A в topic-mode не работает, supervisor
+heatmap не разблокируется. Скрипт [`scripts/attach_corpus_by_keywords.py`](../../scripts/attach_corpus_by_keywords.py)
+делает первый proход эвристически, по совпадению key_concepts топика с текстом
+чанков:
+
+```bash
+# dry-run сначала — посмотреть план без записи
+python3 scripts/attach_corpus_by_keywords.py --dry-run
+
+# применить
+python3 scripts/attach_corpus_by_keywords.py
+```
+
+После — tenant-admin проверяет coverage report через `/tenants/{slug}/coverage`
+и точечно правит ложные match'и через UI / API. Это эвристика, не финальная
+разметка.
+
 **Bootstrap пилотного тенанта одной командой** — [`scripts/pilot_seed.py`](../../scripts/pilot_seed.py):
 
 ```bash
