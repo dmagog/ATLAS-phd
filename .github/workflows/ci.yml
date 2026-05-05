@@ -75,13 +75,16 @@ jobs:
             fi
             sleep 5
           done
-      - name: Run cross-tenant test
+      - name: Run integration tests
         env:
           ATLAS_TEST_BASE_URL: http://127.0.0.1:8731
           ADMIN_EMAIL: ci-admin@example.com
           ADMIN_PASSWORD: ci-admin-pass-test
         run: |
-          pytest tests/test_m4d_cross_tenant_isolation.py -v
+          # 31 tests across 6 files: m3a hard-gate, m4a read-only, m4c
+          # auth+invite, m4d cross-tenant, m45a program lifecycle, m5
+          # supervisor privacy. All use the live stack we just brought up.
+          pytest tests/ -v
       - name: Compose logs (always)
         if: always()
         run: |
