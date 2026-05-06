@@ -160,8 +160,55 @@ Self-check rubric correctness — отдельный block, требует rubri
 
 ---
 
+## M3.A Self-check rubric block (2026-05-06, finalized)
+
+Eval-set расширен до **120 entries** (60 qa + 20 refusal + 20 formula + **20 self_check**).
+
+### Setup
+
+- 5 тем (Брюстер, Снеллиус, Малюс, кольца Ньютона, голография) × 4 уровня правильности ответа (good 4.5 / partial 3.0 / weak 1.5 / off 0.5) = 20 entries
+- Каждый entry содержит `canned_question` + `user_answer` + `expected_overall` + per-criterion `expected_scores`
+- Тестируется ТОЛЬКО Evaluator (изолированно от Generator) через **новый stateless endpoint** `POST /self-check/evaluate` — добавлен в [src/atlas/api/routers/selfcheck.py](../../src/atlas/api/routers/selfcheck.py) специально для honest measurement'а
+
+### Результаты (treatment, paid llama 3.3 70b как evaluator)
+
+| Метрика | Значение |
+|---|---|
+| n_responses | 20 (0 errors) |
+| **MAE overall** | **0.615** на шкале 0-5 |
+| MAE per criterion: correctness | 0.73 |
+| MAE per criterion: completeness | 0.645 |
+| MAE per criterion: logic | 0.565 |
+| MAE per criterion: terminology | 0.995 (highest bias) |
+| within ±1.0 | 15/20 = **75%** |
+| within ±0.5 | 9/20 = 45% |
+| **κ binarized (correct vs incorrect)** | **1.000** |
+
+### По уровням правильности
+
+| Уровень | Expected | Got mean | Δ |
+|---|---|---|---|
+| good (4.5) | 4.50 | 4.44 | **0.06** ✓ |
+| partial (3.0) | 3.00 | 4.08 | 1.08 (bias up) |
+| weak (1.5) | 1.50 | 1.58 | **0.08** ✓ |
+| off (0.5) | 0.50 | 1.46 | 0.96 (bias up) |
+
+### Insights
+
+1. **Idiomatic boundary cases (good / weak) — точно**: на чёткие ответы хорошего и слабого качества evaluator выдаёт almost-exact expected. Это main use-case (показать аспиранту: «правильно/неправильно»).
+2. **Evaluator завышает middle и off** — типичный bias middle-tier LLM-judge (Llama 3.3 70B оценивает свои же outputs). Партиал-ответ получает ~4 вместо 3, off-topic получает ~1.5 вместо 0.5. Решается switch'ем на claude-3.5-sonnet или gpt-4o как judge.
+3. **κ_binarized = 1.0** — perfect agreement на бинарной классификации (правильный ≥ 2.5 vs неправильный < 2.5). Это значит, что **как gating mechanism «зачёт/незачёт» evaluator идеален**, даже если absolute score'ы немного смещены.
+
+### Действия после M3.A
+
+- Schema fix: `selfcheck_flow.py` пытался писать `status='submitted'` и `'evaluated'`, которых нет в check_constraint. Исправлено на `'in_progress'` (после submit, до evaluation) и `'completed'` (после успешной evaluation). Без этого fix'а submit падал с IntegrityError.
+- Runner: `call_self_check()` полностью переписан под `/self-check/evaluate` (stateless), runner больше не использует `/start` + `/submit` для evaluation тестирования.
+
+---
+
 ## Версия отчёта
 
 - **v1.0** (2026-05-03) — первый M3.B A/B на free-tier llama. Refusal+formula 40 entries. Полный прогон blocked rate-limit'ом.
 - **v1.1** (2026-05-04) — post-fix секция: 4 false-refusals разобраны через перефразировки eval-set v1.0-draft → v1.0.
 - **v2.0** (2026-05-06) — paid llama 3.3 70b. Полный 100-entry прогон baseline + treatment + treatment-postfix + judge × 3. Все базовые BDD (1.3, 6.1, 6.2) passing. Faithfulness measured: 0.541 (treatment), 0.550 (baseline).
+- **v2.1** (2026-05-06 evening) — M3.A self-check блок 0/20 → 20/20: новый `/self-check/evaluate` debug endpoint, schema fix, MAE 0.615, κ binarized 1.0, 75% within ±1.0. Eval-set вырос до 120 entries.

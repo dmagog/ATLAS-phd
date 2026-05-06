@@ -95,7 +95,11 @@ async def submit_selfcheck(
     if not attempt:
         raise ValueError("ATTEMPT_NOT_FOUND")
 
-    attempt.status = "submitted"
+    # Schema check_constraint допускает только in_progress/completed/abandoned/
+    # invalid_evaluation. Раньше здесь было 'submitted', что валило INSERT с
+    # IntegrityError. Семантически после submit'а до завершения evaluation'а
+    # attempt всё ещё в работе → in_progress.
+    attempt.status = "in_progress"
     attempt.answers = answers
     await db.commit()
 
@@ -124,7 +128,9 @@ async def submit_selfcheck(
             answers=answers,
             request_id=request_id,
         )
-        attempt.status = "evaluated"
+        # 'evaluated' тоже отсутствует в check_constraint — успешный финал =
+        # 'completed'. Тесты M5 supervisor heatmap уже работают со status='completed'.
+        attempt.status = "completed"
         attempt.evaluation = {
             "overall_score": payload.overall_score,
             "criterion_scores": {

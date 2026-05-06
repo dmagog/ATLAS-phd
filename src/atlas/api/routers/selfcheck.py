@@ -301,3 +301,78 @@ async def selfcheck_detail(
         created_at=_fmt(row.created_at),
         completed_at=_fmt(row.completed_at),
     )
+
+
+# ── Evaluate (debug) ─────────────────────────────────────────────────────────
+
+
+class EvaluateDebugRequest(BaseModel):
+    """Debug endpoint для eval-runner'а: оценить пару (question, user_answer) без
+    создания attempt'а. Используется при self_check блоке eval-set'а, где у нас
+    уже есть canned_question — runner не должен полагаться на /start, который
+    генерит свои вопросы.
+    """
+    question: str
+    question_type: str = "open_ended"  # "open_ended" | "multiple_choice"
+    options: list[str] = []
+    correct_option: str | None = None
+    user_answer: str
+
+
+class EvaluateDebugResponse(BaseModel):
+    overall_score: float
+    criterion_scores: CriterionScoresOut
+    error_tags: list[str]
+    evaluator_summary: str
+    confidence: float
+
+
+@router.post("/evaluate", response_model=EvaluateDebugResponse)
+async def selfcheck_evaluate_debug(
+    body: EvaluateDebugRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> EvaluateDebugResponse:
+    """Eval-only stateless evaluator для measurement self-check rubric correctness.
+
+    Не создаёт attempt в БД, не пишет audit. Используется только runner'ом
+    eval'а — поэтому ограничен administrator-ролью.
+    """
+    if current_user.role not in ("super-admin", "tenant-admin"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="admin only")
+
+    from atlas.selfcheck.evaluator import evaluate_answers
+    from atlas.selfcheck.generator import Question
+
+    qid = "debug-q1"
+    question = Question(
+        question_id=qid,
+        type=body.question_type,
+        prompt=body.question,
+        options=body.options,
+        correct_option=body.correct_option,
+    )
+    request_id = str(uuid.uuid4())
+    try:
+        payload = await evaluate_answers(
+            attempt_id=f"debug-{request_id}",
+            questions=[question],
+            answers=[{"question_id": qid, "answer_text": body.user_answer}],
+            request_id=request_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
+    cs = payload.criterion_scores
+    return EvaluateDebugResponse(
+        overall_score=payload.overall_score,
+        criterion_scores=CriterionScoresOut(
+            correctness=cs.correctness,
+            completeness=cs.completeness,
+            logic=cs.logic,
+            terminology=cs.terminology,
+        ),
+        error_tags=payload.error_tags,
+        evaluator_summary=payload.evaluator_summary,
+        confidence=payload.confidence,
+    )

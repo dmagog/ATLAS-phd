@@ -179,40 +179,30 @@ def call_qa(
 def call_self_check(
     client: httpx.Client, cfg: RunnerConfig, entry: SelfCheckEntry
 ) -> tuple[RunResponse, dict | None]:
-    """Self-check: start attempt with topic, submit canned user_answer, capture scores.
+    """Self-check evaluation through stateless `/self-check/evaluate` debug endpoint.
 
-    NOTE: текущий /selfcheck/start API генерирует свои вопросы по теме. Чтобы
-    тестировать ТОЛЬКО Evaluator (с canned_question + user_answer), потребуется
-    либо расширить API debug-эндпоинтом `/selfcheck/evaluate`, либо подставлять
-    user_answer на сгенерированный вопрос. Для skeleton M3.B — стартуем attempt
-    и сабмитим user_answer как ответ на первый сгенерированный вопрос.
-    Полная инструментовка — в follow-up.
+    Передаёт canned_question + user_answer из eval-set'а в Evaluator. НЕ создаёт
+    attempt в БД и НЕ зависит от Generator'а — измеряет ТОЛЬКО Evaluator
+    rubric agreement, изолированно. Это даёт точное сравнение sc_overall_score
+    с expected_overall (BDD 6.7 floor).
     """
     started = datetime.utcnow()
     t0 = time.monotonic()
     try:
-        # Start
-        start_resp = client.post(
-            f"{cfg.base_url}/selfcheck/start",
+        eval_resp = client.post(
+            f"{cfg.base_url}/self-check/evaluate",
             headers=_auth_headers(cfg),
-            json={"topic": entry.topic},
+            json={
+                "question": entry.canned_question,
+                "question_type": (
+                    "multiple_choice" if entry.canned_question_type == "mc" else "open_ended"
+                ),
+                "user_answer": entry.user_answer,
+            },
             timeout=cfg.timeout_seconds,
         )
-        start_resp.raise_for_status()
-        start = start_resp.json()
-        attempt_id = start.get("attempt_id") or start.get("id")
-        questions = start.get("questions", [])
-        # Submit: ставим user_answer на ВСЕ вопросы для smoke; реальная логика
-        # будет различать MC/open в follow-up.
-        answers = [{"question_id": q.get("id"), "answer": entry.user_answer} for q in questions]
-        submit_resp = client.post(
-            f"{cfg.base_url}/selfcheck/{attempt_id}/submit",
-            headers=_auth_headers(cfg),
-            json={"answers": answers},
-            timeout=cfg.timeout_seconds,
-        )
-        submit_resp.raise_for_status()
-        result = submit_resp.json()
+        eval_resp.raise_for_status()
+        result = eval_resp.json()
         latency = int((time.monotonic() - t0) * 1000)
         return (
             RunResponse(
@@ -221,13 +211,13 @@ def call_self_check(
                 config_name=cfg.name,
                 started_at=started.isoformat() + "Z",
                 latency_ms=latency,
-                http_status=submit_resp.status_code,
-                sc_attempt_id=attempt_id,
-                sc_status=result.get("status"),
+                http_status=eval_resp.status_code,
+                sc_attempt_id=None,
+                sc_status="completed",
                 sc_overall_score=result.get("overall_score"),
                 sc_criterion_scores=result.get("criterion_scores"),
             ),
-            {"start": start, "submit": result},
+            {"evaluate": result},
         )
     except httpx.HTTPError as e:
         latency = int((time.monotonic() - t0) * 1000)
