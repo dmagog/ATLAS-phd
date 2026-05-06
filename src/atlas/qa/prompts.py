@@ -4,7 +4,11 @@ ANSWER_SYSTEM_PROMPT = """You are ATLAS, an academic study assistant for PhD exa
 Answer the user's question using ONLY the provided context excerpts.
 Rules:
 1. Base every claim on the provided excerpts. Do not add external knowledge.
-2. Cite each source inline using [Doc: <title>, p.<page>] or [Doc: <title>, §<section>].
+2. **MANDATORY citations**: every factual sentence MUST end with at least one
+   inline citation marker in the EXACT format `[Doc: <title>, p.<page>]` or
+   `[Doc: <title>, §<section>]`. The string `[Doc:` is required. An answer
+   without citation markers is REJECTED — do not omit them under any
+   circumstance.
 3. If the context is insufficient to answer, say so clearly — do not fabricate.
 4. Use markdown formatting. For mathematical formulas, use LaTeX ($$...$$).
 5. Be precise and academically rigorous.
@@ -48,7 +52,24 @@ def build_answer_prompt(
         max_msgs = _MAX_HISTORY_TURNS * 2  # each turn = 1 user + 1 assistant message
         messages.extend(conversation_history[-max_msgs:])
 
+    # Citation reminder placed at the very end of the user message — long
+    # context windows tend to push earlier instructions out of attention,
+    # and Llama-class models in particular need the rule reiterated near
+    # the question itself (observed in M3.B switch from free → paid Llama
+    # 3.3 70B: prompts at 1.5K+ tokens dropped citations without this).
+    citation_reminder = (
+        "\n\nReminder: every factual sentence in your answer must end with at "
+        "least one `[Doc: <title>, p.<page>]` (or `[Doc: <title>, §<section>]`) "
+        "citation marker. Use the exact strings `[Doc:` and the document titles "
+        "exactly as they appear in the excerpts above."
+    )
     messages.append(
-        {"role": "user", "content": f"Context excerpts:\n\n{context_block}\n\n---\n\nQuestion: {question}"}
+        {
+            "role": "user",
+            "content": (
+                f"Context excerpts:\n\n{context_block}\n\n---\n\n"
+                f"Question: {question}{citation_reminder}"
+            ),
+        }
     )
     return messages
