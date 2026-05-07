@@ -1,0 +1,348 @@
+{% extends "_app.html" %}
+{% from "_partials.html" import sidebar_tenant_admin, topbar %}
+{% block title %}Программа кафедры{% endblock %}
+{% block content_mode %}app__content--dashboard{% endblock %}
+{% block sidebar %}{{ sidebar_tenant_admin(active='program') }}{% endblock %}
+{% block topbar %}{{ topbar() }}{% endblock %}
+
+{% block content %}
+<div class="flex items-baseline justify-between mb-5">
+  <div>
+    <h1 class="t-2xl t-bold">Программа кафедры</h1>
+    <div class="t-sm t-muted" id="ta-program-info">—</div>
+  </div>
+</div>
+
+<!-- States -->
+<div id="ta-loading" class="card">
+  <div class="empty">
+    <div class="empty__icon"><span class="spinner spinner--lg"></span></div>
+    <div class="empty__title">Загружаю данные…</div>
+  </div>
+</div>
+
+<div id="ta-forbidden" class="card hidden">
+  <div class="empty">
+    <div class="empty__icon"><i class="bi bi-shield-exclamation" style="font-size: 48px;"></i></div>
+    <div class="empty__title">Доступ только для tenant-admin / super-admin</div>
+    <div class="empty__subtitle">Эта страница управляет программой и материалами кафедры.</div>
+  </div>
+</div>
+
+<div id="ta-no-tenant" class="card hidden">
+  <div class="empty">
+    <div class="empty__icon"><i class="bi bi-building-x" style="font-size: 48px;"></i></div>
+    <div class="empty__title">Нет привязки к тенанту</div>
+    <div class="empty__subtitle">Ваша учётка не связана с конкретной кафедрой.</div>
+  </div>
+</div>
+
+<div id="ta-no-program" class="card hidden">
+  <div class="empty">
+    <div class="empty__icon"><i class="bi bi-book-half" style="font-size: 48px;"></i></div>
+    <div class="empty__title">Программа не загружена</div>
+    <div class="empty__subtitle">Загрузите program.md через CLI: <code class="t-mono">python3 scripts/seed_program.py …</code></div>
+  </div>
+</div>
+
+<!-- Main dashboard -->
+<div id="ta-dashboard" class="hidden">
+  <!-- Hero row -->
+  <div class="grid grid-cols-4 mb-5" id="ta-hero-row"></div>
+
+  <!-- Two-column: program | (invites + users) -->
+  <div class="grid" style="grid-template-columns: 2fr 1fr; gap: var(--sp-5);">
+
+    <!-- Program topics with coverage -->
+    <div class="card">
+      <h2 class="card__title">Топики и покрытие материалами</h2>
+      <div class="card__subtitle" id="ta-coverage-info">—</div>
+      <div id="ta-topics-list" class="flex-col gap-3 mt-3"></div>
+    </div>
+
+    <!-- Right column -->
+    <div class="flex-col gap-5">
+      <!-- Invites -->
+      <div class="card" id="invites">
+        <div class="flex items-baseline justify-between mb-3">
+          <h2 class="card__title" style="margin-bottom: 0;">Активные инвайты</h2>
+          <button class="btn btn--ghost btn--sm" id="ta-create-invite-btn" aria-label="Создать инвайт">
+            <i class="bi bi-plus-lg" aria-hidden="true"></i>Создать
+          </button>
+        </div>
+        <div id="ta-invites-list" class="flex-col"></div>
+      </div>
+
+      <!-- Users -->
+      <div class="card">
+        <h2 class="card__title">Пользователи</h2>
+        <div class="card__subtitle" id="ta-users-info">—</div>
+        <div id="ta-users-list" class="flex-col gap-2 mt-3"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Create-invite modal -->
+<div class="overlay" id="ta-invite-modal">
+  <div class="modal">
+    <div class="modal__title">Создать инвайт-код</div>
+    <p class="t-sm t-muted mb-4">Код можно передать студенту или научруку для регистрации.</p>
+    <div class="field field--lg">
+      <label class="label" for="invite-role">Роль</label>
+      <select class="select" id="invite-role">
+        <option value="student">student</option>
+        <option value="supervisor">supervisor</option>
+        <option value="tenant-admin">tenant-admin</option>
+      </select>
+    </div>
+    <div class="field field--lg">
+      <label class="label" for="invite-uses">Лимит использований</label>
+      <input class="input" type="number" id="invite-uses" min="1" max="100" value="1">
+    </div>
+    <div class="field field--lg">
+      <label class="label" for="invite-ttl">TTL (часов, опционально)</label>
+      <input class="input" type="number" id="invite-ttl" min="1" placeholder="бессрочно">
+    </div>
+    <div id="ta-invite-error" class="hidden mb-3" style="background: var(--c-danger-bg); color: var(--c-danger); padding: var(--sp-2) var(--sp-3); border-radius: var(--r-md); font-size: var(--fs-xs);"></div>
+    <div class="flex gap-3 justify-end">
+      <button class="btn btn--ghost" id="ta-invite-cancel">Отмена</button>
+      <button class="btn btn--primary" id="ta-invite-submit">Создать</button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function escHtml(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function show(id) { document.getElementById(id).classList.remove('hidden'); }
+function hide(id) { document.getElementById(id).classList.add('hidden'); }
+function fmtTime(iso) {
+  if (!iso) return '—';
+  try { return new Date(iso).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' }); }
+  catch { return iso; }
+}
+function ttlBadge(expiresAt) {
+  if (!expiresAt) return '<span class="t-xs t-muted">бессрочно</span>';
+  const ms = new Date(expiresAt).getTime() - Date.now();
+  if (ms < 0) return '<span class="badge badge--danger">просрочен</span>';
+  const days = Math.floor(ms / 86400000);
+  return days > 0 ? `<span class="t-xs t-muted">${days} дн.</span>` : '<span class="badge badge--warning">&lt; 1 дн.</span>';
+}
+
+function heroCard(label, value, valueMod, footnote) {
+  const valClass = 'hero-card__value' + (valueMod ? ' hero-card__value--' + valueMod : '');
+  return `<div class="hero-card">
+    <div class="hero-card__label">${label}</div>
+    <div class="${valClass}">${value}</div>
+    ${footnote ? `<div class="hero-card__compare"><span>${footnote}</span></div>` : ''}
+  </div>`;
+}
+
+let currentSlug = null;
+
+async function refreshAll() {
+  const [progRes, covRes, invRes, studRes] = await Promise.all([
+    authFetch(`/tenants/${encodeURIComponent(currentSlug)}/program`),
+    authFetch(`/tenants/${encodeURIComponent(currentSlug)}/coverage`),
+    authFetch('/invites'),
+    authFetch(`/tenants/${encodeURIComponent(currentSlug)}/supervisor/students`),
+  ]);
+
+  if (progRes.status === 403 || covRes.status === 403) {
+    hide('ta-loading');
+    show('ta-forbidden');
+    return;
+  }
+
+  const program = progRes.ok ? await progRes.json() : null;
+  const coverage = covRes.ok ? await covRes.json() : null;
+  const invites = invRes.ok ? await invRes.json() : [];
+  const students = studRes.ok ? await studRes.json() : { n_total: 0, n_visible: 0, students: [] };
+
+  hide('ta-loading');
+
+  if (!program) {
+    show('ta-no-program');
+    return;
+  }
+  show('ta-dashboard');
+
+  renderHero(program, coverage, students, invites);
+  renderTopics(program, coverage);
+  renderInvites(invites);
+  renderUsers(students);
+
+  document.getElementById('ta-program-info').textContent =
+    `Версия программы ${program.version} · ${program.topics.length} топиков · status ${program.status}`;
+  if (coverage) {
+    document.getElementById('ta-coverage-info').textContent =
+      `Bucket-пороги: ≥ ${coverage.K_self_check} чанков → 🟡, ≥ ${coverage.K_qa} чанков → 🟢`;
+  }
+}
+
+function renderHero(program, coverage, students, invites) {
+  const totalChunks = program.topics.reduce((acc, t) => acc + (t.coverage_chunks || 0), 0);
+  const greenTopics = coverage ? coverage.topics.filter(t => t.bucket === 'green').length : program.topics.length;
+  const coveragePct = program.topics.length ? Math.round(greenTopics / program.topics.length * 100) : 0;
+  const activeInvites = invites.filter(i => !i.redeemed_at && (!i.expires_at || new Date(i.expires_at) > new Date())).length;
+
+  const cards = [
+    heroCard('Топиков', program.topics.length, null, 'в программе'),
+    heroCard('Покрытие зелёных', `${coveragePct}%`, coveragePct >= 80 ? 'success' : (coveragePct >= 50 ? null : 'primary'), `${greenTopics} из ${program.topics.length}`),
+    heroCard('Чанков всего', totalChunks, null, 'в материалах кафедры'),
+    heroCard('Пользователей', students.n_total, null, `${activeInvites} активных инвайтов`),
+  ];
+  document.getElementById('ta-hero-row').innerHTML = cards.join('');
+
+  document.querySelectorAll('[data-count-students]').forEach(el => el.textContent = students.n_total);
+}
+
+function renderTopics(program, coverage) {
+  const list = document.getElementById('ta-topics-list');
+  if (!program.topics.length) {
+    list.innerHTML = '<div class="empty"><div class="empty__title">Топиков нет</div></div>';
+    return;
+  }
+  // Build coverage map
+  const covMap = new Map();
+  if (coverage) {
+    for (const t of coverage.topics) covMap.set(t.external_id, t);
+  }
+  const Kqa = (coverage && coverage.K_qa) || 5;
+
+  list.innerHTML = program.topics.map(t => {
+    const cov = covMap.get(t.external_id);
+    const bucket = cov ? cov.bucket : 'red';
+    const bucketColor = bucket === 'green' ? 'var(--c-success)' : (bucket === 'yellow' ? 'var(--c-warning)' : 'var(--c-danger)');
+    // Width %: relative to Kqa target (cap at 100)
+    const pct = Math.min(100, Math.round((t.coverage_chunks / Kqa) * 100));
+    const conceptsHtml = (t.key_concepts || []).slice(0, 4).map(c => `<span class="badge">${escHtml(c)}</span>`).join('');
+    return `<div class="card card--flat" style="background: var(--c-surface-2); border: 1px solid var(--c-border);">
+      <div class="flex items-baseline justify-between mb-2">
+        <div class="t-md t-bold"><span class="t-mono t-faint">${t.external_id}</span> ${escHtml(t.title)}</div>
+        <div class="flex items-center gap-2">
+          <span class="badge badge--${bucket === 'green' ? 'success' : (bucket === 'yellow' ? 'warning' : 'danger')}">${t.coverage_chunks} чанков</span>
+        </div>
+      </div>
+      <div class="bar-cmp__track" style="margin-bottom: var(--sp-2);">
+        <div class="bar-cmp__fill" style="width: ${pct}%; background: ${bucketColor};"></div>
+      </div>
+      ${conceptsHtml ? `<div class="flex items-center justify-between"><div class="flex flex-wrap gap-1">${conceptsHtml}</div><span class="t-xs t-muted">${escHtml(t.section)}</span></div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function renderInvites(invites) {
+  const list = document.getElementById('ta-invites-list');
+  const active = invites.filter(i => !i.redeemed_at);
+  if (!active.length) {
+    list.innerHTML = '<div class="t-sm t-muted">Активных инвайтов нет.</div>';
+    return;
+  }
+  list.innerHTML = active.map(i => `
+    <div class="flex items-center gap-2" style="padding: var(--sp-2) 0; border-bottom: 1px solid var(--c-border);">
+      <code class="t-xs t-mono" style="color: var(--c-primary); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;">${escHtml(i.code)}</code>
+      <span class="badge badge--${i.role === 'supervisor' ? 'info' : (i.role === 'tenant-admin' ? 'warning' : 'success')}">${i.role}</span>
+      ${ttlBadge(i.expires_at)}
+      <button class="btn btn--ghost btn--icon btn--sm" data-copy-code="${escHtml(i.code)}" title="Скопировать код" aria-label="Скопировать инвайт-код">
+        <i class="bi bi-clipboard" aria-hidden="true"></i>
+      </button>
+    </div>
+  `).join('');
+}
+
+function renderUsers(students) {
+  document.getElementById('ta-users-info').textContent = `Всего ${students.n_total} · показывают прогресс ${students.n_visible}.`;
+  const list = document.getElementById('ta-users-list');
+  if (!students.students.length) {
+    list.innerHTML = '<div class="t-sm t-muted">Пользователей нет.</div>';
+    return;
+  }
+  list.innerHTML = students.students.slice(0, 8).map(s => {
+    const ini = s.visible && s.display_name
+      ? s.display_name.split(/[._@-]/).slice(0,2).map(p => p[0] || '').join('').toUpperCase().slice(0,2)
+      : '#';
+    return `<div class="flex items-center gap-2">
+      <div class="sidebar__user-avatar" style="width: 24px; height: 24px; font-size: 10px;">${escHtml(ini)}</div>
+      <div class="flex-1" style="min-width: 0;">
+        <div class="t-sm" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escHtml(s.display_name)}</div>
+      </div>
+      <span class="badge ${s.visible ? 'badge--success' : ''}" style="font-size: 10px;">${s.visible ? 'visible' : 'anon'}</span>
+    </div>`;
+  }).join('') + (students.students.length > 8 ? `<a href="#" class="t-xs mt-2">Все пользователи (${students.students.length}) →</a>` : '');
+}
+
+// ── Copy invite code ─────────────────────────────────────────────────────────
+document.addEventListener('click', async e => {
+  const btn = e.target.closest('[data-copy-code]');
+  if (!btn) return;
+  const code = btn.dataset.copyCode;
+  try {
+    await navigator.clipboard.writeText(code);
+    btn.innerHTML = '<i class="bi bi-check-lg" aria-hidden="true"></i>';
+    setTimeout(() => { btn.innerHTML = '<i class="bi bi-clipboard" aria-hidden="true"></i>'; }, 1500);
+  } catch (_) {}
+});
+
+// ── Create invite modal ──────────────────────────────────────────────────────
+const inviteModal = document.getElementById('ta-invite-modal');
+document.getElementById('ta-create-invite-btn').addEventListener('click', () => inviteModal.classList.add('overlay--open'));
+document.getElementById('ta-invite-cancel').addEventListener('click', () => inviteModal.classList.remove('overlay--open'));
+inviteModal.addEventListener('click', e => { if (e.target === inviteModal) inviteModal.classList.remove('overlay--open'); });
+
+document.getElementById('ta-invite-submit').addEventListener('click', async () => {
+  const role = document.getElementById('invite-role').value;
+  const uses = parseInt(document.getElementById('invite-uses').value, 10) || 1;
+  const ttlH = parseInt(document.getElementById('invite-ttl').value, 10);
+  const errEl = document.getElementById('ta-invite-error');
+  errEl.classList.add('hidden');
+
+  const body = { role, max_uses: uses };
+  if (ttlH > 0) body.ttl_hours = ttlH;
+
+  try {
+    const res = await authFetch('/invites', { method: 'POST', body: JSON.stringify(body) });
+    if (!res.ok) {
+      let msg = 'Не удалось создать инвайт.';
+      try { const e = await res.json(); if (e.detail) msg = e.detail; } catch (_) {}
+      errEl.textContent = msg;
+      errEl.classList.remove('hidden');
+      return;
+    }
+    inviteModal.classList.remove('overlay--open');
+    refreshAll();  // reload invites list
+  } catch (err) {
+    if (err.message !== 'unauthorized') {
+      errEl.textContent = 'Ошибка соединения.';
+      errEl.classList.remove('hidden');
+    }
+  }
+});
+
+window.onAuthReady = async function (me) {
+  if (!['tenant-admin', 'super-admin'].includes(me.role)) {
+    hide('ta-loading');
+    show('ta-forbidden');
+    return;
+  }
+  if (!me.tenant_slug) {
+    hide('ta-loading');
+    show('ta-no-tenant');
+    return;
+  }
+  currentSlug = me.tenant_slug;
+  try {
+    await refreshAll();
+  } catch (err) {
+    if (err.message !== 'unauthorized') {
+      hide('ta-loading');
+      show('ta-no-program');
+      console.error('tenant-admin load:', err);
+    }
+  }
+};
+</script>
+{% endblock %}

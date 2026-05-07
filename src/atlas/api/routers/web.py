@@ -62,6 +62,14 @@ async def supervisor_page(request: Request):
     return templates.TemplateResponse(request=request, name="supervisor.html")
 
 
+@router.get("/tenant-admin", response_class=HTMLResponse)
+async def tenant_admin_page(request: Request):
+    """Tenant-admin dashboard (Phase 5.6). Program + coverage + invites
+    + users list. Data fetched client-side from /tenants/{slug}/program,
+    /tenants/{slug}/coverage, /invites, /tenants/{slug}/supervisor/students."""
+    return templates.TemplateResponse(request=request, name="tenant_admin.html")
+
+
 # Phase 3 wireframes — internal previews of redesigned screens.
 # All under /_/wf/* prefix, no auth, hard-coded sample data.
 # Will be deleted at end of Phase 5 once production templates are migrated.
