@@ -187,6 +187,14 @@ class SelfCheckAttempt(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True
     )  # nullable after soft-delete anonymization (BDD 7.3)
     topic = Column(String(512), nullable=False)
+    # M5: FK to program_topics so supervisor heatmap can aggregate per-topic.
+    # Nullable for legacy attempts created before the FK was wired up.
+    topic_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("program_topics.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
     language = Column(String(8), default="ru", nullable=False)
     status = Column(String(32), default=SelfCheckStatus.completed.value, nullable=False)
     question_set = Column(JSON, nullable=True)
