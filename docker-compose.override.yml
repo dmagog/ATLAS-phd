@@ -10,6 +10,8 @@ services:
       - ./corpus:/app/corpus
       # Read-only mount for eval results — used by /eval dashboard (Phase 5.2).
       - ./eval:/app/eval:ro
+      # Demo seed scripts (Phase 6) — read-only, executed via `docker compose exec`.
+      - ./scripts:/app/scripts:ro
     command: uvicorn atlas.api.main:app --host 0.0.0.0 --port 8731 --reload --reload-dir /app/src --timeout-graceful-shutdown 1
     environment:
       APP_ENV: development
