@@ -34,6 +34,34 @@ POST /admin/ingestion-jobs (multipart upload)
 → POST /tenants/{slug}/materials/{material_id}/quality-score
 ```
 
+### Bulk-привязка материалов к topic'ам по ключевым словам (M4.5.C)
+
+Если только что загружен большой корпус и привязывать каждый файл к
+topic'ам вручную долго — есть heuristic-скрипт:
+
+```bash
+python3 scripts/attach_corpus_by_keywords.py --tenant optics-kafedra
+```
+
+Скрипт смотрит на key_concepts каждого topic'а в активной программе и
+ищет их в text'е chunks материалов. Триггеры в БД пересчитают
+`coverage_chunks`. После — проверь `GET /tenants/{slug}/coverage`.
+
+### Per-topic анализ eval-набора (M4.5.E)
+
+Если хочешь увидеть, как эталонный eval-set распределён по topic'ам твоей
+программы (faithfulness/answered/refused per-topic), запусти:
+
+```bash
+python3 eval/per_topic_breakdown.py \
+    --run eval/results/<latest-run-dir> \
+    --set eval/golden_set_v1/golden_set_v1.0.jsonl
+```
+
+Это даёт раннее представление, какие topic'ы программы хорошо покрыты,
+а какие — слабо (low faithfulness или мало entries в eval-set'е). Сигнал
+к расширению корпуса или eval-set'а.
+
 ### Замена устаревшего материала
 
 Текущий API не поддерживает «удалить материал» (это в зоне роста — `material.delete` action). Пока: загружаете новый, привязываете к тем же билетам, старый оставляете. Coverage-counter автоматически обновится; в retrieval работают оба, и это нормально для пилота.

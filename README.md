@@ -24,29 +24,30 @@
 
 ## Агентный контур
 
-MVP реализует детерминированный агентный конвейер поверх RAG:
+Детерминированный агентный конвейер поверх RAG:
 
-1. **Retrieval** — поиск релевантных фрагментов из корпуса (pgvector, cosine similarity).
-2. **Answer Node** — генерация ответа строго по найденным источникам, с inline-цитатами.
-3. **Verifier** (hard-gate) — детерминированная проверка достаточности evidence и наличия цитат; при провале — одна попытка re-generation с расширенным контекстом.
-4. **Self-check Generator** — RAG-заземлённая генерация вопросов (MC + открытые) по теме.
-5. **Self-check Evaluator** — оценка ответов по рубрике (correctness 40% / completeness 30% / logic 20% / terminology 10%).
+1. **Retrieval** — гибридный поиск (pgvector cosine + BM25 ts_rank → RRF) с фильтрацией по `tenant_id` (M4.A).
+2. **Hard-gate (M3.A.0)** — на retrieval-уровне: при недостатке evidence (`top1_vscore < 0.55` ИЛИ `chunks_above_threshold < 2`) запрос отказывается **без LLM-вызова**, за <2s. Защита от галлюцинаций на off-topic. Сравнение M3.B: refusal_tnr **1.000 vs 0.000** vs baseline.
+3. **Answer Node** — генерация ответа строго по найденным источникам, с обязательными inline `[Doc: <title>, p.<page>]` маркерами.
+4. **Verifier (post-answer)** — проверка наличия citation markers; при провале — одна re-generation на том же retrieval.
+5. **Self-check Generator + Evaluator** — RAG-заземлённая генерация вопросов (MC + open) и оценка по рубрике (correctness 40% / completeness 30% / logic 20% / terminology 10%). M3.A self-check rubric: **κ_binarized = 1.000** на бинарной классификации зачёт/незачёт.
 
-Маршрутизация по режимам (`Q&A` / `Self-check`) осуществляется на уровне API-эндпоинтов.
-
+Маршрутизация по режимам (`Q&A` / `Self-check`) — на уровне API-эндпоинтов.
 Подробнее: [`docs/specs/agent-orchestrator.md`](docs/specs/agent-orchestrator.md).
 
 ## Стек
 
 | Слой | Технология |
 |---|---|
-| API / Web UI | FastAPI + Jinja2 |
-| БД | PostgreSQL + pgvector (HNSW, cosine) |
-| Embeddings | `paraphrase-multilingual-MiniLM-L12-v2` (384-dim, RU+EN, локально в Docker) |
-| LLM | OpenRouter API (`qwen/qwen3-8b:free` по умолчанию) |
-| Auth | JWT HS256, Argon2 пароли, RBAC (user / admin) |
+| API / Web UI | FastAPI + Jinja2 (web-first, Telegram бот отложен) |
+| БД | PostgreSQL 16 + pgvector (HNSW partial-индексы per-tenant, cosine) |
+| Embeddings | `paraphrase-multilingual-MiniLM-L12-v2` (384-dim, RU+EN, sidecar в Docker) |
+| LLM | OpenRouter API. Default: `meta-llama/llama-3.3-70b-instruct` (paid, $0.10/M input). Free fallback с rate-limit: `meta-llama/llama-3.3-70b-instruct:free` |
+| Multi-tenancy | M4.A: `tenant_id` на всех данных, JWT с `jv` claim (versioned), RBAC (super-admin / tenant-admin / supervisor / student), invite-flow, audit_log |
+| Auth | JWT HS256, Argon2 пароли, jwt-version revocation (BDD 7.5) |
 | Ingestion | JSONL (page-aware) / PDF / DOCX / TXT / MD |
-| Деплой | Docker Compose |
+| Eval-harness | M3 golden_set v1.1 (120 entries × 6 program topics), runner + score + per-topic breakdown |
+| Деплой | Docker Compose; multi-stage Dockerfile (dev/production); GHCR image build via GitHub Actions |
 
 ## Что MVP НЕ делает (out-of-scope)
 
@@ -111,7 +112,10 @@ cp .env.example .env
 `.env.example`:
 ```
 LLM_API_KEY=your_openrouter_key_here
-LLM_MODEL_ID=qwen/qwen3-8b:free
+# Paid (рекомендуется для пилота, без rate-limit'а):
+LLM_MODEL_ID=meta-llama/llama-3.3-70b-instruct
+# Free fallback (с rate-limit, годится для dev/smoke):
+# LLM_MODEL_ID=meta-llama/llama-3.3-70b-instruct:free
 
 POSTGRES_PASSWORD=atlas_dev
 
@@ -120,6 +124,8 @@ ADMIN_EMAIL=admin@example.com
 ADMIN_PASSWORD=changeme
 
 LOG_LEVEL=INFO
+VERIFIER_ENABLED=true   # M3 A/B toggle: false для baseline-режима
+PILOT_TENANT_SLUG=optics-kafedra
 ```
 
 ### 2. Запуск
@@ -169,7 +175,25 @@ ADMIN_EMAIL=<ваш_email> ADMIN_PASSWORD=<ваш_пароль> ./scripts/seed_c
 
 ### 6. Smoke-check
 
-Прогнать базовые сценарии из [`docs/acceptance_tests.md`](docs/acceptance_tests.md): `AT-01` (Q&A с цитатами), `AT-03` (отказ при отсутствии evidence), `AT-06` (самопроверка).
+```bash
+# Авто-тесты (требуется живой стэк):
+python3 -m pytest tests/ -v   # 31 BDD test, время ~25s
+
+# Eval-harness smoke (40 entries, ~10 мин):
+ATLAS_EVAL_TOKEN=... python3 eval/runner.py \
+    --set eval/golden_set_v1/golden_set_v1.0.jsonl \
+    --config eval/configs/treatment.toml \
+    --only refusal --only formula
+```
+
+Можно также пройти базовые сценарии из [`docs/acceptance_tests.md`](docs/acceptance_tests.md): `AT-01` (Q&A с цитатами), `AT-03` (отказ при отсутствии evidence), `AT-06` (самопроверка).
+
+## Запуск пилота с друзьями
+
+Если хочешь дать доступ 3–5 коллегам/аспирантам для тестирования — есть отдельный гайд для **local-пилота на твоей машине** (без VPS):
+[`docs/deployment/local-pilot.md`](docs/deployment/local-pilot.md). Покрывает Tailscale / LAN / Cloudflare Tunnel / ngrok варианты сетевого доступа, bootstrap пилотного тенанта одной командой через [`scripts/pilot_seed.py`](scripts/pilot_seed.py).
+
+Для **production-пилота на VPS** — [`docs/deployment/hetzner-setup.md`](docs/deployment/hetzner-setup.md).
 
 ## Разработка (hot-reload)
 
@@ -180,3 +204,14 @@ docker compose up -d
 ```
 
 `src/` и `alembic/` монтируются как volume; uvicorn запущен с `--reload` — изменения кода подхватываются без пересборки образа.
+
+В production (GHCR image, target `production` в [`docker/app.Dockerfile`](docker/app.Dockerfile)) — без `--reload`, миграции делаются явным шагом через [`scripts/deploy.sh`](scripts/deploy.sh), не на старте контейнера.
+
+## Эксплуатационные документы
+
+| Документ | Описание |
+|---|---|
+| [`docs/runbook.md`](docs/runbook.md) | Day-to-day operations: health, restart, log-by-request_id, backup, rollback, типовые user-сообщения |
+| [`docs/pilot/incident-runbook.md`](docs/pilot/incident-runbook.md) | Privacy / production / governance incident playbooks |
+| [`docs/welcome/student.md`](docs/welcome/student.md), [`supervisor.md`](docs/welcome/supervisor.md), [`tenant-admin.md`](docs/welcome/tenant-admin.md) | Welcome-гайды для пилотных пользователей по ролям |
+| [`eval/results/M3-report.md`](eval/results/M3-report.md) | Отчёт по M3.A/B/C: refusal_tnr, faithfulness, reproducibility, per-topic breakdown |

@@ -263,7 +263,51 @@ Cron на хосте (по умолчанию настроен в [hetzner-setup
 | Eval set | [`eval/golden_set_v1/golden_set_v1.0.jsonl`](../eval/golden_set_v1/golden_set_v1.0.jsonl) |
 | Eval reports | [`eval/results/`](../eval/results/) (включая M3-report.md) |
 
-## 14. Когда эскалировать
+## 14. Реестр скриптов
+
+Все скрипты лежат в `scripts/` (host-side) и `eval/` (для eval-harness).
+Каждый идемпотентен и safe to re-run.
+
+| Скрипт | Назначение | Краткое использование |
+|---|---|---|
+| [`scripts/pilot_seed.py`](../scripts/pilot_seed.py) | Bootstrap пилотного тенанта одной командой: создать tenant, загрузить программу, выписать N invite-кодов | `python3 scripts/pilot_seed.py --invites 5 --role student` |
+| [`scripts/pg_backup.sh`](../scripts/pg_backup.sh) | Daily pg_dump c rotation 7 дней; cron-friendly | `./scripts/pg_backup.sh /home/atlas/backups` |
+| [`scripts/daily_metrics_report.py`](../scripts/daily_metrics_report.py) | Суточная сводка из БД (users, self-check, audit privacy events, corpus state); --json mode для cron'а | `python3 scripts/daily_metrics_report.py --tenant optics-kafedra` |
+| [`scripts/deploy.sh`](../scripts/deploy.sh) | Production-deploy на VPS: snapshot БД → git pull → compose pull → миграция one-shot → up -d → health-check | `./scripts/deploy.sh --tag sha-abc1234` |
+| [`scripts/seed_corpus.sh`](../scripts/seed_corpus.sh) | Загрузить демо-корпус оптика (Born&Wolf, Matveev, Yariv) через ingestion API | `ADMIN_EMAIL=... ADMIN_PASSWORD=... ./scripts/seed_corpus.sh` |
+| [`scripts/attach_corpus_by_keywords.py`](../scripts/attach_corpus_by_keywords.py) | M4.5.C: heuristic привязка материалов к topic'ам программы по ключевым словам chunks → triggers пересчитывают `coverage_chunks` | `python3 scripts/attach_corpus_by_keywords.py --tenant optics-kafedra` |
+| [`scripts/eval_smoke.sh`](../scripts/eval_smoke.sh) | Quick eval-runbook: get JWT → run `--only refusal` → score → report | `BASE_URL=http://127.0.0.1:8731 ./scripts/eval_smoke.sh` |
+| [`eval/runner.py`](../eval/runner.py) | Полный eval prog: проходит eval-set через `/qa/message`, `/self-check/evaluate`, пишет responses.jsonl + trace/ | `ATLAS_EVAL_TOKEN=$JWT python3 eval/runner.py --set ... --config ...` |
+| [`eval/score.py`](../eval/score.py) | Считает refusal_correctness / faithfulness (LLM-judge) / citation accuracy / latency / selfcheck_rubric из run-dir | `python3 eval/score.py --run eval/results/X --set ... [--judge-model ...]` |
+| [`eval/per_topic_breakdown.py`](../eval/per_topic_breakdown.py) | M4.5.E: per-topic срез ans/ref/err + faithfulness/MAE на основе `topic_external_id` из eval-set v1.1 | `python3 eval/per_topic_breakdown.py --run eval/results/X --set ...` |
+
+## 15. Audit log: справочник actions
+
+Все действия, которые пишутся в `audit_log` (М4.D + М5 + М4.5):
+
+| action | Кто пишет | Когда | Кому полезно |
+|---|---|---|---|
+| `user.bootstrap` | `seed_admin()` startup | Создан super-admin из `.env` | Аудитор — verify первый super-admin |
+| `tenant.create` | POST /tenants | super-admin создал тенант | Audit-trail кто и когда добавил кафедру |
+| `tenant.status.change` | PATCH /tenants/{slug}/status | super-admin перевёл active↔read-only↔archived | Privacy-incident response (read-only flip) |
+| `program.upload` | POST /tenants/{slug}/program | tenant-admin залил program.md (BDD 4.7 archive-on-replace) | Версионирование программы |
+| `material.topics.set` | POST /tenants/{slug}/materials/{id}/topics | tenant-admin привязал материал к topic'ам | Coverage-debug, trigger пересчитал `coverage_chunks` |
+| `material.quality_score.compute` | POST /tenants/{slug}/materials/{id}/quality-score | Quality-recalculation | Why does some material get low_quality flag |
+| `invite.issue` | POST /invites | tenant-admin (или super-admin) создал invite | Кто кого приглашал |
+| `invite.redeem` | POST /invites/{code}/redeem | Новый user принял invite + согласие (BDD 4.10) | Регистрация конкретного аспиранта |
+| `user.role.grant` | (admin role-mgmt — М4.D) | Изменена роль пользователя | RBAC-audit |
+| `user.visibility.toggle` | POST /me/visibility | Аспирант сменил `supervisor_visibility` (BDD 3.4) | Privacy posture event |
+| `personal_data.access` | GET /tenants/{slug}/supervisor/students/{id}/profile (opted-in) | Supervisor посмотрел профиль аспиранта с opt-in (BDD 5.5) | Privacy compliance — DPIA-lite §5.6 |
+| `privacy.violation_attempt` | Same endpoint, но student NOT opted-in (BDD 5.5) | Supervisor попытался посмотреть профиль не-opt-in аспиранта | **Триггер privacy-incident'а** — см. [`pilot/incident-runbook.md`](pilot/incident-runbook.md) §1 |
+
+Поля `audit_log` row: `id`, `occurred_at`, `actor_id`, `actor_role`,
+`tenant_id`, `action`, `target_type`, `target_id`, `request_id`, `details` (JSONB).
+
+Daily monitoring: `personal_data.access` count + `privacy.violation_attempt`
+count в [`scripts/daily_metrics_report.py`](../scripts/daily_metrics_report.py).
+N ≥ 2 violation_attempt'ов за сутки → начало incident-flow.
+
+## 16. Когда эскалировать
 
 | Условие | Куда |
 |---|---|

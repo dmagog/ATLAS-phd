@@ -21,10 +21,38 @@
 
 ### 2.1 Что логируем
 
+**Application logs** (structured JSON, stdout):
 - `request_id`, `timestamp`, `node_name`, `decision`, `duration_ms`
 - `reason_code` для отказов и технических сбоев
 - псевдонимизированный `user_id`
 - административные действия и события отказа в доступе
+
+**`audit_log` table** (append-only Postgres, Не удаляется по retention)
+— append-only регистр privacy-significant действий:
+
+| action | Когда пишется | Privacy-relevance |
+|---|---|---|
+| `user.bootstrap` | Создан super-admin из `.env` при старте | low (один раз на инсталляцию) |
+| `tenant.create` | super-admin создал тенант | low |
+| `tenant.status.change` | super-admin перевёл тенант в read-only/archived | medium (incident-response trigger) |
+| `program.upload` | tenant-admin залил program.md (BDD 4.7 archive-on-replace) | low |
+| `material.topics.set` | tenant-admin привязал материал к topic'ам | low |
+| `material.quality_score.compute` | recompute quality-score | low |
+| `invite.issue` | Выписан invite-код | medium (кто кого пригласил) |
+| `invite.redeem` | Новый user принял invite + согласие (BDD 4.10) | high (consent recording) |
+| `user.role.grant` | Роль пользователя изменена | high (RBAC change) |
+| `user.visibility.toggle` | Аспирант сменил `supervisor_visibility` (BDD 3.4) | high (privacy posture event) |
+| `personal_data.access` | Supervisor посмотрел профиль opted-in аспиранта (BDD 5.5) | **critical** (DPIA-lite §5.6, требуется по 152-ФЗ) |
+| `privacy.violation_attempt` | Supervisor попытался открыть профиль NOT opted-in аспиранта | **critical** — триггер privacy-incident'а (см. [`pilot/incident-runbook.md`](pilot/incident-runbook.md) §1) |
+
+Каждая запись содержит: `actor_id`, `actor_role`, `tenant_id`, `target_type`,
+`target_id`, `request_id`, `details` (JSONB), `occurred_at`.
+
+Альтернативное представление по группам — в [`docs/runbook.md`](runbook.md) §15.
+
+Daily metrics из [`scripts/daily_metrics_report.py`](../scripts/daily_metrics_report.py):
+агрегаты `personal_data.access` и `privacy.violation_attempt` — основной
+сигнал privacy-incident'а.
 
 ### 2.2 Что не логируем
 
