@@ -1,227 +1,316 @@
-{% extends "base.html" %}
+{% extends "_app.html" %}
+{% from "_partials.html" import sidebar_student, topbar %}
 {% block title %}Чат{% endblock %}
+{% block content_mode %}{% endblock %}{# no max-width — chat owns full width with source-panel #}
+{% block sidebar %}{{ sidebar_student(active='chat') }}{% endblock %}
+{% block topbar %}{{ topbar() }}{% endblock %}
+
 {% block content %}
-<div class="card" style="display:flex;flex-direction:column;height:calc(100vh - 140px);min-height:420px">
+<div class="flex" id="chat-shell" style="height: calc(100vh - 60px); margin: calc(-1 * var(--sp-6)) calc(-1 * var(--sp-5));">
 
-  <!-- Profile selector -->
-  <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;flex-shrink:0">
-    <label style="font-size:.85rem;color:#6b7280">Режим:</label>
-    <select id="profile-select" style="width:auto">
-      <option value="detailed">Подробный</option>
-      <option value="brief">Краткий</option>
-      <option value="study">Учебный</option>
-    </select>
-    <label style="font-size:.85rem;color:#6b7280;margin-left:8px">Язык проверки:</label>
-    <select id="lang-select" style="width:auto">
-      <option value="ru">RU</option>
-      <option value="en">EN</option>
-    </select>
-    <span id="planner-badge" style="display:none;margin-left:auto;font-size:.78rem;padding:2px 8px;border-radius:10px;background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe"></span>
-  </div>
+  <!-- Chat column -->
+  <div class="flex-col flex-1" style="min-width: 0; padding: var(--sp-5); padding-bottom: 0;">
+    <div class="flex items-center gap-3 mb-4">
+      <h1 class="t-xl t-bold">ATLAS</h1>
+      <span style="margin-left:auto" class="flex gap-2 items-center">
+        <label class="t-xs t-muted">Режим:</label>
+        <select class="select" id="profile-select" style="width:auto" aria-label="Режим ответа">
+          <option value="detailed">Подробный</option>
+          <option value="brief">Краткий</option>
+          <option value="study">Учебный</option>
+        </select>
+        <label class="t-xs t-muted" style="margin-left: 8px;">Язык:</label>
+        <select class="select" id="lang-select" style="width:auto" aria-label="Язык проверки">
+          <option value="ru">RU</option>
+          <option value="en">EN</option>
+        </select>
+        <button class="btn btn--ghost btn--icon" id="clear-btn" title="Очистить чат" aria-label="Очистить чат">
+          <i class="bi bi-trash" aria-hidden="true"></i>
+        </button>
+      </span>
+    </div>
 
-  <!-- Messages area -->
-  <div id="messages" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:12px;margin-bottom:12px;padding-right:4px"></div>
+    <!-- Messages area -->
+    <div id="messages" class="flex-col gap-3 mb-4" style="flex:1; overflow-y:auto; padding-right: 4px;"></div>
 
-  <!-- Input -->
-  <div style="display:flex;gap:8px;flex-shrink:0">
-    <textarea id="chat-input"
-      placeholder="Задайте вопрос или напишите «Проверь меня по теме…»"
-      style="flex:1;min-height:48px;max-height:140px;resize:none"></textarea>
-    <div style="display:flex;flex-direction:column;gap:4px;align-self:flex-end">
-      <button class="btn-primary" id="send-btn" style="white-space:nowrap">Отправить</button>
-      <button class="btn-secondary" id="clear-btn" style="font-size:.78rem;padding:4px 10px">Очистить</button>
+    <!-- Composer -->
+    <div class="flex gap-2" style="padding: var(--sp-3) 0;">
+      <textarea class="textarea" id="chat-input" rows="2"
+        placeholder="Задайте вопрос или напишите «Проверь меня по теме…»"
+        style="resize:none; min-height: 56px; max-height: 140px"
+        aria-label="Сообщение"></textarea>
+      <button class="btn btn--primary" id="send-btn" style="align-self:stretch" aria-label="Отправить сообщение">
+        <i class="bi bi-send-fill" aria-hidden="true"></i>Отправить
+      </button>
     </div>
   </div>
 
+  <!-- Source panel -->
+  <aside class="source-panel" id="source-panel">
+    <div class="source-panel__title">Источники</div>
+    <div id="source-cards">
+      <div class="empty" style="padding: var(--sp-6) var(--sp-3);">
+        <div class="empty__icon"><i class="bi bi-book" style="font-size: 32px;" aria-hidden="true"></i></div>
+        <div class="t-xs t-muted">Источники будут показаны здесь после ответа.</div>
+      </div>
+    </div>
+    <div class="t-uppercase mt-6">Сессия</div>
+    <div class="t-xs t-muted mt-2" id="session-stats">
+      <div class="flex justify-between"><span>Сообщений</span><span class="t-mono" id="stat-msgs">0</span></div>
+      <div class="flex justify-between mt-1"><span>Уникальных источников</span><span class="t-mono" id="stat-srcs">0</span></div>
+      <div class="flex justify-between mt-1"><span>Hard-gate отказов</span><span class="t-mono" id="stat-refusals">0</span></div>
+    </div>
+  </aside>
 </div>
 {% endblock %}
+
 {% block scripts %}
-<style>
-@keyframes spin { to { transform: rotate(360deg); } }
-.msg-user  { background:#eff6ff; align-self:flex-end; max-width:82% }
-.msg-atlas { background:#f9fafb; border:1px solid #e5e7eb; align-self:flex-start; max-width:90% }
-.msg-wrap  { padding:12px 14px; border-radius:8px; line-height:1.55 }
-.msg-label { font-size:.82rem; color:#6b7280; margin-bottom:4px }
-.quiz-option { display:block; padding:6px 10px; border-radius:6px; margin:4px 0;
-               cursor:pointer; font-size:.88rem; border:1px solid #e5e7eb; background:#fff;
-               transition:background .15s }
-.quiz-option:hover { background:#eff6ff }
-.quiz-option.selected { background:#dbeafe; border-color:#93c5fd }
-.quiz-opt-correct { background:#dcfce7 !important; border-color:#86efac !important; color:#166534; font-weight:600 }
-.quiz-opt-wrong   { background:#fee2e2 !important; border-color:#fca5a5 !important; color:#991b1b; text-decoration:line-through }
-</style>
 <script>
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Markdown helpers ──────────────────────────────────────────────────────────
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
 function mdToHtml(text) {
-  return text
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-    .replace(/\*\*(.+?)\*\*/g,'<b>$1</b>')
-    .replace(/\*(.+?)\*/g,'<i>$1</i>')
-    .replace(/`([^`]+)`/g,'<code style="background:#f3f4f6;padding:1px 4px;border-radius:3px">$1</code>')
-    .replace(/\n/g,'<br>');
+  return escHtml(text)
+    .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+    .replace(/\*(.+?)\*/g, '<i>$1</i>')
+    .replace(/`([^`]+)`/g, '<code style="background:var(--c-surface-2);padding:1px 5px;border-radius:3px">$1</code>')
+    .replace(/\n\n/g, '</p><p>')
+    .replace(/\n/g, '<br>');
 }
 
-function scoreColor(s) {
-  return s >= 4 ? '#16a34a' : s >= 2.5 ? '#d97706' : '#dc2626';
-}
+// ── Step badges shown during typing ───────────────────────────────────────────
+const STEPS_PLAN = ['<i class="bi bi-cpu"></i> Анализирую запрос'];
+const STEPS_QA   = [
+  '<i class="bi bi-search"></i> Ищу в материалах',
+  '<i class="bi bi-pencil"></i> Формирую ответ',
+  '<i class="bi bi-shield-check"></i> Проверяю точность',
+];
+const STEPS_SC = [
+  '<i class="bi bi-crosshair"></i> Определяю тему',
+  '<i class="bi bi-list-check"></i> Составляю вопросы',
+];
 
-function appendMsg(cls, labelText, innerHtml, save = true) {
-  const msgs = document.getElementById('messages');
+// ── Rendering helpers ─────────────────────────────────────────────────────────
+function appendBubble(role, label, html, opts = {}) {
   const wrap = document.createElement('div');
-  wrap.className = `msg-wrap ${cls}`;
-  wrap.innerHTML = `<div class="msg-label">${labelText}</div>${innerHtml}`;
-  msgs.appendChild(wrap);
-  msgs.scrollTop = msgs.scrollHeight;
+  wrap.className = 'bubble bubble--' + role;
+  wrap.innerHTML = `<div class="bubble__author">${label}</div>${html}`;
+  if (opts.id) wrap.id = opts.id;
+  document.getElementById('messages').appendChild(wrap);
+  scrollToBottom();
   if (window.renderMathInElement) renderMathInElement(wrap);
-  if (save) { _chatLog.push({cls, label: labelText, html: innerHtml}); _saveSession(); }
   return wrap;
 }
 
-// ── Typing indicator ──────────────────────────────────────────────────────────
-const STEPS_QA   = ['<i class="bi bi-search"></i> Планирую запрос…','<i class="bi bi-book-half"></i> Ищу в материалах…','<i class="bi bi-pencil"></i> Формирую ответ…','<i class="bi bi-shield-check"></i> Проверяю точность…'];
-const STEPS_SC   = ['<i class="bi bi-crosshair"></i> Определяю тему…','<i class="bi bi-book-half"></i> Ищу в корпусе…','<i class="bi bi-list-check"></i> Составляю вопросы…'];
-const STEPS_PLAN = ['<i class="bi bi-cpu"></i> Анализирую запрос…'];
+function scrollToBottom() {
+  const m = document.getElementById('messages');
+  m.scrollTop = m.scrollHeight;
+}
 
 function showTyping(steps) {
-  const msgs = document.getElementById('messages');
   const wrap = document.createElement('div');
-  wrap.className = 'msg-wrap msg-atlas';
-  const stepEl = document.createElement('span');
-  stepEl.style.cssText = 'font-size:.88rem;color:#9ca3af';
-  wrap.innerHTML = '<div class="msg-label">ATLAS</div>';
-  wrap.appendChild(stepEl);
-  msgs.appendChild(wrap);
-  msgs.scrollTop = msgs.scrollHeight;
+  wrap.className = 'bubble bubble--atlas';
+  wrap.id = 'typing-bubble';
+  let badgesHtml = steps.map((s, i) =>
+    `<span class="step-badge ${i === 0 ? 'step-badge--active' : ''}" data-step="${i}">${s}</span>`
+  ).join(' ');
+  wrap.innerHTML = `<div class="bubble__author">ATLAS</div>
+    <div class="flex items-center gap-2 t-sm t-muted flex-wrap">
+      <span class="spinner"></span>${badgesHtml}
+    </div>`;
+  document.getElementById('messages').appendChild(wrap);
+  scrollToBottom();
 
+  // Rotate active step every ~3.5s for visual feedback
   let idx = 0;
-  stepEl.innerHTML = steps[0];
-  wrap._t = setInterval(() => {
-    idx = Math.min(idx + 1, steps.length - 1);
-    stepEl.innerHTML = steps[idx];
-    msgs.scrollTop = msgs.scrollHeight;
+  wrap._timer = setInterval(() => {
+    const next = Math.min(idx + 1, steps.length - 1);
+    if (next === idx) return;
+    wrap.querySelector(`[data-step="${idx}"]`)?.classList.replace('step-badge--active', 'step-badge--done');
+    wrap.querySelector(`[data-step="${next}"]`)?.classList.add('step-badge--active');
+    idx = next;
   }, 3500);
   return wrap;
 }
 
-function removeTyping(wrap) {
-  if (wrap?._t) clearInterval(wrap._t);
-  wrap?.parentNode?.removeChild(wrap);
-}
-
-// ── Badge ─────────────────────────────────────────────────────────────────────
-function setBadge(route) {
-  const b = document.getElementById('planner-badge');
-  const labels = { qa: '→ Q&A', self_check: '→ Самопроверка', clarify: '→ Уточнение' };
-  b.textContent = labels[route] || route;
-  b.style.display = 'inline';
-  setTimeout(() => { b.style.display = 'none'; }, 4000);
-}
-
-// ── Feedback ──────────────────────────────────────────────────────────────────
-const _fbData = {}; // requestId → {questionText, answerText}
-
-async function sendFeedback(btn) {
-  const rid    = btn.dataset.rid;
-  const rating = btn.dataset.rating;
-  const { questionText = '', answerText = '' } = _fbData[rid] || {};
-  const row = btn.closest('.feedback-row');
-  row.innerHTML = '<span style="font-size:.75rem;color:#9ca3af">Спасибо за оценку!</span>';
-  try {
-    await fetch('/qa/feedback', {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify({ request_id: rid, rating, question_text: questionText, answer_markdown: answerText }),
-    });
-  } catch(_) {}
-}
-
-document.addEventListener('click', e => {
-  const btn = e.target.closest('.fb-btn[data-rid]');
-  if (btn) sendFeedback(btn);
-});
-
-// ── Q&A response ──────────────────────────────────────────────────────────────
-function renderQA(data, questionText) {
-  if (data.status === 'answered') {
-    const answerText = data.answer_markdown || '';
-    let citeHtml = '';
-    if (data.citations?.length) {
-      citeHtml = '<div style="margin-top:10px;font-size:.8rem;color:#6b7280"><b>Источники:</b> '
-        + data.citations.map(c => `<span class="tag">${c.document_title}${c.page ? ', с.'+c.page : ''}</span>`).join(' ')
-        + '</div>';
-    }
-    const rid = data.request_id || '';
-    if (rid) _fbData[rid] = { questionText: questionText || '', answerText };
-    const feedbackHtml = rid ? `<div class="feedback-row" style="margin-top:10px;display:flex;gap:6px;align-items:center">
-      <span style="font-size:.75rem;color:#9ca3af">Полезно?</span>
-      <button class="fb-btn" data-rid="${rid}" data-rating="positive"><i class="bi bi-hand-thumbs-up"></i></button>
-      <button class="fb-btn" data-rid="${rid}" data-rating="negative"><i class="bi bi-hand-thumbs-down"></i></button>
-    </div>` : '';
-    appendMsg('msg-atlas', 'ATLAS', mdToHtml(answerText) + citeHtml + feedbackHtml);
-  } else {
-    const msg = data.refusal_message || 'Не удалось получить ответ.';
-    appendMsg('msg-atlas', 'ATLAS', `<span style="color:#dc2626">${mdToHtml(msg)}</span>`);
+function removeTyping() {
+  const t = document.getElementById('typing-bubble');
+  if (t) {
+    if (t._timer) clearInterval(t._timer);
+    t.remove();
   }
 }
 
-// ── Self-check inline quiz ─────────────────────────────────────────────────────
+// ── Source panel ──────────────────────────────────────────────────────────────
+const seenSources = new Map(); // key: title|page → {idx, ...data}
+let nextSourceIdx = 1;
+
+function dedupKey(c) {
+  return (c.document_title || '') + '|' + (c.page || '');
+}
+
+function updateSourcePanel(citations) {
+  if (!citations || !citations.length) return [];
+  const indices = [];
+  for (const c of citations) {
+    const k = dedupKey(c);
+    if (seenSources.has(k)) {
+      indices.push(seenSources.get(k).idx);
+    } else {
+      const idx = nextSourceIdx++;
+      seenSources.set(k, { idx, ...c });
+      indices.push(idx);
+    }
+  }
+  renderSourcePanel();
+  return indices;
+}
+
+function renderSourcePanel() {
+  const container = document.getElementById('source-cards');
+  if (!seenSources.size) return;
+  // Sort by idx
+  const sorted = Array.from(seenSources.values()).sort((a, b) => a.idx - b.idx);
+  container.innerHTML = sorted.map(s => `
+    <div class="source-card" data-src-idx="${s.idx}" tabindex="0" role="button" aria-label="Источник ${s.idx}: ${escHtml(s.document_title)}">
+      <span class="source-card__index">${s.idx}</span>
+      <span class="source-card__title">${escHtml(s.document_title || 'без названия')}</span>
+      ${s.page ? `<span class="source-card__page">с. ${s.page}</span>` : ''}
+      ${s.snippet ? `<div class="source-card__snippet">${escHtml(s.snippet).slice(0, 220)}${s.snippet.length > 220 ? '…' : ''}</div>` : ''}
+    </div>
+  `).join('');
+  document.getElementById('stat-srcs').textContent = seenSources.size;
+}
+
+function highlightSource(idx) {
+  document.querySelectorAll('.source-card').forEach(el => {
+    el.classList.toggle('source-card--active', el.dataset.srcIdx === String(idx));
+  });
+  // Scroll into view in panel
+  const target = document.querySelector(`.source-card[data-src-idx="${idx}"]`);
+  if (target) target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// Click on cite-pill → highlight
+document.addEventListener('click', e => {
+  const pill = e.target.closest('.cite');
+  if (pill) {
+    e.preventDefault();
+    const idx = pill.dataset.srcIdx;
+    if (idx) highlightSource(idx);
+    return;
+  }
+  const card = e.target.closest('.source-card');
+  if (card) {
+    document.querySelectorAll('.source-card').forEach(el => el.classList.remove('source-card--active'));
+    card.classList.add('source-card--active');
+  }
+});
+
+// ── Render Q&A response ───────────────────────────────────────────────────────
+function renderQA(data, questionText) {
+  if (data.status === 'refused' || (data.status !== 'answered' && data.refusal_message)) {
+    renderRefusal(data, questionText);
+    return;
+  }
+  if (data.status !== 'answered') {
+    appendBubble('atlas', 'ATLAS', `<span style="color:var(--c-danger)">${mdToHtml(data.refusal_message || 'Не удалось получить ответ.')}</span>`);
+    return;
+  }
+
+  const indices = updateSourcePanel(data.citations || []);
+  const citePills = indices.length
+    ? indices.map(i => `<a href="#" class="cite" data-src-idx="${i}">${i}</a>`).join(' ')
+    : '';
+
+  const answerHtml = '<p>' + mdToHtml(data.answer_markdown || '') + '</p>';
+  const sourcesLine = citePills
+    ? `<div class="mt-3 t-xs t-muted">Источники: ${citePills}</div>`
+    : '';
+
+  const badgesHtml = `<div class="mt-3 flex gap-2 items-center flex-wrap">
+    <span class="badge badge--brand"><i class="bi bi-shield-check" aria-hidden="true"></i>Hard-gate verified</span>
+    ${data.citations?.length ? `<span class="badge badge--success">${data.citations.length} источника</span>` : ''}
+    <span style="margin-left:auto" class="flex gap-1">
+      <button class="btn btn--ghost btn--sm" data-fb="positive" data-rid="${data.request_id || ''}" title="Полезно" aria-label="Оценить ответ как полезный">
+        <i class="bi bi-hand-thumbs-up" aria-hidden="true"></i>
+      </button>
+      <button class="btn btn--ghost btn--sm" data-fb="negative" data-rid="${data.request_id || ''}" title="Не полезно" aria-label="Оценить ответ как бесполезный">
+        <i class="bi bi-hand-thumbs-down" aria-hidden="true"></i>
+      </button>
+    </span>
+  </div>`;
+
+  appendBubble('atlas', 'ATLAS', answerHtml + sourcesLine + badgesHtml);
+  // Stash question text + answer for feedback
+  const lastFb = document.querySelectorAll('[data-fb]');
+  lastFb.forEach(b => {
+    b._questionText = questionText;
+    b._answerText = data.answer_markdown;
+  });
+}
+
+function renderRefusal(data, questionText) {
+  document.getElementById('stat-refusals').textContent =
+    parseInt(document.getElementById('stat-refusals').textContent || '0') + 1;
+  const suggestions = (data.followup_suggestions || []);
+  const sugHtml = suggestions.length
+    ? `<div class="card" style="background: var(--c-surface-2); border: none; max-width: 480px; margin: var(--sp-4) auto 0;">
+        <div class="t-uppercase mb-2">Темы, по которым корпус даёт ответы</div>
+        <div class="flex flex-wrap gap-2">
+          ${suggestions.map(s => `<span class="badge badge--info">${escHtml(s)}</span>`).join('')}
+        </div>
+      </div>`
+    : '';
+  const refusalHtml = `<div class="refusal" style="margin: var(--sp-3) auto;">
+    <div class="refusal__icon"><img src="/static/icons/atlas-shield.svg" alt=""></div>
+    <h3 class="refusal__title">Hard-gate: запрос отклонён</h3>
+    <p class="refusal__subtitle">${escHtml(data.refusal_message || 'В корпусе кафедры не найдено достаточно доказательств для ответа.')}</p>
+    <p class="refusal__footnote">
+      Это поведение детерминировано на уровне retrieval. На off-topic eval-set'е метрика
+      <code class="t-mono">refusal_tnr = 1.000</code>.
+    </p>
+  </div>${sugHtml}`;
+  appendBubble('atlas', 'ATLAS · защита', refusalHtml);
+}
+
+// ── Self-check inline quiz (carried over from legacy chat) ────────────────────
+function scoreColor(s) { return s >= 4 ? 'var(--c-success)' : (s >= 2.5 ? 'var(--c-warning)' : 'var(--c-danger)'); }
+
 function renderQuiz(data) {
-  const msgs = document.getElementById('messages');
-  const card = document.createElement('div');
-  card.className = 'msg-wrap msg-atlas';
-  card.style.maxWidth = '100%';
-
-  const questions = data.questions;
   const attemptId = data.attempt_id;
-  const topic = data.topic;
-
-  // Build questions HTML
-  let qHtml = `<div class="msg-label">ATLAS — Самопроверка</div>
-    <div style="font-weight:600;margin-bottom:12px">Тема: ${topic}</div>`;
-
+  const questions = data.questions || [];
+  let html = `<div class="t-md t-bold mb-3">Самопроверка · <span class="t-muted">${escHtml(data.topic || '')}</span></div>`;
   questions.forEach((q, i) => {
-    qHtml += `<div style="margin-bottom:14px;padding:12px;border:1px solid #e5e7eb;border-radius:8px;background:#fff">
-      <div style="font-weight:500;margin-bottom:8px;font-size:.92rem">${i+1}. ${q.prompt}</div>`;
-
+    html += `<div class="card card--flat" style="margin-bottom: var(--sp-3); background: var(--c-surface-2);">
+      <div class="t-md t-bold mb-2">${i + 1}. ${escHtml(q.prompt)}</div>`;
     if (q.type === 'multiple_choice') {
       q.options.forEach(opt => {
         const letter = opt.charAt(0);
-        qHtml += `<label class="quiz-option" data-qid="${q.question_id}" data-letter="${letter}">
-          <input type="radio" name="q_${q.question_id}" value="${letter}"
-                 style="display:none" onchange="selectOption(this)"> ${opt}
+        html += `<label style="display:block; padding: 6px 10px; border-radius: var(--r-sm); cursor: pointer; margin-bottom: 2px;">
+          <input type="radio" name="q_${q.question_id}" value="${letter}" style="margin-right: 6px;"> ${escHtml(opt)}
         </label>`;
       });
     } else {
-      qHtml += `<textarea data-qid="${q.question_id}"
-                  placeholder="Ваш ответ…"
-                  style="margin-top:4px;min-height:64px"></textarea>`;
+      html += `<textarea data-qid="${q.question_id}" class="textarea" placeholder="Ваш ответ…" style="margin-top: 6px;"></textarea>`;
     }
-    qHtml += '</div>';
+    html += '</div>';
   });
+  html += `<div class="flex gap-2 items-center">
+    <button class="btn btn--primary" id="quiz-submit-${attemptId}">Отправить ответы</button>
+    <span id="quiz-status-${attemptId}" class="hidden t-sm t-muted"><span class="spinner"></span> Оцениваю…</span>
+  </div>`;
+  appendBubble('atlas', 'ATLAS', html);
 
-  qHtml += `<button class="btn-primary" id="quiz-submit-${attemptId}"
-              onclick="submitQuiz('${attemptId}', ${JSON.stringify(questions).replace(/'/g, "\\'")})"
-              style="margin-top:4px">Отправить ответы</button>
-             <div id="quiz-status-${attemptId}" style="display:none;margin-top:8px;font-size:.85rem;color:#2563eb">
-               ⏳ Оцениваю ответы…
-             </div>`;
-
-  card.innerHTML = qHtml;
-  msgs.appendChild(card);
-  msgs.scrollTop = msgs.scrollHeight;
-}
-
-function selectOption(radio) {
-  const qid = radio.closest('label').dataset.qid;
-  document.querySelectorAll(`label[data-qid="${qid}"]`).forEach(l => l.classList.remove('selected'));
-  radio.closest('label').classList.add('selected');
+  document.getElementById(`quiz-submit-${attemptId}`).addEventListener('click', () => submitQuiz(attemptId, questions));
 }
 
 async function submitQuiz(attemptId, questions) {
   const btn = document.getElementById(`quiz-submit-${attemptId}`);
-  const statusEl = document.getElementById(`quiz-status-${attemptId}`);
+  const stat = document.getElementById(`quiz-status-${attemptId}`);
   btn.disabled = true;
-  statusEl.style.display = 'block';
+  stat.classList.remove('hidden');
 
   const answers = questions.map(q => {
     let answer_text = '';
@@ -236,144 +325,86 @@ async function submitQuiz(attemptId, questions) {
   });
 
   try {
-    const res = await fetch(`/self-check/${attemptId}/submit`, {
-      method: 'POST', headers: authHeaders(),
-      body: JSON.stringify(answers),
+    const res = await authFetch(`/self-check/${attemptId}/submit`, {
+      method: 'POST', body: JSON.stringify(answers),
     });
-    statusEl.style.display = 'none';
     if (!res.ok) {
+      stat.classList.add('hidden');
       const e = await res.json().catch(() => ({}));
-      appendMsg('msg-atlas', 'ATLAS', `<span style="color:#dc2626">${e.detail || 'Ошибка оценки.'}</span>`);
+      appendBubble('atlas', 'ATLAS', `<span style="color:var(--c-danger)">${escHtml(e.detail || 'Ошибка оценки.')}</span>`);
       btn.disabled = false; return;
     }
     const data = await res.json();
-    renderQuizResults(data, questions);
-    // Hide the quiz card submit area
-    btn.remove(); statusEl.remove();
-  } catch(e) {
-    statusEl.style.display = 'none';
-    appendMsg('msg-atlas', 'ATLAS', '<span style="color:#dc2626">Ошибка соединения.</span>');
+    stat.classList.add('hidden');
+    renderQuizResult(data);
+    btn.remove();
+  } catch (err) {
+    stat.classList.add('hidden');
+    appendBubble('atlas', 'ATLAS', '<span style="color:var(--c-danger)">Ошибка соединения.</span>');
     btn.disabled = false;
   }
 }
 
-function renderQuizResults(data, questions) {
+function renderQuizResult(data) {
   const score = data.overall_score;
-  const color = scoreColor(score);
   const verdict = score >= 4 ? 'Отлично' : score >= 3 ? 'Хорошо' : score >= 2 ? 'Удовлетворительно' : 'Нужно повторить';
-  const qMap = Object.fromEntries(questions.map(q => [q.question_id, q]));
+  const color = scoreColor(score);
+  const cs = data.criterion_scores || {};
+  const labels = { correctness: ['Точность', '40%'], completeness: ['Полнота', '30%'], logic: ['Логика', '20%'], terminology: ['Терминология', '10%'] };
 
-  // Mark options in original quiz card
-  (data.question_results || []).forEach(r => {
-    const q = qMap[r.question_id];
-    if (!q || q.type !== 'multiple_choice') return;
-    document.querySelectorAll(`label[data-qid="${r.question_id}"]`).forEach(lbl => {
-      const letter = lbl.dataset.letter;
-      const userAnswer = data.question_results.find(x => x.question_id === r.question_id);
-      // correct_answer comes from the full result object
-      if (letter === data.question_results.find(x=>x.question_id===r.question_id)?.correct_answer
-                     || r.correct_answer && letter === r.correct_answer) {
-        lbl.classList.add('quiz-opt-correct');
-      }
-    });
-    // Mark user's wrong answer
-    if (r.status === 'incorrect') {
-      const checked = document.querySelector(`input[name="q_${r.question_id}"]:checked`);
-      if (checked) checked.closest('label').classList.add('quiz-opt-wrong');
-    }
-  });
-
-  // Results summary card
-  let html = `
-    <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:6px">
-      <span style="font-size:2rem;font-weight:700;color:${color}">${score.toFixed(1)}<span style="font-size:1rem;color:#6b7280">/5</span></span>
-      <span style="font-size:.9rem;color:#6b7280">${verdict}</span>
+  let html = `<div class="flex items-end gap-3 mb-4">
+    <div class="t-hero" style="color: ${color}">${score.toFixed(1)}<span class="t-md t-muted" style="font-weight: 500"> / 5</span></div>
+    <div class="flex-col gap-1">
+      <div class="t-md t-bold">${verdict}</div>
     </div>
-    <div style="height:6px;background:#e5e7eb;border-radius:3px;margin-bottom:12px">
-      <div style="height:100%;width:${score/5*100}%;background:${color};border-radius:3px;transition:width .4s"></div>
-    </div>`;
-
-  // Criterion grid
-  const cs = data.criterion_scores;
-  const labels = {correctness:'Точность',completeness:'Полнота',logic:'Логика',terminology:'Терминология'};
-  const weights = {correctness:'40%',completeness:'30%',logic:'20%',terminology:'10%'};
-  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">';
+  </div>
+  <div class="rubric">`;
   for (const k of Object.keys(labels)) {
-    const v = cs[k] || 0;
-    html += `<div style="background:#f9fafb;border-radius:6px;padding:8px;border-left:3px solid ${scoreColor(v)}">
-      <div style="font-size:.75rem;color:#6b7280">${labels[k]} (${weights[k]})</div>
-      <div style="font-size:1.1rem;font-weight:700;color:${scoreColor(v)}">${v.toFixed(1)}</div>
+    const v = cs[k] ?? 0;
+    const lvl = v >= 4 ? 'good' : v >= 2.5 ? 'mid' : 'bad';
+    html += `<div class="rubric__cell rubric__cell--${lvl}">
+      <div class="rubric__label">${labels[k][0]} <span class="rubric__weight">${labels[k][1]}</span></div>
+      <div class="rubric__value rubric__value--${lvl}">${v.toFixed(1)}</div>
     </div>`;
   }
   html += '</div>';
-
   if (data.evaluator_summary) {
-    html += `<div style="font-size:.88rem;color:#374151;padding:10px;background:#f0f9ff;border-radius:6px;border-left:3px solid #2563eb;margin-bottom:10px">${data.evaluator_summary}</div>`;
-  }
-
-  // Per-question results with correct answers
-  (data.question_results || []).forEach((r, i) => {
-    const q = qMap[r.question_id];
-    if (!q) return;
-    const bgMap = {correct:'#f0fdf4',partial:'#fefce8',incorrect:'#fef2f2'};
-    const iconMap = {correct:'✓',partial:'~',incorrect:'✗'};
-    const isMC = r.type === 'multiple_choice';
-    const scoreDisp = isMC
-      ? `<span style="font-size:1.4rem;font-weight:700;color:${r.score>0?'#16a34a':'#dc2626'}">${r.score>0?'✓':'✗'}</span>`
-      : `<span style="font-size:1.1rem;font-weight:700;color:${scoreColor(r.score)}">${r.score.toFixed(1)}/5</span>`;
-
-    let detail = '';
-    if (isMC && r.correct_answer) {
-      const correctOpt = q.options?.find(o => o.charAt(0) === r.correct_answer) || r.correct_answer;
-      detail = `<div style="font-size:.8rem;margin-top:6px;color:#166534">✓ Верный ответ: ${correctOpt}</div>`;
-    }
-
-    html += `<div style="padding:10px;border-radius:6px;background:${bgMap[r.status]||'#f9fafb'};border:1px solid #e5e7eb;margin-bottom:6px">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
-        <div style="font-size:.85rem;font-weight:500;flex:1">${i+1}. ${q.prompt}</div>
-        <div style="text-align:center;flex-shrink:0">${scoreDisp}</div>
-      </div>${detail}
+    html += `<div class="card card--flat mt-4" style="background: var(--c-primary-bg); border-left: 3px solid var(--c-primary);">
+      <div class="t-uppercase mb-1">Резюме</div>
+      <div class="t-sm">${escHtml(data.evaluator_summary)}</div>
     </div>`;
-  });
-
-  appendMsg('msg-atlas', 'ATLAS — Результаты', html);
+  }
+  appendBubble('atlas', 'ATLAS · результат', html);
 }
+
+// ── Feedback ──────────────────────────────────────────────────────────────────
+document.addEventListener('click', async e => {
+  const btn = e.target.closest('[data-fb]');
+  if (!btn) return;
+  const rating = btn.dataset.fb;
+  const rid = btn.dataset.rid;
+  const row = btn.parentElement;
+  row.innerHTML = '<span class="t-xs t-muted">Спасибо за оценку!</span>';
+  try {
+    await authFetch('/qa/feedback', {
+      method: 'POST',
+      body: JSON.stringify({
+        request_id: rid, rating,
+        question_text: btn._questionText || '',
+        answer_markdown: btn._answerText || '',
+      }),
+    });
+  } catch (_) {}
+});
 
 // ── Session memory ────────────────────────────────────────────────────────────
-const _SS_HISTORY = 'atlas_conv_history';
-const _SS_LOG     = 'atlas_chat_log';
+const _SS_HISTORY = 'atlas_conv_history_v2';
 const MAX_HISTORY = 10;
-
 const conversationHistory = JSON.parse(sessionStorage.getItem(_SS_HISTORY) || '[]');
-let   _chatLog            = JSON.parse(sessionStorage.getItem(_SS_LOG)     || '[]');
 
-function _saveSession() {
-  sessionStorage.setItem(_SS_HISTORY, JSON.stringify(conversationHistory.slice(-MAX_HISTORY)));
-  sessionStorage.setItem(_SS_LOG,     JSON.stringify(_chatLog.slice(-60)));
-}
+// ── Send message ──────────────────────────────────────────────────────────────
+let messageCount = 0;
 
-function _restoreChat() {
-  if (!_chatLog.length) return;
-  const msgs = document.getElementById('messages');
-  _chatLog.forEach(({cls, label, html}) => {
-    const wrap = document.createElement('div');
-    wrap.className = `msg-wrap ${cls}`;
-    wrap.innerHTML = `<div class="msg-label">${label}</div>${html}`;
-    msgs.appendChild(wrap);
-    if (window.renderMathInElement) renderMathInElement(wrap);
-  });
-  msgs.scrollTop = msgs.scrollHeight;
-}
-
-function clearChat() {
-  sessionStorage.removeItem(_SS_HISTORY);
-  sessionStorage.removeItem(_SS_LOG);
-  conversationHistory.length = 0;
-  _chatLog = [];
-  document.getElementById('messages').innerHTML = '';
-}
-
-// ── Send ──────────────────────────────────────────────────────────────────────
 async function sendMessage() {
   const input = document.getElementById('chat-input');
   const msg = input.value.trim();
@@ -381,17 +412,17 @@ async function sendMessage() {
   input.value = '';
 
   const btn = document.getElementById('send-btn');
-  btn.disabled = true; btn.textContent = '…';
+  btn.disabled = true;
 
-  appendMsg('msg-user', 'Вы', mdToHtml(msg));
+  appendBubble('user', 'Вы', '<p>' + mdToHtml(msg) + '</p>');
+  messageCount++;
+  document.getElementById('stat-msgs').textContent = messageCount;
 
-  // Show typing — start with planning steps, then extend based on route
-  const typingEl = showTyping(STEPS_PLAN);
+  showTyping(STEPS_PLAN.concat(STEPS_QA));
 
   try {
-    const res = await fetch('/chat/message', {
+    const res = await authFetch('/chat/message', {
       method: 'POST',
-      headers: authHeaders(),
       body: JSON.stringify({
         message_text: msg,
         response_profile: document.getElementById('profile-select').value,
@@ -399,40 +430,36 @@ async function sendMessage() {
         conversation_history: conversationHistory.slice(-MAX_HISTORY),
       }),
     });
-
-    if (checkUnauthorized(res)) { removeTyping(typingEl); btn.disabled = false; btn.textContent = 'Отправить'; return; }
+    removeTyping();
     if (!res.ok) {
-      removeTyping(typingEl);
       const e = await res.json().catch(() => ({}));
-      appendMsg('msg-atlas', 'ATLAS', `<span style="color:#dc2626">${e.detail || 'Ошибка сервера.'}</span>`);
+      appendBubble('atlas', 'ATLAS', `<span style="color:var(--c-danger)">${escHtml(e.detail || 'Ошибка сервера.')}</span>`);
       return;
     }
-
     const data = await res.json();
-    removeTyping(typingEl);
-    setBadge(data.route);
 
     if (data.route === 'clarify') {
-      appendMsg('msg-atlas', 'ATLAS', mdToHtml(data.clarify_message || 'Уточните запрос.'));
+      appendBubble('atlas', 'ATLAS', mdToHtml(data.clarify_message || 'Уточните запрос.'));
     } else if (data.route === 'self_check') {
       renderQuiz(data);
     } else {
-      // Save Q&A exchange to session history
+      // qa
       if (data.status === 'answered' && data.answer_markdown) {
         conversationHistory.push({ role: 'user', content: msg });
         conversationHistory.push({ role: 'assistant', content: data.answer_markdown });
-        _saveSession();
+        sessionStorage.setItem(_SS_HISTORY, JSON.stringify(conversationHistory.slice(-MAX_HISTORY)));
       }
       renderQA(data, msg);
     }
-
-  } catch(e) {
-    removeTyping(typingEl);
-    appendMsg('msg-atlas', 'ATLAS', '<span style="color:#dc2626">Ошибка соединения.</span>');
+  } catch (err) {
+    if (err.message !== 'unauthorized') {
+      removeTyping();
+      appendBubble('atlas', 'ATLAS', '<span style="color:var(--c-danger)">Ошибка соединения.</span>');
+    }
+  } finally {
+    btn.disabled = false;
+    input.focus();
   }
-
-  btn.disabled = false; btn.textContent = 'Отправить';
-  input.focus();
 }
 
 document.getElementById('send-btn').addEventListener('click', sendMessage);
@@ -440,13 +467,27 @@ document.getElementById('chat-input').addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
 });
 
-function onAuthReady() {
-  _restoreChat();
-}
-
 document.getElementById('clear-btn').addEventListener('click', () => {
-  clearChat();
+  if (!confirm('Очистить чат? История сессии будет удалена.')) return;
+  sessionStorage.removeItem(_SS_HISTORY);
+  conversationHistory.length = 0;
+  document.getElementById('messages').innerHTML = '';
+  seenSources.clear();
+  nextSourceIdx = 1;
+  messageCount = 0;
+  document.getElementById('stat-msgs').textContent = '0';
+  document.getElementById('stat-srcs').textContent = '0';
+  document.getElementById('stat-refusals').textContent = '0';
+  document.getElementById('source-cards').innerHTML = `
+    <div class="empty" style="padding: var(--sp-6) var(--sp-3);">
+      <div class="empty__icon"><i class="bi bi-book" style="font-size: 32px;" aria-hidden="true"></i></div>
+      <div class="t-xs t-muted">Источники будут показаны здесь после ответа.</div>
+    </div>`;
 });
-checkAuth();
+
+// onAuthReady is defined in _app.html bootstrap; nothing more to do here
+window.onAuthReady = function () {
+  document.getElementById('chat-input').focus();
+};
 </script>
 {% endblock %}
