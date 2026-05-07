@@ -1,62 +1,130 @@
-{% extends "base.html" %}
+{% extends "_app.html" %}
+{% from "_partials.html" import sidebar_tenant_admin, topbar %}
 {% block title %}Материалы{% endblock %}
-{% block content %}
+{% block content_mode %}app__content--dashboard{% endblock %}
+{% block sidebar %}{{ sidebar_tenant_admin(active='materials') }}{% endblock %}
+{% block topbar %}{{ topbar() }}{% endblock %}
 
-<!-- Upload card -->
-<div class="card">
-  <h2 style="font-size:1rem;margin-bottom:14px">Загрузка учебных материалов</h2>
-  <p style="font-size:.88rem;color:#6b7280;margin-bottom:16px">
-    Форматы: PDF, DOCX, TXT, MD, <b>JSONL</b> (постраничный — точные цитаты).
-    Повторные файлы определяются автоматически по контрольной сумме и пропускаются.
-  </p>
-  <input type="file" id="file-input" multiple accept=".pdf,.docx,.txt,.md,.jsonl" style="margin-bottom:12px">
-  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-    <button class="btn-primary" id="upload-btn">Загрузить</button>
-    <span id="upload-status" style="font-size:.85rem;color:#6b7280"></span>
+{% block content %}
+<div class="flex items-baseline justify-between mb-5">
+  <div>
+    <h1 class="t-2xl t-bold">Материалы кафедры</h1>
+    <div class="t-sm t-muted" id="materials-info">—</div>
   </div>
-  <div id="upload-error" class="error hidden" style="margin-top:8px"></div>
+  <button class="btn btn--secondary btn--sm" id="refresh-docs-btn" aria-label="Обновить список">
+    <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>Обновить
+  </button>
 </div>
 
+
+<!-- Upload card -->
+<div class="card mb-4">
+  <h2 class="card__title">Загрузка учебных материалов</h2>
+  <p class="card__subtitle">
+    Форматы: PDF, DOCX, TXT, MD, <b>JSONL</b> (постраничный — точные цитаты).
+    Повторные файлы определяются по контрольной сумме и пропускаются.
+  </p>
+
+  <div class="flex gap-3 items-center mt-3" style="flex-wrap: wrap;">
+    <input type="file" id="file-input" multiple accept=".pdf,.docx,.txt,.md,.jsonl"
+           class="input" style="flex: 1; min-width: 280px; padding: 6px 8px;">
+    <button class="btn btn--primary" id="upload-btn" aria-label="Загрузить выбранные файлы">
+      <i class="bi bi-upload" aria-hidden="true"></i>Загрузить
+    </button>
+    <span id="upload-status" class="t-sm t-muted"></span>
+  </div>
+  <div id="upload-error" class="hidden mt-3" style="background: var(--c-danger-bg); color: var(--c-danger); padding: var(--sp-2) var(--sp-3); border-radius: var(--r-md); font-size: var(--fs-xs);"></div>
+</div>
+
+
 <!-- Progress card -->
+<div id="progress-card" class="card mb-4 hidden">
+  <div class="flex items-baseline justify-between mb-3">
+    <h3 class="card__title" style="margin-bottom: 0;">Обработка файлов</h3>
+    <span id="progress-status-label" class="t-sm t-muted"></span>
+  </div>
+  <div id="progress-track" style="height: 10px; background: var(--c-surface-2); border-radius: var(--r-sm); margin-bottom: var(--sp-2); overflow: hidden;">
+    <div id="progress-bar" style="height: 100%; background: var(--c-primary); border-radius: var(--r-sm); width: 0%; transition: width var(--t-base);"></div>
+  </div>
+  <div id="progress-hint" class="t-xs t-muted mb-3"></div>
+  <div id="accepted-list" class="mb-2"></div>
+  <div id="rejected-list"></div>
+</div>
+
+
+<!-- Documents list -->
+<div class="card">
+  <h2 class="card__title">Загруженные материалы</h2>
+  <div class="card__subtitle" id="documents-info">—</div>
+  <div id="documents-list" class="mt-3">
+    <div class="empty">
+      <div class="empty__icon"><span class="spinner"></span></div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
 <style>
-@keyframes indeterminate {
+@keyframes atlas-bar-indeterminate {
   0%   { left: -40%; width: 40%; }
   60%  { left: 60%;  width: 40%; }
   100% { left: 100%; width: 0%;  }
 }
-.bar-indeterminate { position:relative; overflow:hidden; }
+.bar-indeterminate { position: relative; overflow: hidden; }
 .bar-indeterminate::after {
-  content:''; position:absolute; top:0; height:100%;
-  background:#2563eb; border-radius:4px;
-  animation: indeterminate 1.4s ease-in-out infinite;
+  content: ''; position: absolute; top: 0; height: 100%;
+  background: var(--c-primary); border-radius: var(--r-sm);
+  animation: atlas-bar-indeterminate 1.4s ease-in-out infinite;
 }
 </style>
-<div id="progress-card" class="card hidden">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-    <h3 style="font-size:.95rem">Обработка файлов</h3>
-    <span id="progress-status-label" style="font-size:.82rem;color:#6b7280"></span>
-  </div>
-  <div id="progress-track" style="height:8px;background:#e5e7eb;border-radius:4px;margin-bottom:6px;overflow:hidden">
-    <div id="progress-bar" style="height:100%;background:#2563eb;border-radius:4px;width:0%;transition:width .4s"></div>
-  </div>
-  <div id="progress-hint" style="font-size:.78rem;color:#9ca3af;margin-bottom:12px"></div>
-  <div id="accepted-list"></div>
-  <div id="rejected-list"></div>
-</div>
-
-<!-- Documents list -->
-<div class="card">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-    <h3 style="font-size:.95rem">Загруженные материалы</h3>
-    <button class="btn-secondary" id="refresh-docs-btn" style="padding:4px 12px;font-size:.82rem"><i class="bi bi-arrow-clockwise"></i> Обновить</button>
-  </div>
-  <div id="documents-list"><p style="font-size:.85rem;color:#9ca3af">Загрузка...</p></div>
-</div>
-
-{% endblock %}
-{% block scripts %}
 <script>
+function escHtml(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function show(id) { document.getElementById(id).classList.remove('hidden'); }
+function hide(id) { document.getElementById(id).classList.add('hidden'); }
+
 let pollInterval = null;
+
+function statusLabel(s) {
+  return ({
+    created:               '<i class="bi bi-hourglass-split" aria-hidden="true"></i> В очереди…',
+    running:               '<i class="bi bi-arrow-repeat" aria-hidden="true"></i> Обрабатывается…',
+    completed:             '<i class="bi bi-check-circle-fill" style="color: var(--c-success)" aria-hidden="true"></i> Завершено',
+    completed_with_errors: '<i class="bi bi-exclamation-triangle-fill" style="color: var(--c-warning)" aria-hidden="true"></i> Завершено с ошибками',
+    failed:                '<i class="bi bi-x-circle-fill" style="color: var(--c-danger)" aria-hidden="true"></i> Ошибка',
+  })[s] || s;
+}
+function reasonLabel(r) {
+  return ({
+    DUPLICATE: 'уже загружен',
+    UNSUPPORTED_FORMAT: 'формат не поддерживается',
+    EMPTY_FILE: 'пустой файл',
+    EMPTY_CONTENT: 'нет текста',
+    PROCESSING_ERROR: 'ошибка обработки',
+    CHUNKING_FAILED: 'ошибка разбивки',
+  })[r] || r || '';
+}
+function stageLabel(p) {
+  if (!p) return '';
+  const f = escHtml(p.file || '');
+  switch (p.stage) {
+    case 'extract': return `<i class="bi bi-file-earmark-text" aria-hidden="true"></i> ${f} — извлечение текста…`;
+    case 'chunk':   return `<i class="bi bi-scissors" aria-hidden="true"></i> ${f} — разбивка: ${p.pages} стр. → ${p.chunks} чанков`;
+    case 'embed':   return `<i class="bi bi-hash" aria-hidden="true"></i> ${f} — эмбеддинги: батч ${p.batch} из ${p.total_batches} (${p.chunks} чанков)`;
+    case 'index':   return `<i class="bi bi-database" aria-hidden="true"></i> ${f} — запись в базу…`;
+    default:        return `<i class="bi bi-hourglass-split" aria-hidden="true"></i> ${f} — ${escHtml(p.stage)}`;
+  }
+}
+
+function setBarIndeterminate(on) {
+  const track = document.getElementById('progress-track');
+  const bar = document.getElementById('progress-bar');
+  if (on) { track.classList.add('bar-indeterminate'); bar.style.width = '0%'; }
+  else { track.classList.remove('bar-indeterminate'); }
+}
+function setBarPct(pct) { document.getElementById('progress-bar').style.width = pct + '%'; }
+
 
 // ── Upload ────────────────────────────────────────────────────────────────────
 document.getElementById('upload-btn').addEventListener('click', async () => {
@@ -66,67 +134,67 @@ document.getElementById('upload-btn').addEventListener('click', async () => {
   const statusEl = document.getElementById('upload-status');
   const errEl = document.getElementById('upload-error');
   btn.disabled = true;
-  errEl.classList.add('hidden');
-  statusEl.textContent = `Передаю ${files.length} файл(ов)...`;
+  hide('upload-error');
+  statusEl.textContent = `Передаю ${files.length} файл(ов)…`;
 
   const form = new FormData();
   for (const f of files) form.append('files', f);
 
   try {
+    // FormData → don't set Content-Type, let browser set boundary
     const res = await fetch('/admin/ingestion-jobs', {
       method: 'POST',
       headers: { 'Authorization': 'Bearer ' + getToken() },
       body: form,
     });
+    if (res.status === 401) {
+      clearToken();
+      redirectToLogin();
+      return;
+    }
     const data = await res.json();
     if (!res.ok) {
-      errEl.textContent = data.detail || 'Ошибка (нет прав администратора?)';
-      errEl.classList.remove('hidden');
+      errEl.textContent = data.detail || 'Ошибка загрузки. Проверьте права (требуется tenant-admin).';
+      show('upload-error');
       statusEl.textContent = '';
       btn.disabled = false;
       return;
     }
-    statusEl.textContent = `Задача создана, обрабатывается...`;
+    statusEl.textContent = 'Задача создана, обрабатывается…';
     startPolling(data.job_id, data.file_count);
   } catch (e) {
     errEl.textContent = 'Ошибка соединения.';
-    errEl.classList.remove('hidden');
+    show('upload-error');
     statusEl.textContent = '';
     btn.disabled = false;
   }
 });
 
-// ── Polling ───────────────────────────────────────────────────────────────────
+
 function startPolling(jobId, totalFiles) {
-  document.getElementById('progress-card').classList.remove('hidden');
+  show('progress-card');
   setBarIndeterminate(true);
   document.getElementById('progress-hint').textContent =
-    'Идёт извлечение текста, разбивка на чанки и построение эмбеддингов — это займёт несколько м��нут…';
-
+    'Идёт извлечение текста, разбивка на чанки и построение эмбеддингов — это займёт несколько минут…';
   if (pollInterval) clearInterval(pollInterval);
   pollInterval = setInterval(() => pollJob(jobId, totalFiles), 2000);
 }
 
+
 async function pollJob(jobId, totalFiles) {
   try {
-    const res = await fetch(`/admin/ingestion-jobs/${jobId}`, {
-      headers: { 'Authorization': 'Bearer ' + getToken() },
-    });
-    if (checkUnauthorized(res)) { clearInterval(pollInterval); pollInterval = null; return; }
+    const res = await authFetch(`/admin/ingestion-jobs/${jobId}`);
     if (!res.ok) return;
     const data = await res.json();
-
-    const done = data.accepted_files.length + data.rejected_files.length;
+    const done = (data.accepted_files?.length || 0) + (data.rejected_files?.length || 0);
     const terminal = ['completed', 'completed_with_errors', 'failed'].includes(data.status);
 
     document.getElementById('progress-status-label').innerHTML = statusLabel(data.status);
-    renderFileLists(data.accepted_files, data.rejected_files);
+    renderFileLists(data.accepted_files || [], data.rejected_files || []);
 
-    // Update progress hint from pipeline stage info
     if (data.progress_info && !terminal) {
       document.getElementById('progress-hint').innerHTML = stageLabel(data.progress_info);
     }
-
     if (terminal) {
       setBarIndeterminate(false);
       setBarPct(100);
@@ -140,120 +208,86 @@ async function pollJob(jobId, totalFiles) {
       setBarIndeterminate(false);
       setBarPct(Math.round(done / totalFiles * 100));
     }
-  } catch (e) { /* ignore transient errors */ }
+  } catch (e) { /* swallow transient errors */ }
 }
 
-function statusLabel(s) {
-  return {
-    created:               '<i class="bi bi-hourglass-split"></i> В очереди…',
-    running:               '<i class="bi bi-arrow-repeat"></i> Обрабатывается…',
-    completed:             '<i class="bi bi-check-circle-fill" style="color:#16a34a"></i> Завершено',
-    completed_with_errors: '<i class="bi bi-exclamation-triangle-fill" style="color:#d97706"></i> Завершено с ошибками',
-    failed:                '<i class="bi bi-x-circle-fill" style="color:#dc2626"></i> Ошибка',
-  }[s] || s;
-}
-
-function stageLabel(p) {
-  if (!p) return '';
-  const f = p.file || '';
-  switch (p.stage) {
-    case 'extract': return `<i class="bi bi-file-earmark-text"></i> ${f} — извлечение текста…`;
-    case 'chunk':   return `<i class="bi bi-scissors"></i> ${f} — разбивка: ${p.pages} стр. → ${p.chunks} чанков`;
-    case 'embed':   return `<i class="bi bi-hash"></i> ${f} — эмбеддинги: батч ${p.batch} из ${p.total_batches} (${p.chunks} чанков)`;
-    case 'index':   return `<i class="bi bi-database"></i> ${f} — запись в базу…`;
-    default:        return `<i class="bi bi-hourglass-split"></i> ${f} — ${p.stage}`;
-  }
-}
-
-function setBarIndeterminate(on) {
-  const track = document.getElementById('progress-track');
-  const bar   = document.getElementById('progress-bar');
-  if (on) {
-    track.classList.add('bar-indeterminate');
-    bar.style.width = '0%';
-  } else {
-    track.classList.remove('bar-indeterminate');
-  }
-}
-
-function setBarPct(pct) {
-  document.getElementById('progress-bar').style.width = pct + '%';
-}
-
-// ── File lists ────────────────────────────────────────────────────────────────
 function renderFileLists(accepted, rejected) {
-  document.getElementById('accepted-list').innerHTML = accepted.length
-    ? `<div style="margin-bottom:10px">
-        <b style="color:#16a34a;font-size:.88rem"><i class="bi bi-check-circle-fill"></i> Принято (${accepted.length})</b>` +
-      accepted.map(f =>
-        `<div style="font-size:.82rem;padding:3px 0;border-bottom:1px solid #f0fdf4;display:flex;justify-content:space-between">
-          <span>${f.filename}</span>
-          <span style="color:#6b7280">${f.chunks_created != null ? f.chunks_created + ' чанков' : ''}</span>
-        </div>`
-      ).join('') + '</div>'
+  const aHtml = accepted.length
+    ? `<div class="t-sm mb-2"><b style="color: var(--c-success);"><i class="bi bi-check-circle-fill" aria-hidden="true"></i> Принято (${accepted.length})</b></div>`
+      + accepted.map(f => `
+        <div class="flex items-center justify-between t-xs" style="padding: 3px 0; border-bottom: 1px solid var(--c-border);">
+          <span>${escHtml(f.filename)}</span>
+          <span class="t-muted t-mono">${f.chunks_created != null ? f.chunks_created + ' чанков' : ''}</span>
+        </div>`).join('')
     : '';
-
-  document.getElementById('rejected-list').innerHTML = rejected.length
-    ? `<div>
-        <b style="color:#dc2626;font-size:.88rem"><i class="bi bi-x-circle-fill"></i> Пропущено / ошибка (${rejected.length})</b>` +
-      rejected.map(f =>
-        `<div style="font-size:.82rem;padding:3px 0;border-bottom:1px solid #fef2f2;display:flex;justify-content:space-between">
-          <span>${f.filename}</span>
-          <span style="color:#dc2626">${reasonLabel(f.reason)}</span>
-        </div>`
-      ).join('') + '</div>'
+  const rHtml = rejected.length
+    ? `<div class="t-sm mt-3 mb-2"><b style="color: var(--c-danger);"><i class="bi bi-x-circle-fill" aria-hidden="true"></i> Пропущено / ошибка (${rejected.length})</b></div>`
+      + rejected.map(f => `
+        <div class="flex items-center justify-between t-xs" style="padding: 3px 0; border-bottom: 1px solid var(--c-border);">
+          <span>${escHtml(f.filename)}</span>
+          <span style="color: var(--c-danger);">${escHtml(reasonLabel(f.reason))}</span>
+        </div>`).join('')
     : '';
+  document.getElementById('accepted-list').innerHTML = aHtml;
+  document.getElementById('rejected-list').innerHTML = rHtml;
 }
 
-function reasonLabel(r) {
-  return { DUPLICATE: 'уже загружен', UNSUPPORTED_FORMAT: 'формат не поддерживается',
-           EMPTY_FILE: 'пустой файл', EMPTY_CONTENT: 'нет текста',
-           PROCESSING_ERROR: 'ошибка обработки', CHUNKING_FAILED: 'ошибка разбивки' }[r] || r || '';
-}
 
 // ── Documents list ────────────────────────────────────────────────────────────
 async function loadDocuments() {
   const container = document.getElementById('documents-list');
   try {
-    const res = await fetch('/admin/documents', {
-      headers: { 'Authorization': 'Bearer ' + getToken() },
-    });
-    if (checkUnauthorized(res)) return;
-    if (!res.ok) { container.innerHTML = '<p style="font-size:.85rem;color:#dc2626">Ошибка загрузки списка.</p>'; return; }
+    const res = await authFetch('/admin/documents');
+    if (!res.ok) {
+      container.innerHTML = '<div class="empty"><div class="empty__title">Не удалось загрузить список</div><div class="empty__subtitle">Возможно, у вас нет прав tenant-admin.</div></div>';
+      return;
+    }
     const docs = await res.json();
+    document.querySelectorAll('[data-count-materials]').forEach(el => el.textContent = docs.length);
+    document.getElementById('documents-info').textContent = docs.length
+      ? `${docs.length} материалов в корпусе кафедры.`
+      : 'Материалов пока нет.';
+    document.getElementById('materials-info').textContent = docs.length
+      ? `${docs.length} материалов · ${docs.reduce((a, d) => a + (d.chunk_count || 0), 0)} чанков`
+      : 'материалов нет';
+
     if (!docs.length) {
-      container.innerHTML = '<p style="font-size:.85rem;color:#9ca3af">Материалы ещё не загружены.</p>';
+      container.innerHTML = `<div class="empty">
+        <div class="empty__icon"><i class="bi bi-file-earmark-x" style="font-size: 48px;" aria-hidden="true"></i></div>
+        <div class="empty__title">Материалы ещё не загружены</div>
+        <div class="empty__subtitle">Загрузите PDF, DOCX, TXT, MD или JSONL через форму выше.</div>
+      </div>`;
       return;
     }
     container.innerHTML = `
-      <table style="width:100%;border-collapse:collapse;font-size:.85rem">
+      <table style="width:100%; border-collapse: collapse; font-size: var(--fs-sm);">
         <thead>
-          <tr style="border-bottom:2px solid #e5e7eb;color:#6b7280">
-            <th style="text-align:left;padding:6px 4px">Название</th>
-            <th style="text-align:left;padding:6px 4px">Файл</th>
-            <th style="text-align:right;padding:6px 4px">Чанков</th>
-            <th style="text-align:right;padding:6px 4px">Загружен</th>
+          <tr style="border-bottom: 2px solid var(--c-border);">
+            <th style="text-align: left; padding: 8px 6px; color: var(--c-text-2); font-weight: 500; font-size: var(--fs-xs);">Название</th>
+            <th style="text-align: left; padding: 8px 6px; color: var(--c-text-2); font-weight: 500; font-size: var(--fs-xs);">Файл</th>
+            <th style="text-align: right; padding: 8px 6px; color: var(--c-text-2); font-weight: 500; font-size: var(--fs-xs);">Чанков</th>
+            <th style="text-align: right; padding: 8px 6px; color: var(--c-text-2); font-weight: 500; font-size: var(--fs-xs);">Загружен</th>
           </tr>
         </thead>
         <tbody>
           ${docs.map(d => `
-            <tr style="border-bottom:1px solid #f3f4f6">
-              <td style="padding:6px 4px;font-weight:500">${d.title}</td>
-              <td style="padding:6px 4px;color:#6b7280;font-size:.8rem">${d.filename}</td>
-              <td style="padding:6px 4px;text-align:right">
-                <span class="tag">${d.chunk_count}</span>
-              </td>
-              <td style="padding:6px 4px;text-align:right;color:#9ca3af">${d.created_at}</td>
+            <tr style="border-bottom: 1px solid var(--c-border);">
+              <td style="padding: 10px 6px;"><b>${escHtml(d.title)}</b></td>
+              <td style="padding: 10px 6px; color: var(--c-text-2); font-size: var(--fs-xs);">${escHtml(d.filename)}</td>
+              <td style="padding: 10px 6px; text-align: right;"><span class="badge badge--info">${d.chunk_count}</span></td>
+              <td style="padding: 10px 6px; text-align: right; color: var(--c-text-3); font-size: var(--fs-xs);">${escHtml(d.created_at)}</td>
             </tr>`).join('')}
         </tbody>
       </table>`;
   } catch (e) {
-    container.innerHTML = '<p style="font-size:.85rem;color:#dc2626">Ошибка соединения.</p>';
+    if (e.message !== 'unauthorized') {
+      container.innerHTML = '<div class="empty"><div class="empty__title">Ошибка соединения</div></div>';
+    }
   }
 }
 
 document.getElementById('refresh-docs-btn').addEventListener('click', loadDocuments);
 
-function onAuthReady() { loadDocuments(); }
+window.onAuthReady = function () { loadDocuments(); };
 </script>
 {% endblock %}

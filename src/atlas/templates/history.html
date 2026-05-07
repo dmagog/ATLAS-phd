@@ -1,114 +1,144 @@
-{% extends "base.html" %}
+{% extends "_app.html" %}
+{% from "_partials.html" import sidebar_student, topbar %}
 {% block title %}История самопроверок{% endblock %}
+{% block content_mode %}app__content--chat{% endblock %}
+{% block sidebar %}{{ sidebar_student(active='history') }}{% endblock %}
+{% block topbar %}{{ topbar() }}{% endblock %}
+
 {% block content %}
-<div class="card">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-    <h2 style="font-size:1rem;font-weight:600">История самопроверок</h2>
-    <a href="/self-check" class="btn-primary" style="text-decoration:none;font-size:.85rem;padding:6px 14px">+ Новая</a>
+<div class="flex items-baseline justify-between mb-5">
+  <div>
+    <h1 class="t-2xl t-bold">История самопроверок</h1>
+    <div class="t-sm t-muted" id="history-info">—</div>
   </div>
-  <div id="history-list"><div style="color:#9ca3af;font-size:.9rem">Загрузка…</div></div>
+  <a href="/self-check" class="btn btn--primary btn--sm">
+    <i class="bi bi-plus-lg" aria-hidden="true"></i>Новая проверка
+  </a>
 </div>
 
-<!-- Detail modal -->
-<div id="detail-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;align-items:center;justify-content:center;padding:16px">
-  <div style="background:#fff;border-radius:10px;max-width:680px;width:100%;max-height:88vh;overflow-y:auto;padding:24px;position:relative">
-    <button onclick="closeDetail()" style="position:absolute;top:12px;right:14px;background:none;border:none;font-size:1.1rem;cursor:pointer;color:#6b7280"><i class="bi bi-x-lg"></i></button>
-    <div id="detail-body">Загрузка…</div>
+<div id="history-loading" class="card">
+  <div class="empty">
+    <div class="empty__icon"><span class="spinner spinner--lg"></span></div>
+    <div class="empty__title">Загружаю историю…</div>
   </div>
 </div>
+
+<div id="history-empty" class="card hidden">
+  <div class="empty">
+    <div class="empty__icon"><i class="bi bi-clock-history" style="font-size: 48px;" aria-hidden="true"></i></div>
+    <div class="empty__title">Попыток ещё нет</div>
+    <div class="empty__subtitle">Запустите первую самопроверку — результаты появятся здесь.</div>
+    <a href="/self-check" class="btn btn--primary"><i class="bi bi-plus-lg" aria-hidden="true"></i>Начать самопроверку</a>
+  </div>
+</div>
+
+<div id="history-list-card" class="card hidden">
+  <div id="history-list" class="flex-col gap-2"></div>
+</div>
+
+
+<!-- Detail modal -->
+<div class="overlay" id="detail-overlay">
+  <div class="modal" style="max-width: 720px; max-height: 88vh; overflow-y: auto;">
+    <button class="btn btn--ghost btn--icon btn--sm" id="detail-close" style="position: absolute; top: var(--sp-3); right: var(--sp-3);" aria-label="Закрыть">
+      <i class="bi bi-x-lg" aria-hidden="true"></i>
+    </button>
+    <div id="detail-body">
+      <div class="empty"><div class="empty__icon"><span class="spinner spinner--lg"></span></div></div>
+    </div>
+  </div>
+</div>
+
 {% endblock %}
+
 {% block scripts %}
-<style>
-.attempt-row {
-  display:flex; align-items:center; gap:12px;
-  padding:12px 14px; border-radius:8px; border:1px solid #e5e7eb;
-  margin-bottom:8px; cursor:pointer; transition:background .15s;
-}
-.attempt-row:hover { background:#f9fafb; }
-.score-badge {
-  font-size:1.1rem; font-weight:700; min-width:42px; text-align:center;
-  padding:4px 8px; border-radius:6px;
-}
-.status-pill {
-  font-size:.72rem; padding:2px 8px; border-radius:10px; font-weight:500;
-}
-.crit-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin:10px 0; }
-.crit-cell {
-  background:#f9fafb; border-radius:6px; padding:8px;
-  border-left:3px solid #e5e7eb;
-}
-</style>
 <script>
-function scoreColor(s) {
-  return s >= 4 ? '#16a34a' : s >= 2.5 ? '#d97706' : '#dc2626';
-}
-function scoreBg(s) {
-  return s >= 4 ? '#f0fdf4' : s >= 2.5 ? '#fefce8' : '#fef2f2';
-}
+function escHtml(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function scoreColor(s) { return s >= 4 ? 'var(--c-success)' : s >= 2.5 ? 'var(--c-warning)' : 'var(--c-danger)'; }
+function scoreBg(s)    { return s >= 4 ? 'var(--c-success-bg)' : s >= 2.5 ? 'var(--c-warning-bg)' : 'var(--c-danger-bg)'; }
+function scoreLevel(s) { return s >= 4 ? 'good' : s >= 2.5 ? 'mid' : 'bad'; }
+function show(id) { document.getElementById(id).classList.remove('hidden'); }
+function hide(id) { document.getElementById(id).classList.add('hidden'); }
+
 function fmtDate(iso) {
   if (!iso) return '—';
-  const d = new Date(iso);
-  return d.toLocaleDateString('ru-RU') + ' ' + d.toLocaleTimeString('ru-RU', {hour:'2-digit',minute:'2-digit'});
+  try {
+    const d = new Date(iso);
+    return d.toLocaleString('ru-RU', { dateStyle: 'medium', timeStyle: 'short' });
+  } catch { return iso; }
 }
-function statusLabel(s) {
+
+function statusBadge(s) {
   const map = {
-    created:  ['В процессе', '#2563eb', '#eff6ff'],
-    submitted:['Отправлено', '#d97706', '#fef3c7'],
-    evaluated:['Оценено',    '#16a34a', '#f0fdf4'],
-    invalid_evaluation: ['Ошибка', '#dc2626', '#fef2f2'],
+    created:   ['В процессе', 'badge--info'],
+    submitted: ['Отправлено', 'badge--warning'],
+    evaluated: ['Оценено',    'badge--success'],
+    invalid_evaluation: ['Ошибка оценки', 'badge--danger'],
   };
-  return map[s] || [s, '#6b7280', '#f3f4f6'];
+  const [label, cls] = map[s] || [s, ''];
+  return `<span class="badge ${cls}">${label}</span>`;
 }
 
 async function loadHistory() {
-  const list = document.getElementById('history-list');
   try {
-    const res = await fetch('/self-check/history/list', { headers: authHeaders() });
-    if (checkUnauthorized(res)) return;
+    const res = await authFetch('/self-check/history/list');
     if (!res.ok) throw new Error(res.status);
     const data = await res.json();
+    hide('history-loading');
     if (!data.length) {
-      list.innerHTML = '<div style="color:#9ca3af;font-size:.9rem;padding:8px 0">Попыток пока нет. <a href="/self-check">Начать самопроверку →</a></div>';
+      show('history-empty');
+      document.getElementById('history-info').textContent = 'нет попыток';
       return;
     }
+    show('history-list-card');
+    document.getElementById('history-info').textContent = `${data.length} попыт${data.length % 10 === 1 && data.length !== 11 ? 'ка' : (data.length % 10 >= 2 && data.length % 10 <= 4 && (data.length % 100 < 10 || data.length % 100 > 20) ? 'ки' : 'ок')} всего`;
+    document.querySelectorAll('[data-count-history]').forEach(el => el.textContent = data.length);
+
+    const list = document.getElementById('history-list');
     list.innerHTML = '';
     data.forEach(a => {
-      const [slabel, scolor, sbg] = statusLabel(a.status);
       const hasScore = a.overall_score !== null && a.overall_score !== undefined;
       const scoreHtml = hasScore
-        ? `<div class="score-badge" style="color:${scoreColor(a.overall_score)};background:${scoreBg(a.overall_score)}">${a.overall_score.toFixed(1)}</div>`
-        : `<div class="score-badge" style="color:#9ca3af;background:#f3f4f6">—</div>`;
+        ? `<div style="font-size: 1.1rem; font-weight: 700; min-width: 50px; text-align: center; padding: 6px 10px; border-radius: var(--r-md); color: ${scoreColor(a.overall_score)}; background: ${scoreBg(a.overall_score)}; font-variant-numeric: tabular-nums;">${a.overall_score.toFixed(1)}</div>`
+        : `<div style="font-size: 1rem; min-width: 50px; text-align: center; padding: 6px 10px; border-radius: var(--r-md); color: var(--c-text-3); background: var(--c-surface-2);">—</div>`;
 
       const row = document.createElement('div');
-      row.className = 'attempt-row';
+      row.className = a.status === 'evaluated' ? 'card card--interactive' : 'card card--flat';
+      row.style.cssText = 'padding: var(--sp-3); display: flex; align-items: center; gap: var(--sp-3);';
       row.innerHTML = `
         ${scoreHtml}
-        <div style="flex:1;min-width:0">
-          <div style="font-weight:500;font-size:.92rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${a.topic}</div>
-          <div style="font-size:.78rem;color:#9ca3af;margin-top:2px">${fmtDate(a.created_at)}</div>
+        <div class="flex-1" style="min-width: 0;">
+          <div class="t-md t-bold" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escHtml(a.topic)}</div>
+          <div class="t-xs t-muted">${fmtDate(a.created_at)}</div>
         </div>
-        <span class="status-pill" style="color:${scolor};background:${sbg};border:1px solid ${scolor}33">${slabel}</span>
-        <i class="bi bi-chevron-right" style="color:#9ca3af;font-size:.85rem"></i>`;
-
+        ${statusBadge(a.status)}
+        ${a.status === 'evaluated' ? '<i class="bi bi-chevron-right" style="color: var(--c-text-3); font-size: 0.85rem;" aria-hidden="true"></i>' : ''}
+      `;
       if (a.status === 'evaluated') {
         row.addEventListener('click', () => openDetail(a.attempt_id));
       }
       list.appendChild(row);
     });
-  } catch(e) {
-    list.innerHTML = '<div style="color:#dc2626;font-size:.9rem">Не удалось загрузить историю.</div>';
+  } catch (err) {
+    if (err.message !== 'unauthorized') {
+      hide('history-loading');
+      show('history-empty');
+      document.getElementById('history-info').textContent = 'не удалось загрузить';
+    }
   }
 }
 
+const _KATEX_OPTS = { delimiters: [{left:'$$',right:'$$',display:true}, {left:'$',right:'$',display:false}] };
+function renderMath(el) { if (typeof renderMathInElement === 'function') renderMathInElement(el, _KATEX_OPTS); }
+
 async function openDetail(attemptId) {
   const overlay = document.getElementById('detail-overlay');
-  const body    = document.getElementById('detail-body');
-  overlay.style.display = 'flex';
-  body.innerHTML = '<div style="color:#9ca3af;text-align:center;padding:24px">Загрузка…</div>';
+  const body = document.getElementById('detail-body');
+  overlay.classList.add('overlay--open');
+  body.innerHTML = '<div class="empty"><div class="empty__icon"><span class="spinner spinner--lg"></span></div></div>';
 
   try {
-    const res = await fetch(`/self-check/${attemptId}/detail`, { headers: authHeaders() });
-    if (checkUnauthorized(res)) { closeDetail(); return; }
+    const res = await authFetch(`/self-check/${attemptId}/detail`);
     if (!res.ok) throw new Error(res.status);
     const d = await res.json();
     const sc = d.overall_score;
@@ -116,91 +146,74 @@ async function openDetail(attemptId) {
     const verdict = sc >= 4 ? 'Отлично' : sc >= 3 ? 'Хорошо' : sc >= 2 ? 'Удовлетворительно' : 'Нужно повторить';
 
     let html = `
-      <h3 style="font-size:1rem;font-weight:600;margin-bottom:4px">${d.topic}</h3>
-      <div style="font-size:.78rem;color:#9ca3af;margin-bottom:14px">${fmtDate(d.created_at)}</div>
+      <h2 class="t-xl t-bold mb-1">${escHtml(d.topic)}</h2>
+      <div class="t-xs t-muted mb-4">${fmtDate(d.created_at)}</div>
 
-      <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:6px">
-        <span style="font-size:2.2rem;font-weight:700;color:${color}">${sc.toFixed(1)}<span style="font-size:1rem;color:#9ca3af">/5</span></span>
-        <span style="font-size:.9rem;color:#6b7280">${verdict}</span>
-      </div>
-      <div style="height:6px;background:#e5e7eb;border-radius:3px;margin-bottom:14px">
-        <div style="height:100%;width:${sc/5*100}%;background:${color};border-radius:3px"></div>
+      <div class="flex items-end gap-3 mb-4">
+        <div class="t-hero" style="color: ${color}">${sc.toFixed(1)}<span class="t-md t-muted" style="font-weight: 500"> / 5</span></div>
+        <div class="t-md t-bold">${verdict}</div>
       </div>`;
 
     if (d.criterion_scores) {
       const cs = d.criterion_scores;
-      const labels = {correctness:'Точность',completeness:'Полнота',logic:'Логика',terminology:'Терминология'};
-      const weights = {correctness:'40%',completeness:'30%',logic:'20%',terminology:'10%'};
-      html += '<div class="crit-grid">';
+      const labels = { correctness: ['Точность', '40%'], completeness: ['Полнота', '30%'], logic: ['Логика', '20%'], terminology: ['Терминология', '10%'] };
+      html += '<div class="rubric mb-4">';
       for (const k of Object.keys(labels)) {
-        const v = cs[k] || 0;
-        html += `<div class="crit-cell" style="border-left-color:${scoreColor(v)}">
-          <div style="font-size:.75rem;color:#6b7280">${labels[k]} (${weights[k]})</div>
-          <div style="font-size:1.1rem;font-weight:700;color:${scoreColor(v)}">${v.toFixed(1)}</div>
+        const v = cs[k] ?? 0;
+        const lvl = scoreLevel(v);
+        html += `<div class="rubric__cell rubric__cell--${lvl}">
+          <div class="rubric__label">${labels[k][0]} <span class="rubric__weight">${labels[k][1]}</span></div>
+          <div class="rubric__value rubric__value--${lvl}">${v.toFixed(1)}</div>
         </div>`;
       }
       html += '</div>';
     }
 
     if (d.evaluator_summary) {
-      html += `<div style="font-size:.88rem;color:#374151;padding:10px;background:#f0f9ff;border-radius:6px;border-left:3px solid #2563eb;margin-bottom:14px">${d.evaluator_summary}</div>`;
+      html += `<div class="card card--flat mb-4" style="background: var(--c-primary-bg); border-left: 3px solid var(--c-primary);">
+        <div class="t-uppercase mb-1">Резюме</div>
+        <div class="t-sm">${escHtml(d.evaluator_summary)}</div>
+      </div>`;
     }
 
-    if (d.error_tags?.length) {
-      html += '<div style="margin-bottom:12px">'
-        + d.error_tags.map(t => `<span class="tag" style="background:#fef2f2;color:#dc2626;border:1px solid #fca5a5;margin-right:4px">${t}</span>`).join('')
-        + '</div>';
+    if (d.error_tags && d.error_tags.length) {
+      html += `<div class="flex flex-wrap gap-2 mb-4">${d.error_tags.map(t => `<span class="badge badge--warning">${escHtml(t)}</span>`).join('')}</div>`;
     }
 
-    // Per-question breakdown
-    html += `<div style="font-size:.82rem;font-weight:600;color:#6b7280;margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em">Вопросы</div>`;
-    const bgMap = {correct:'#f0fdf4', partial:'#fefce8', incorrect:'#fef2f2'};
+    html += `<div class="t-uppercase mb-2">Вопросы</div><div class="flex-col gap-2">`;
     (d.question_results || []).forEach((r, i) => {
       const isMC = r.type === 'multiple_choice';
-      const scoreDisp = isMC
-        ? `<span style="font-size:1.1rem;font-weight:700;color:${r.score>0?'#16a34a':'#dc2626'}">${r.score>0?'<i class="bi bi-check-circle-fill"></i>':'<i class="bi bi-x-circle-fill"></i>'}</span>`
-        : `<span style="font-size:1rem;font-weight:700;color:${scoreColor(r.score)}">${r.score.toFixed(1)}/5</span>`;
-
-      html += `<div style="padding:10px;border-radius:6px;background:${bgMap[r.status]||'#f9fafb'};border:1px solid #e5e7eb;margin-bottom:6px">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
-          <div style="font-size:.85rem;font-weight:500;flex:1">${i+1}. ${r.prompt}</div>
-          <div>${scoreDisp}</div>
-        </div>`;
-
-      if (isMC && r.correct_answer) {
-        const correctOpt = r.options?.find(o => o.charAt(0) === r.correct_answer) || r.correct_answer;
-        const userOpt    = r.options?.find(o => o.charAt(0) === r.user_answer) || r.user_answer;
-        html += `<div style="margin-top:6px;font-size:.78rem">
-          <span style="color:#166534"><i class="bi bi-check-lg"></i> ${correctOpt}</span>`;
-        if (r.status === 'incorrect' && r.user_answer) {
-          html += `<span style="color:#991b1b;text-decoration:line-through;margin-left:10px">${userOpt}</span>`;
-        }
-        html += '</div>';
-      } else if (!isMC && r.user_answer) {
-        html += `<div style="margin-top:6px;font-size:.78rem;color:#6b7280;font-style:italic">"${r.user_answer.slice(0, 180)}${r.user_answer.length > 180 ? '…' : ''}"</div>`;
-      }
-      html += '</div>';
+      const sColor = scoreColor(r.score);
+      const scoreDisplay = isMC
+        ? `<i class="bi bi-${r.score > 0 ? 'check-circle-fill' : 'x-circle-fill'}" style="color: ${sColor}" aria-hidden="true"></i>`
+        : `<span style="color: ${sColor}; font-weight: 600;">${r.score.toFixed(1)} <span class="t-xs t-muted" style="font-weight: 400">/5</span></span>`;
+      html += `<div style="padding: var(--sp-3); border-radius: var(--r-md); background: ${scoreBg(r.score)}; border: 1px solid var(--c-border);">
+        <div class="flex items-start justify-between gap-3">
+          <div class="t-sm" style="flex: 1;">${i + 1}. ${escHtml(r.prompt)}</div>
+          <div style="flex-shrink: 0;">${scoreDisplay}</div>
+        </div>
+      </div>`;
     });
+    html += '</div>';
 
     body.innerHTML = html;
-    if (typeof renderMathInElement === 'function') {
-      renderMathInElement(body, {delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]});
+    renderMath(body);
+  } catch (err) {
+    if (err.message !== 'unauthorized') {
+      body.innerHTML = '<div class="empty"><div class="empty__title">Не удалось загрузить детали</div></div>';
     }
-  } catch(e) {
-    body.innerHTML = '<div style="color:#dc2626;font-size:.9rem">Не удалось загрузить детали.</div>';
   }
 }
 
-function closeDetail() {
-  document.getElementById('detail-overlay').style.display = 'none';
-}
+document.getElementById('detail-close').addEventListener('click', () => {
+  document.getElementById('detail-overlay').classList.remove('overlay--open');
+});
 document.getElementById('detail-overlay').addEventListener('click', e => {
-  if (e.target === document.getElementById('detail-overlay')) closeDetail();
+  if (e.target.id === 'detail-overlay') {
+    document.getElementById('detail-overlay').classList.remove('overlay--open');
+  }
 });
 
-function onAuthReady() { loadHistory(); }
-// base.html calls checkAuth() before this script runs, so onAuthReady
-// was not yet defined at that point. Re-trigger auth flow now.
-checkAuth();
+window.onAuthReady = function () { loadHistory(); };
 </script>
 {% endblock %}
