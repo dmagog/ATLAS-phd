@@ -1,0 +1,301 @@
+{% extends "_app.html" %}
+{% from "_partials.html" import sidebar_super_admin, topbar %}
+{% block title %}Eval Dashboard{% endblock %}
+{% block content_mode %}app__content--dashboard{% endblock %}
+{% block sidebar %}{{ sidebar_super_admin(active='eval') }}{% endblock %}
+{% block topbar %}{{ topbar() }}{% endblock %}
+
+{% block content %}
+<div class="flex items-baseline justify-between mb-5">
+  <div class="flex-col gap-1">
+    <h1 class="t-2xl t-bold">Eval Dashboard</h1>
+    <div class="t-sm t-muted">Контроль качества RAG + agentic-конвейера. Метрики из последнего прогона eval-set v1.1.</div>
+  </div>
+  <div class="flex gap-2 items-center">
+    <span class="t-xs t-muted">Последний прогон:</span>
+    <time class="t-xs t-mono" data-latest-run-time>—</time>
+  </div>
+</div>
+
+<!-- Loading state -->
+<div id="eval-loading" class="card">
+  <div class="empty">
+    <div class="empty__icon"><span class="spinner spinner--lg"></span></div>
+    <div class="empty__title">Загружаю данные…</div>
+    <div class="empty__subtitle">Чтение результатов из <code class="t-mono">eval/results/</code></div>
+  </div>
+</div>
+
+<!-- No-data state -->
+<div id="eval-empty" class="card hidden">
+  <div class="empty">
+    <div class="empty__icon"><i class="bi bi-database-x" style="font-size: 48px"></i></div>
+    <div class="empty__title">Нет данных eval-runner'а</div>
+    <div class="empty__subtitle">
+      Запустите eval-прогон, чтобы метрики появились здесь:
+      <code class="t-mono d-block mt-2">python3 eval/run_eval.py --config treatment</code>
+    </div>
+  </div>
+</div>
+
+<!-- Forbidden state (non-super-admin) -->
+<div id="eval-forbidden" class="card hidden">
+  <div class="empty">
+    <div class="empty__icon"><i class="bi bi-shield-exclamation" style="font-size: 48px"></i></div>
+    <div class="empty__title">Доступ только для super-admin</div>
+    <div class="empty__subtitle">Eval-дашборд показывает кросс-тенантные метрики качества. Войдите под учёткой super-admin.</div>
+  </div>
+</div>
+
+<!-- Main dashboard -->
+<div id="eval-dashboard" class="hidden">
+
+  <!-- Hero metrics row -->
+  <div class="grid grid-cols-3 mb-5" id="hero-row"></div>
+
+  <!-- Per-topic table -->
+  <div class="card mb-5">
+    <h2 class="card__title">Разбивка по топикам программы</h2>
+    <div class="card__subtitle" data-set-info>—</div>
+
+    <table style="width:100%; border-collapse:collapse; font-size: var(--fs-sm); margin-top: var(--sp-3);">
+      <thead>
+        <tr style="border-bottom: 2px solid var(--c-border);">
+          <th style="text-align:left;  padding: 8px 6px; color: var(--c-text-2); font-weight: 500; font-size: var(--fs-xs);">Топик</th>
+          <th style="text-align:right; padding: 8px 6px; color: var(--c-text-2); font-weight: 500; font-size: var(--fs-xs);">Всего</th>
+          <th style="text-align:right; padding: 8px 6px; color: var(--c-text-2); font-weight: 500; font-size: var(--fs-xs);">Отвечено</th>
+          <th style="text-align:right; padding: 8px 6px; color: var(--c-text-2); font-weight: 500; font-size: var(--fs-xs);">Отказано</th>
+          <th style="text-align:right; padding: 8px 6px; color: var(--c-text-2); font-weight: 500; font-size: var(--fs-xs);">Ошибок</th>
+          <th style="text-align:right; padding: 8px 6px; color: var(--c-text-2); font-weight: 500; font-size: var(--fs-xs);">Faith μ <span class="t-faint">(n)</span></th>
+          <th style="text-align:right; padding: 8px 6px; color: var(--c-text-2); font-weight: 500; font-size: var(--fs-xs);">Self-check MAE <span class="t-faint">(n)</span></th>
+        </tr>
+      </thead>
+      <tbody id="topic-tbody"></tbody>
+    </table>
+  </div>
+
+  <!-- Reproducibility + history row -->
+  <div class="grid grid-cols-2">
+    <div class="card">
+      <h2 class="card__title">Воспроизводимость</h2>
+      <div class="card__subtitle" id="repro-subtitle">—</div>
+      <div id="repro-grid" class="grid grid-cols-2 mt-4 gap-3"></div>
+    </div>
+
+    <div class="card">
+      <h2 class="card__title">Последние прогоны</h2>
+      <div class="card__subtitle">До 12 последних запусков (treatment + baseline).</div>
+      <div id="history-list" class="flex-col gap-2 mt-3"></div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script>
+function fmt(n, digits) {
+  if (n === null || n === undefined) return '—';
+  if (typeof n !== 'number') return String(n);
+  return n.toFixed(digits);
+}
+
+function fmtMs(ms) {
+  if (ms === null || ms === undefined) return '—';
+  return (ms / 1000).toFixed(1) + ' s';
+}
+
+function fmtTime(iso) {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    return d.toLocaleString('ru-RU', { dateStyle: 'medium', timeStyle: 'short' });
+  } catch { return iso; }
+}
+
+function show(id) { document.getElementById(id).classList.remove('hidden'); }
+function hide(id) { document.getElementById(id).classList.add('hidden'); }
+
+function heroCard(label, value, valueMod, compare, footnote) {
+  const valClass = 'hero-card__value' + (valueMod ? ' hero-card__value--' + valueMod : '');
+  let cmpHtml = '';
+  if (compare) {
+    cmpHtml = `<div class="hero-card__compare">
+      <span>${compare.label}</span>
+      ${compare.value !== undefined ? `<span class="hero-card__compare-value">${compare.value}</span>` : ''}
+    </div>`;
+  }
+  const fnHtml = footnote ? `<div class="t-xs t-muted mt-2">${footnote}</div>` : '';
+  return `<div class="hero-card">
+    <div class="hero-card__label">${label}</div>
+    <div class="${valClass}">${value}</div>
+    ${cmpHtml}${fnHtml}
+  </div>`;
+}
+
+function renderHero(data) {
+  const t = data.latest_treatment.summary.metrics || {};
+  const b = (data.latest_baseline && data.latest_baseline.summary.metrics) || {};
+
+  const tnr = t.refusal_correctness?.refusal_tnr;
+  const baseTnr = b.refusal_correctness?.refusal_tnr;
+  const kappa = t.selfcheck_rubric?.kappa_binarized;
+  const baseKappa = b.selfcheck_rubric?.kappa_binarized;
+  const p95 = t.latency?.p95_ms;
+
+  const cards = [
+    heroCard(
+      'Refusal TNR', fmt(tnr, 3),
+      tnr === 1.0 ? 'success' : null,
+      baseTnr !== undefined ? { label: 'vs baseline', value: fmt(baseTnr, 3) } : { label: 'baseline-прогон отсутствует' },
+      'True negative rate на off-topic вопросах. BDD 6.1.'
+    ),
+    heroCard(
+      'κ binarized', fmt(kappa, 3),
+      kappa === 1.0 ? 'brand' : null,
+      baseKappa !== undefined ? { label: 'vs baseline', value: fmt(baseKappa, 3) } : { label: 'self-check rubric vs expert' },
+      "Cohen's κ на бинарной классификации зачёт/незачёт."
+    ),
+    heroCard(
+      'Latency p95', fmtMs(p95), null,
+      { label: 'медиана: ' + fmtMs(t.latency?.p50_ms) },
+      'Среднее по всем 120 элементам eval-set.'
+    ),
+  ];
+  document.getElementById('hero-row').innerHTML = cards.join('');
+}
+
+function renderTopics(data) {
+  const tbody = document.getElementById('topic-tbody');
+  if (!data.per_topic.length) {
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center t-muted" style="padding: var(--sp-5)">Per-topic данные недоступны (нет responses.jsonl или golden_set).</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = data.per_topic.map(r => {
+    const faithCol = r.faith_mu !== null
+      ? `<span class="t-mono" style="color: ${r.faith_mu >= 0.7 ? 'var(--c-success)' : (r.faith_mu >= 0.5 ? 'var(--c-warning)' : 'var(--c-danger)')}">${fmt(r.faith_mu, 3)}</span> <span class="t-faint">(${r.faith_n})</span>`
+      : '<span class="t-faint">— (0)</span>';
+    const scCol = r.sc_mae !== null
+      ? `<span class="t-mono">${fmt(r.sc_mae, 3)}</span> <span class="t-faint">(${r.sc_n})</span>`
+      : '<span class="t-faint">— (0)</span>';
+    return `<tr style="border-bottom: 1px solid var(--c-border);">
+      <td style="padding: 10px 6px;"><b>${r.id}</b> <span class="t-muted">${r.title}</span></td>
+      <td style="padding: 10px 6px; text-align: right; font-family: var(--font-mono); color: var(--c-text-2)">${r.total}</td>
+      <td style="padding: 10px 6px; text-align: right; font-family: var(--font-mono); color: var(--c-success)">${r.answered}</td>
+      <td style="padding: 10px 6px; text-align: right; font-family: var(--font-mono); color: ${r.refused ? 'var(--c-warning)' : 'var(--c-text-3)'}">${r.refused}</td>
+      <td style="padding: 10px 6px; text-align: right; font-family: var(--font-mono); color: ${r.error ? 'var(--c-danger)' : 'var(--c-text-3)'}">${r.error}</td>
+      <td style="padding: 10px 6px; text-align: right;">${faithCol}</td>
+      <td style="padding: 10px 6px; text-align: right;">${scCol}</td>
+    </tr>`;
+  }).join('');
+
+  // Set info
+  const meta = data.latest_treatment.meta;
+  if (meta && meta.entry_count) {
+    const dist = meta.distribution || {};
+    const distStr = Object.entries(dist).map(([k, v]) => `${k}: ${v}`).join(' · ');
+    document.querySelector('[data-set-info]').textContent = `eval-set v1.1, ${meta.entry_count} элементов · ${distStr}`;
+  }
+}
+
+function renderRepro(data) {
+  const r = data.reproducibility;
+  if (!r) {
+    document.getElementById('repro-subtitle').textContent = 'Недостаточно прогонов (минимум 2 treatment-запуска).';
+    document.getElementById('repro-grid').innerHTML = '';
+    return;
+  }
+  document.getElementById('repro-subtitle').textContent = `Распределение метрик по ${r.n_runs} последним treatment-прогонам.`;
+  const cells = [];
+  if (r.refusal_tnr) {
+    cells.push(`<div class="metric">
+      <div class="metric__value t-mono">${fmt(r.refusal_tnr.mean, 3)} ± ${fmt(r.refusal_tnr.stdev, 3)}</div>
+      <div class="metric__label">refusal_tnr (mean ± stdev)</div>
+    </div>`);
+  }
+  if (r.kappa_binarized) {
+    cells.push(`<div class="metric">
+      <div class="metric__value t-mono">${fmt(r.kappa_binarized.mean, 3)} ± ${fmt(r.kappa_binarized.stdev, 3)}</div>
+      <div class="metric__label">κ_binarized (mean ± stdev)</div>
+    </div>`);
+  }
+  if (r.latency_p95_ms) {
+    cells.push(`<div class="metric">
+      <div class="metric__value t-mono">${(r.latency_p95_ms.mean / 1000).toFixed(1)} ± ${(r.latency_p95_ms.stdev / 1000).toFixed(1)} s</div>
+      <div class="metric__label">latency p95 (mean ± stdev)</div>
+    </div>`);
+  }
+  cells.push(`<div class="metric">
+    <div class="metric__value t-mono">${r.n_runs}</div>
+    <div class="metric__label">прогонов учтено</div>
+  </div>`);
+  document.getElementById('repro-grid').innerHTML = cells.join('');
+}
+
+function renderHistory(data) {
+  const list = document.getElementById('history-list');
+  if (!data.history.length) {
+    list.innerHTML = '<div class="t-sm t-muted">Нет завершённых прогонов.</div>';
+    return;
+  }
+  list.innerHTML = data.history.map(h => {
+    const tnr = h.refusal_tnr;
+    const tnrBadge = tnr === null
+      ? `<span class="badge">—</span>`
+      : (tnr === 1.0
+          ? `<span class="badge badge--success">TNR ${fmt(tnr, 3)}</span>`
+          : `<span class="badge badge--warning">TNR ${fmt(tnr, 3)}</span>`);
+    const cfgBadge = h.config_name === 'treatment'
+      ? `<span class="badge badge--info">treatment</span>`
+      : `<span class="badge">${h.config_name}</span>`;
+    return `<div class="flex items-center gap-3" style="padding: var(--sp-2) 0; border-bottom: 1px solid var(--c-border);">
+      ${cfgBadge}
+      <div class="flex-1" style="min-width: 0;">
+        <div class="t-xs t-mono" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${h.dir_name}</div>
+        <div class="t-xs t-muted">${fmtTime(h.started_at)}</div>
+      </div>
+      ${tnrBadge}
+    </div>`;
+  }).join('');
+}
+
+window.onAuthReady = async function (me) {
+  if (me.role !== 'super-admin') {
+    hide('eval-loading');
+    show('eval-forbidden');
+    return;
+  }
+  try {
+    const res = await authFetch('/eval/dashboard');
+    if (res.status === 403) {
+      hide('eval-loading');
+      show('eval-forbidden');
+      return;
+    }
+    if (!res.ok) {
+      hide('eval-loading');
+      show('eval-empty');
+      return;
+    }
+    const data = await res.json();
+    hide('eval-loading');
+    if (!data.has_data) {
+      show('eval-empty');
+      return;
+    }
+    show('eval-dashboard');
+
+    if (data.latest_treatment) {
+      document.querySelector('[data-latest-run-time]').textContent = fmtTime(data.latest_treatment.started_at);
+    }
+    renderHero(data);
+    renderTopics(data);
+    renderRepro(data);
+    renderHistory(data);
+  } catch (err) {
+    hide('eval-loading');
+    show('eval-empty');
+    console.error('eval dashboard load:', err);
+  }
+};
+</script>
+{% endblock %}

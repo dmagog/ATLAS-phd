@@ -46,6 +46,14 @@ async def styleguide_page(request: Request):
     return templates.TemplateResponse(request=request, name="_styleguide.html")
 
 
+@router.get("/eval", response_class=HTMLResponse)
+async def eval_page(request: Request):
+    """Eval dashboard (Phase 5.2). HTML shell renders for anyone; the
+    actual data API at /eval/dashboard requires super-admin. Page-side JS
+    detects 403 and shows a friendly state."""
+    return templates.TemplateResponse(request=request, name="eval.html")
+
+
 # Phase 3 wireframes — internal previews of redesigned screens.
 # All under /_/wf/* prefix, no auth, hard-coded sample data.
 # Will be deleted at end of Phase 5 once production templates are migrated.
