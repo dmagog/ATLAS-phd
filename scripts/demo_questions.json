@@ -1,0 +1,115 @@
+{
+  "version": "1.0",
+  "purpose": "Курированный набор demo-вопросов для защиты. Каждый вопрос проверен на текущем корпусе (Born&Wolf, Матвеев, Yariv).",
+  "tenant": "optics-kafedra",
+  "qa_questions_answered": [
+    {
+      "id": "qa-fermat",
+      "title": "Принцип Ферма",
+      "query": "Сформулируй принцип Ферма",
+      "expected_behavior": "answered",
+      "expected_min_citations": 2,
+      "demo_step": "1 — корректный вопрос с цитатами",
+      "notes": "Базовое определение. Все три учебника покрывают. Короткий ответ с inline-цитатами."
+    },
+    {
+      "id": "qa-diffraction",
+      "title": "Дифракция Френеля",
+      "query": "Что такое дифракция Френеля и в чём её отличие от Фраунгофера?",
+      "expected_behavior": "answered",
+      "expected_min_citations": 2,
+      "demo_step": "1 — корректный вопрос с цитатами",
+      "notes": "Сравнительный вопрос — даёт более развёрнутый ответ с двумя кейсами."
+    },
+    {
+      "id": "qa-interference-conditions",
+      "title": "Условия интерференции",
+      "query": "Какие условия должны выполняться для наблюдения интерференции?",
+      "expected_behavior": "answered",
+      "expected_min_citations": 2,
+      "demo_step": "1 — корректный вопрос с цитатами",
+      "notes": "Лист условий — наглядный structured ответ."
+    },
+    {
+      "id": "qa-malus",
+      "title": "Закон Малюса",
+      "query": "Объясни закон Малюса для поляризованного света",
+      "expected_behavior": "answered",
+      "expected_min_citations": 1,
+      "demo_step": "1 — корректный вопрос с цитатами",
+      "notes": "Формула + физический смысл — хороший пример с математикой и KaTeX."
+    },
+    {
+      "id": "qa-tir",
+      "title": "Полное внутреннее отражение",
+      "query": "При каких условиях наблюдается полное внутреннее отражение?",
+      "expected_behavior": "answered",
+      "expected_min_citations": 2,
+      "demo_step": "1 — корректный вопрос с цитатами",
+      "notes": "Базовый закон с критическим углом — короткий и наглядный."
+    },
+    {
+      "id": "qa-thin-lens",
+      "title": "Формула тонкой линзы",
+      "query": "Запиши формулу тонкой линзы и объясни знаки",
+      "expected_behavior": "answered",
+      "expected_min_citations": 1,
+      "demo_step": "резерв на случай проблем с одним из вопросов выше",
+      "notes": "Резервный вопрос."
+    }
+  ],
+  "qa_questions_refusal": [
+    {
+      "id": "refusal-moscow-population",
+      "title": "Численность населения (off-topic)",
+      "query": "Какова численность населения Москвы?",
+      "expected_behavior": "refused",
+      "demo_step": "2 — off-topic → Hard-gate отказ",
+      "notes": "Статистика, никак не связано с оптикой. Hard-gate срабатывает за <2s, без вызова LLM. ПРОВЕРЕН: refused в живом прогоне 2026-05-07."
+    },
+    {
+      "id": "refusal-diesel",
+      "title": "Дизельный двигатель (off-topic)",
+      "query": "Расскажи про устройство дизельного двигателя",
+      "expected_behavior": "refused",
+      "demo_step": "2 — off-topic → Hard-gate отказ (резерв)",
+      "notes": "Инженерия, не физика света. ПРОВЕРЕН: refused."
+    },
+    {
+      "id": "refusal-quicksort",
+      "title": "Алгоритм сортировки (off-topic)",
+      "query": "Объясни алгоритм быстрой сортировки",
+      "expected_behavior": "refused",
+      "demo_step": "2 — off-topic → Hard-gate отказ (резерв)",
+      "notes": "Computer science, ничего про оптику. ПРОВЕРЕН: refused."
+    },
+    {
+      "id": "refusal-near-physics-DO-NOT-USE",
+      "title": "ПРИМЕР НЕНАДЁЖНОГО ОТКАЗА: гипотеза Римана / КХД",
+      "query": "Расскажи доказательство гипотезы Римана",
+      "expected_behavior": "answered_unexpectedly",
+      "demo_step": "НЕ ИСПОЛЬЗОВАТЬ В DEMO",
+      "notes": "Найдено в Phase 6.3 verification: вопросы, близкие к физике (математика для физики, теор-физика), retrieval НАХОДИТ loose-matches и НЕ отказывается. Это honest finding о границах hard-gate: он точен на off-topic, но не на «соседних» доменах. Использовать только если хотим показать ограничения системы."
+    }
+  ],
+  "selfcheck_topics": [
+    {
+      "id": "sc-dispersion",
+      "title": "Дисперсия света",
+      "topic": "Дисперсия света и её проявления",
+      "demo_step": "4 — self-check с рубрикой",
+      "expected_min_score": 2.0,
+      "expected_max_score": 4.5,
+      "notes": "Тема с богатой структурой — позволяет показать все 4 критерия рубрики."
+    },
+    {
+      "id": "sc-fresnel-zones",
+      "title": "Зоны Френеля",
+      "topic": "Метод зон Френеля для дифракции",
+      "demo_step": "4 — self-check с рубрикой (резерв)",
+      "expected_min_score": 2.0,
+      "expected_max_score": 4.5,
+      "notes": "Резервная тема, более узкая."
+    }
+  ]
+}
