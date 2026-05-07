@@ -30,3 +30,10 @@ async def selfcheck_history_page(request: Request):
 @router.get("/admin", response_class=HTMLResponse)
 async def admin_page(request: Request):
     return templates.TemplateResponse(request=request, name="admin.html")
+
+
+@router.get("/_/styleguide", response_class=HTMLResponse)
+async def styleguide_page(request: Request):
+    """Internal design-system showcase. No auth gate — page is harmless,
+    but kept on `_/` prefix to signal internal use."""
+    return templates.TemplateResponse(request=request, name="_styleguide.html")

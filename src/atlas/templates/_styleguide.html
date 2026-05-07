@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ATLAS phd — Styleguide</title>
+  <link rel="icon" type="image/svg+xml" href="/static/icons/atlas-shield.svg">
+  <link rel="stylesheet" href="/static/atlas.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <style>
+    /* Styleguide-only chrome */
+    .sg-section { margin-bottom: var(--sp-10); scroll-margin-top: var(--sp-5); }
+    .sg-section__head { display: flex; align-items: baseline; gap: var(--sp-3); margin-bottom: var(--sp-4); }
+    .sg-section__num { font-family: var(--font-mono); color: var(--c-text-3); font-size: var(--fs-sm); }
+    .sg-section__title { font-size: var(--fs-lg); font-weight: 600; }
+    .sg-row { display: flex; flex-wrap: wrap; gap: var(--sp-3); align-items: center; padding: var(--sp-4); background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r-lg); }
+    .sg-row + .sg-row { margin-top: var(--sp-3); }
+    .sg-grid { display: grid; gap: var(--sp-3); }
+    .sg-grid--swatches { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+    .sg-grid--type { grid-template-columns: 60px 1fr 80px; gap: var(--sp-3) var(--sp-4); align-items: baseline; padding: var(--sp-4); background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r-lg); }
+    .sg-swatch { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--r-md); overflow: hidden; }
+    .sg-swatch__color { height: 64px; }
+    .sg-swatch__meta { padding: var(--sp-2) var(--sp-3); font-size: var(--fs-xs); }
+    .sg-swatch__name { font-weight: 500; color: var(--c-text); }
+    .sg-swatch__token { color: var(--c-text-3); font-family: var(--font-mono); font-size: 11px; margin-top: 2px; }
+    .sg-frame { background: var(--c-bg); border: 1px solid var(--c-border); border-radius: var(--r-lg); padding: var(--sp-5); }
+    .sg-toggle {
+      display: inline-flex; align-items: center; gap: var(--sp-2);
+      padding: 4px 10px; background: var(--c-surface-2); border-radius: var(--r-pill);
+      font-size: var(--fs-xs); cursor: pointer; user-select: none;
+    }
+    .sg-tag-row { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+  </style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- Sidebar (live demo) -->
+  <aside class="sidebar">
+    <div class="sidebar__brand">
+      <img src="/static/icons/atlas-shield.svg" class="sidebar__brand-mark" alt="">
+      <span class="sidebar__brand-name">ATLAS phd</span>
+    </div>
+
+    <a class="sidebar__link" href="#tokens"><i class="bi bi-palette sidebar__icon"></i>Токены</a>
+    <a class="sidebar__link sidebar__link--active" href="#components"><i class="bi bi-grid sidebar__icon"></i>Компоненты</a>
+    <a class="sidebar__link" href="#layout"><i class="bi bi-layout-sidebar sidebar__icon"></i>Layout</a>
+
+    <div class="sidebar__group-label">Якоря</div>
+    <a class="sidebar__link" href="#buttons"><i class="bi bi-square sidebar__icon"></i>Кнопки</a>
+    <a class="sidebar__link" href="#forms"><i class="bi bi-input-cursor sidebar__icon"></i>Формы</a>
+    <a class="sidebar__link" href="#cards"><i class="bi bi-card-text sidebar__icon"></i>Карточки</a>
+    <a class="sidebar__link" href="#cite"><i class="bi bi-quote sidebar__icon"></i>Цитаты</a>
+    <a class="sidebar__link" href="#hero"><i class="bi bi-graph-up sidebar__icon"></i>Hero / метрики</a>
+    <a class="sidebar__link" href="#refusal"><i class="bi bi-shield-check sidebar__icon"></i>Refusal</a>
+    <a class="sidebar__link" href="#rubric"><i class="bi bi-list-check sidebar__icon"></i>Рубрика</a>
+    <a class="sidebar__link" href="#supervisor"><i class="bi bi-grid-3x3 sidebar__icon"></i>Heatmap</a>
+    <a class="sidebar__link" href="#bars"><i class="bi bi-bar-chart sidebar__icon"></i>Bar-cmp</a>
+    <a class="sidebar__link" href="#source-panel"><i class="bi bi-book sidebar__icon"></i>Source-panel</a>
+    <a class="sidebar__link" href="#states"><i class="bi bi-hourglass sidebar__icon"></i>Состояния</a>
+
+    <div class="sidebar__footer">
+      <div class="sidebar__user">
+        <div class="sidebar__user-avatar">GM</div>
+        <span class="sidebar__user-email">georgy@mail.ru</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="app__main">
+
+    <!-- Topbar (live demo) -->
+    <header class="app__topbar">
+      <div class="tenant-ctx">
+        <span class="tenant-ctx__name">Кафедра оптики ИТМО</span>
+        <span class="tenant-ctx__role tenant-ctx__role--super-admin">super-admin</span>
+      </div>
+      <div style="margin-left: auto" class="flex items-center gap-3">
+        <span class="sg-toggle" id="theme-toggle">
+          <i class="bi bi-moon-stars-fill"></i>
+          <span id="theme-label">Dark</span>
+        </span>
+        <button class="btn btn--ghost btn--sm"><i class="bi bi-box-arrow-right"></i> Выйти</button>
+      </div>
+    </header>
+
+    <div class="app__content app__content--dashboard">
+
+      <h1 class="t-2xl t-bold mb-2">Styleguide v0.1</h1>
+      <p class="t-muted mb-6">Все токены и компоненты дизайн-системы ATLAS. Переключи тему в шапке для проверки контраста.</p>
+
+      <!-- =================================================== -->
+      <!-- TOKENS                                              -->
+      <!-- =================================================== -->
+      <div class="sg-section" id="tokens">
+        <div class="sg-section__head">
+          <span class="sg-section__num">1</span>
+          <h2 class="sg-section__title">Токены</h2>
+        </div>
+
+        <h3 class="t-uppercase mb-3">Палитра — поверхности и текст</h3>
+        <div class="sg-grid sg-grid--swatches mb-5">
+          <div class="sg-swatch"><div class="sg-swatch__color" style="background: var(--c-bg)"></div><div class="sg-swatch__meta"><div class="sg-swatch__name">bg</div><div class="sg-swatch__token">--c-bg</div></div></div>
+          <div class="sg-swatch"><div class="sg-swatch__color" style="background: var(--c-surface)"></div><div class="sg-swatch__meta"><div class="sg-swatch__name">surface</div><div class="sg-swatch__token">--c-surface</div></div></div>
+          <div class="sg-swatch"><div class="sg-swatch__color" style="background: var(--c-surface-2)"></div><div class="sg-swatch__meta"><div class="sg-swatch__name">surface-2</div><div class="sg-swatch__token">--c-surface-2</div></div></div>
+          <div class="sg-swatch"><div class="sg-swatch__color" style="background: var(--c-border)"></div><div class="sg-swatch__meta"><div class="sg-swatch__name">border</div><div class="sg-swatch__token">--c-border</div></div></div>
+          <div class="sg-swatch"><div class="sg-swatch__color" style="background: var(--c-text)"></div><div class="sg-swatch__meta"><div class="sg-swatch__name">text</div><div class="sg-swatch__token">--c-text</div></div></div>
+          <div class="sg-swatch"><div class="sg-swatch__color" style="background: var(--c-text-2)"></div><div class="sg-swatch__meta"><div class="sg-swatch__name">text-2</div><div class="sg-swatch__token">--c-text-2</div></div></div>
+          <div class="sg-swatch"><div class="sg-swatch__color" style="background: var(--c-text-3)"></div><div class="sg-swatch__meta"><div class="sg-swatch__name">text-3</div><div class="sg-swatch__token">--c-text-3</div></div></div>
+        </div>
+
+        <h3 class="t-uppercase mb-3">Палитра — семантика и бренд</h3>
+        <div class="sg-grid sg-grid--swatches mb-5">
+          <div class="sg-swatch"><div class="sg-swatch__color" style="background: var(--brand-blue)"></div><div class="sg-swatch__meta"><div class="sg-swatch__name">brand-blue</div><div class="sg-swatch__token">#1D4ED8</div></div></div>
+          <div class="sg-swatch"><div class="sg-swatch__color" style="background: var(--brand-slate)"></div><div class="sg-swatch__meta"><div class="sg-swatch__name">brand-slate</div><div class="sg-swatch__token">#1E293B</div></div></div>
+          <div class="sg-swatch"><div class="sg-swatch__color" style="background: var(--c-primary)"></div><div class="sg-swatch__meta"><div class="sg-swatch__name">primary</div><div class="sg-swatch__token">--c-primary</div></div></div>
+          <div class="sg-swatch"><div class="sg-swatch__color" style="background: var(--c-success)"></div><div class="sg-swatch__meta"><div class="sg-swatch__name">success</div><div class="sg-swatch__token">--c-success</div></div></div>
+          <div class="sg-swatch"><div class="sg-swatch__color" style="background: var(--c-warning)"></div><div class="sg-swatch__meta"><div class="sg-swatch__name">warning</div><div class="sg-swatch__token">--c-warning</div></div></div>
+          <div class="sg-swatch"><div class="sg-swatch__color" style="background: var(--c-danger)"></div><div class="sg-swatch__meta"><div class="sg-swatch__name">danger</div><div class="sg-swatch__token">--c-danger</div></div></div>
+        </div>
+
+        <h3 class="t-uppercase mb-3">Heatmap-шкала</h3>
+        <div class="sg-row mb-5">
+          <div class="heatmap__cell heatmap__cell--empty" style="width:40px">—</div>
+          <div class="heatmap__cell heatmap__cell--low" style="width:40px">1.2</div>
+          <div class="heatmap__cell heatmap__cell--mid" style="width:40px">2.8</div>
+          <div class="heatmap__cell heatmap__cell--high" style="width:40px">3.9</div>
+          <div class="heatmap__cell heatmap__cell--top" style="width:40px">4.6</div>
+          <span class="t-xs t-muted">empty → low → mid → high → top</span>
+        </div>
+
+        <h3 class="t-uppercase mb-3">Типографика</h3>
+        <div class="sg-grid--type mb-5">
+          <code class="t-xs t-mono t-faint">--fs-xs</code>   <span class="t-xs">Подписи и метаданные. The quick brown fox.</span>          <span class="t-xs t-faint">12px</span>
+          <code class="t-xs t-mono t-faint">--fs-sm</code>   <span class="t-sm">Тело таблиц и компактных списков.</span>                   <span class="t-xs t-faint">13px</span>
+          <code class="t-xs t-mono t-faint">--fs-base</code> <span>Базовый текст интерфейса.</span>                                  <span class="t-xs t-faint">15px</span>
+          <code class="t-xs t-mono t-faint">--fs-md</code>   <span class="t-md">Заголовки секций и важный текст.</span>                    <span class="t-xs t-faint">16px</span>
+          <code class="t-xs t-mono t-faint">--fs-lg</code>   <span class="t-lg">Section heading.</span>                                    <span class="t-xs t-faint">18px</span>
+          <code class="t-xs t-mono t-faint">--fs-xl</code>   <span class="t-xl t-bold">Page title</span>                                    <span class="t-xs t-faint">22px</span>
+          <code class="t-xs t-mono t-faint">--fs-2xl</code>  <span class="t-2xl t-bold">Major heading</span>                                <span class="t-xs t-faint">30px</span>
+          <code class="t-xs t-mono t-faint">--fs-hero</code> <span class="t-hero">1.000</span>                                                 <span class="t-xs t-faint">44px</span>
+        </div>
+      </div>
+
+      <!-- =================================================== -->
+      <!-- BUTTONS                                             -->
+      <!-- =================================================== -->
+      <div class="sg-section" id="buttons">
+        <div class="sg-section__head">
+          <span class="sg-section__num">2</span>
+          <h2 class="sg-section__title">Кнопки</h2>
+        </div>
+        <div class="sg-row">
+          <button class="btn btn--primary">Primary</button>
+          <button class="btn btn--secondary">Secondary</button>
+          <button class="btn btn--ghost">Ghost</button>
+          <button class="btn btn--danger">Danger</button>
+          <button class="btn btn--primary" disabled>Disabled</button>
+          <button class="btn btn--primary"><span class="spinner" style="border-color:rgba(255,255,255,.4);border-top-color:#fff"></span>Loading</button>
+        </div>
+        <div class="sg-row">
+          <button class="btn btn--primary btn--sm">Small</button>
+          <button class="btn btn--primary">Medium</button>
+          <button class="btn btn--primary btn--lg">Large</button>
+          <button class="btn btn--ghost btn--icon"><i class="bi bi-three-dots"></i></button>
+          <button class="btn btn--secondary"><i class="bi bi-download"></i>С иконкой</button>
+        </div>
+      </div>
+
+      <!-- =================================================== -->
+      <!-- FORMS                                               -->
+      <!-- =================================================== -->
+      <div class="sg-section" id="forms">
+        <div class="sg-section__head">
+          <span class="sg-section__num">3</span>
+          <h2 class="sg-section__title">Формы</h2>
+        </div>
+        <div class="sg-row" style="display:block">
+          <div class="grid grid-cols-2">
+            <div class="field">
+              <label class="label">Email</label>
+              <input class="input" type="email" placeholder="user@example.com" value="georgy@mail.ru">
+            </div>
+            <div class="field">
+              <label class="label">Пароль</label>
+              <input class="input" type="password" placeholder="••••••••">
+              <div class="field__hint">Минимум 8 символов.</div>
+            </div>
+            <div class="field">
+              <label class="label">Тенант</label>
+              <select class="select">
+                <option>Кафедра оптики ИТМО</option>
+                <option>Демо-тенант</option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="label">Email с ошибкой</label>
+              <input class="input" type="email" value="invalid-email" style="border-color: var(--c-danger)">
+              <div class="field__error">Введите корректный email.</div>
+            </div>
+            <div class="field" style="grid-column: span 2">
+              <label class="label">Сообщение</label>
+              <textarea class="textarea" placeholder="Опишите проблему..."></textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- =================================================== -->
+      <!-- CARDS / BADGES                                      -->
+      <!-- =================================================== -->
+      <div class="sg-section" id="cards">
+        <div class="sg-section__head">
+          <span class="sg-section__num">4</span>
+          <h2 class="sg-section__title">Карточки и бейджи</h2>
+        </div>
+
+        <div class="grid grid-cols-3">
+          <div class="card">
+            <div class="card__title">Default card</div>
+            <div class="card__subtitle">С тонкой тенью и border.</div>
+            Содержимое карточки.
+          </div>
+          <div class="card card--elevated">
+            <div class="card__title">Elevated card</div>
+            <div class="card__subtitle">С более выраженной тенью.</div>
+            Содержимое карточки.
+          </div>
+          <div class="card card--interactive">
+            <div class="card__title">Interactive card</div>
+            <div class="card__subtitle">Hover-состояние.</div>
+            Содержимое карточки.
+          </div>
+        </div>
+
+        <h3 class="t-uppercase mt-6 mb-3">Бейджи</h3>
+        <div class="sg-row">
+          <span class="badge"><span class="badge__dot"></span>Neutral</span>
+          <span class="badge badge--info"><span class="badge__dot"></span>Info</span>
+          <span class="badge badge--success"><span class="badge__dot"></span>Success</span>
+          <span class="badge badge--warning"><span class="badge__dot"></span>Warning</span>
+          <span class="badge badge--danger"><span class="badge__dot"></span>Danger</span>
+          <span class="badge badge--brand">Hard-gate активен</span>
+        </div>
+
+        <h3 class="t-uppercase mt-6 mb-3">Role-бейджи</h3>
+        <div class="sg-row">
+          <span class="tenant-ctx__role tenant-ctx__role--super-admin">super-admin</span>
+          <span class="tenant-ctx__role tenant-ctx__role--tenant-admin">tenant-admin</span>
+          <span class="tenant-ctx__role tenant-ctx__role--supervisor">supervisor</span>
+          <span class="tenant-ctx__role tenant-ctx__role--student">student</span>
+        </div>
+      </div>
+
+      <!-- =================================================== -->
+      <!-- CITATIONS                                           -->
+      <!-- =================================================== -->
+      <div class="sg-section" id="cite">
+        <div class="sg-section__head">
+          <span class="sg-section__num">5</span>
+          <h2 class="sg-section__title">Цитаты и пузыри чата</h2>
+        </div>
+
+        <div class="card flex-col gap-3">
+          <div class="bubble bubble--user">
+            <div class="bubble__author">Вы</div>
+            Сформулируй принцип Ферма.
+          </div>
+          <div class="bubble bubble--atlas">
+            <div class="bubble__author">ATLAS</div>
+            Принцип Ферма утверждает, что свет распространяется по пути, для которого оптическая длина минимальна <a href="#" class="cite">1</a>. Это эквивалентно требованию стационарности оптического пути <a href="#" class="cite">2</a><a href="#" class="cite">3</a>.
+            <div class="mt-3 flex gap-2 items-center">
+              <span class="badge badge--brand"><i class="bi bi-shield-check"></i> Hard-gate verified</span>
+              <span class="badge badge--success">3 источника</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- =================================================== -->
+      <!-- HERO METRICS                                        -->
+      <!-- =================================================== -->
+      <div class="sg-section" id="hero">
+        <div class="sg-section__head">
+          <span class="sg-section__num">6</span>
+          <h2 class="sg-section__title">Hero-метрики (для /eval)</h2>
+        </div>
+        <div class="grid grid-cols-3">
+          <div class="hero-card">
+            <div class="hero-card__label">Refusal TNR</div>
+            <div class="hero-card__value hero-card__value--success">1.000</div>
+            <div class="hero-card__compare">
+              <span>vs baseline</span>
+              <span class="hero-card__compare-value">0.000</span>
+            </div>
+          </div>
+          <div class="hero-card">
+            <div class="hero-card__label">κ binarized</div>
+            <div class="hero-card__value hero-card__value--brand">1.000</div>
+            <div class="hero-card__compare">
+              <span>self-check vs expert</span>
+            </div>
+          </div>
+          <div class="hero-card">
+            <div class="hero-card__label">Hard-gate latency</div>
+            <div class="hero-card__value">&lt; 2 s</div>
+            <div class="hero-card__compare">
+              <span>p95, без LLM-вызова</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- =================================================== -->
+      <!-- BAR COMPARISON                                      -->
+      <!-- =================================================== -->
+      <div class="sg-section" id="bars">
+        <div class="sg-section__head">
+          <span class="sg-section__num">7</span>
+          <h2 class="sg-section__title">Bar comparison (baseline vs verifier)</h2>
+        </div>
+        <div class="card">
+          <h3 class="card__title">Faithfulness по топикам</h3>
+          <div class="bar-cmp">
+            {% set topics = [
+              ('Геометрическая оптика', 0.62, 0.94),
+              ('Волновая оптика',       0.58, 0.91),
+              ('Поляризация',           0.49, 0.88),
+              ('Дисперсия',             0.66, 0.95),
+              ('Интерференция',         0.71, 0.96),
+              ('Дифракция',             0.55, 0.89),
+            ] %}
+            {% for (t, b, v) in topics %}
+            <div class="bar-cmp__row">
+              <div class="bar-cmp__label">{{ t }}</div>
+              <div class="bar-cmp__pair">
+                <div class="bar-cmp__track"><div class="bar-cmp__fill bar-cmp__fill--baseline" style="width: {{ (b * 100) | round | int }}%"></div></div>
+                <div class="bar-cmp__track"><div class="bar-cmp__fill bar-cmp__fill--verifier" style="width: {{ (v * 100) | round | int }}%"></div></div>
+              </div>
+              <div class="bar-cmp__value">{{ '%.2f' | format(b) }} / {{ '%.2f' | format(v) }}</div>
+            </div>
+            {% endfor %}
+          </div>
+          <div class="flex gap-4 mt-4">
+            <span class="t-xs t-muted"><span style="display:inline-block;width:10px;height:10px;background:var(--c-text-3);border-radius:2px;margin-right:6px;vertical-align:middle"></span>baseline</span>
+            <span class="t-xs t-muted"><span style="display:inline-block;width:10px;height:10px;background:var(--c-primary);border-radius:2px;margin-right:6px;vertical-align:middle"></span>verifier</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- =================================================== -->
+      <!-- RUBRIC GRID                                         -->
+      <!-- =================================================== -->
+      <div class="sg-section" id="rubric">
+        <div class="sg-section__head">
+          <span class="sg-section__num">8</span>
+          <h2 class="sg-section__title">Рубрика самопроверки</h2>
+        </div>
+        <div class="card">
+          <div class="flex items-end gap-3 mb-4">
+            <div class="t-hero" style="color: var(--c-success)">4.2</div>
+            <div class="flex-col gap-1">
+              <div class="t-md t-bold">Хорошо</div>
+              <div class="t-xs t-muted">Тема: Дисперсия света</div>
+            </div>
+            <div style="margin-left:auto"><span class="badge badge--info"><i class="bi bi-shield-check"></i> κ = 1.000 vs expert</span></div>
+          </div>
+
+          <div class="rubric">
+            <div class="rubric__cell rubric__cell--good">
+              <div class="rubric__label">Точность <span class="rubric__weight">40%</span></div>
+              <div class="rubric__value rubric__value--good">4.5</div>
+            </div>
+            <div class="rubric__cell rubric__cell--mid">
+              <div class="rubric__label">Полнота <span class="rubric__weight">30%</span></div>
+              <div class="rubric__value rubric__value--mid">3.0</div>
+            </div>
+            <div class="rubric__cell rubric__cell--good">
+              <div class="rubric__label">Логика <span class="rubric__weight">20%</span></div>
+              <div class="rubric__value rubric__value--good">4.5</div>
+            </div>
+            <div class="rubric__cell rubric__cell--mid">
+              <div class="rubric__label">Терминология <span class="rubric__weight">10%</span></div>
+              <div class="rubric__value rubric__value--mid">3.5</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- =================================================== -->
+      <!-- REFUSAL                                             -->
+      <!-- =================================================== -->
+      <div class="sg-section" id="refusal">
+        <div class="sg-section__head">
+          <span class="sg-section__num">9</span>
+          <h2 class="sg-section__title">Refusal-экран (hard-gate)</h2>
+        </div>
+
+        <div class="sg-frame">
+          <div class="refusal">
+            <div class="refusal__icon"><img src="/static/icons/atlas-shield.svg" alt=""></div>
+            <h3 class="refusal__title">Hard-gate: запрос отклонён</h3>
+            <p class="refusal__subtitle">В корпусе кафедры не найдено достаточно доказательств для ответа на этот вопрос. Защита от галлюцинаций сработала до обращения к LLM.</p>
+            <div class="refusal__metrics">
+              <div class="refusal__metric refusal__metric--breach">
+                <div class="refusal__metric-label">Лучший vector-score</div>
+                <div class="refusal__metric-value">0.31 / порог 0.55</div>
+              </div>
+              <div class="refusal__metric refusal__metric--breach">
+                <div class="refusal__metric-label">Чанков выше порога</div>
+                <div class="refusal__metric-value">0 / нужно ≥ 2</div>
+              </div>
+              <div class="refusal__metric">
+                <div class="refusal__metric-label">Время решения</div>
+                <div class="refusal__metric-value">1.7 s</div>
+              </div>
+              <div class="refusal__metric">
+                <div class="refusal__metric-label">LLM-вызов</div>
+                <div class="refusal__metric-value">не выполнен</div>
+              </div>
+            </div>
+            <p class="refusal__footnote">refusal_tnr = 1.000 — это поведение детерминировано, не «модель попросили быть осторожной».</p>
+            <button class="btn btn--primary"><i class="bi bi-arrow-counterclockwise"></i>Задать другой вопрос</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- =================================================== -->
+      <!-- HEATMAP                                             -->
+      <!-- =================================================== -->
+      <div class="sg-section" id="supervisor">
+        <div class="sg-section__head">
+          <span class="sg-section__num">10</span>
+          <h2 class="sg-section__title">Supervisor heatmap (студент × топик)</h2>
+        </div>
+        <div class="card">
+          <div class="grid" style="grid-template-columns: 180px 1fr; gap: var(--sp-3);">
+            <!-- Student names column -->
+            <div class="flex-col gap-1">
+              <div class="t-xs t-faint" style="height:28px">&nbsp;</div>
+              {% set students = ['Иванов А. М.', 'Петрова К. С.', 'Сидоров Д. Н.', 'Козлова Е. В.', 'Морозов П. И.', 'Волков С. Р.', 'Лебедева Н. О.', 'Соколов А. Д.'] %}
+              {% for s in students %}
+              <div class="t-xs t-muted flex items-center" style="height:28px;min-height:28px">{{ s }}</div>
+              {% endfor %}
+            </div>
+
+            <!-- Heatmap grid -->
+            <div>
+              <div class="grid" style="grid-template-columns: repeat(6, 1fr); gap: 3px; margin-bottom: 6px;">
+                {% set htopics = ['Геом.', 'Волн.', 'Поляр.', 'Дисп.', 'Интерф.', 'Дифр.'] %}
+                {% for t in htopics %}
+                <div class="t-xs t-faint text-center" style="line-height:28px">{{ t }}</div>
+                {% endfor %}
+              </div>
+              {# Hard-coded sample data — predictable for demo screenshots #}
+              {% set rows = [
+                [4.6, 4.2, 3.8, 4.5, 4.4, 3.9],
+                [3.5, 4.0, 2.8, 3.6, 4.1, 2.5],
+                [4.7, 4.5, 4.6, 4.8, 4.4, 4.3],
+                [2.1, 1.8, 2.5, 2.3, 1.9, None],
+                [3.8, 3.5, 3.9, 3.6, 3.4, 3.2],
+                [None, 4.2, 3.9, 4.0, None, 3.7],
+                [4.1, 4.0, 3.5, 4.2, 4.3, 3.8],
+                [None, None, 1.5, 2.2, None, None],
+              ] %}
+              <div class="heatmap" style="grid-template-columns: repeat(6, 1fr);">
+                {% for row in rows %}{% for v in row %}
+                  {% if v is none %}
+                    <div class="heatmap__cell heatmap__cell--empty" title="Нет попыток">—</div>
+                  {% elif v >= 4.5 %}
+                    <div class="heatmap__cell heatmap__cell--top">{{ '%.1f' | format(v) }}</div>
+                  {% elif v >= 3.5 %}
+                    <div class="heatmap__cell heatmap__cell--high">{{ '%.1f' | format(v) }}</div>
+                  {% elif v >= 2.5 %}
+                    <div class="heatmap__cell heatmap__cell--mid">{{ '%.1f' | format(v) }}</div>
+                  {% else %}
+                    <div class="heatmap__cell heatmap__cell--low">{{ '%.1f' | format(v) }}</div>
+                  {% endif %}
+                {% endfor %}{% endfor %}
+              </div>
+            </div>
+          </div>
+          <p class="t-xs t-muted mt-4">Цвет — последний score по теме. «—» — попыток не было. Кликабельная ячейка → drill-down (без раскрытия текста ответов студента, M5 supervisor-privacy).</p>
+        </div>
+      </div>
+
+      <!-- =================================================== -->
+      <!-- SOURCE PANEL                                        -->
+      <!-- =================================================== -->
+      <div class="sg-section" id="source-panel">
+        <div class="sg-section__head">
+          <span class="sg-section__num">11</span>
+          <h2 class="sg-section__title">Source-panel</h2>
+        </div>
+        <div class="sg-frame" style="padding: 0; overflow: hidden">
+          <div class="flex" style="height: 360px">
+            <div class="flex-1 p-5 flex-col gap-3 t-muted t-sm">
+              <div class="bubble bubble--atlas">
+                <div class="bubble__author">ATLAS</div>
+                Дисперсия — зависимость показателя преломления от длины волны <a href="#" class="cite cite--active">1</a>. Нормальная дисперсия наблюдается, когда n монотонно убывает с длиной волны <a href="#" class="cite">2</a>.
+              </div>
+            </div>
+            <aside class="source-panel">
+              <div class="source-panel__title">Источники</div>
+              <div class="source-card source-card--active">
+                <span class="source-card__index">1</span>
+                <span class="source-card__title">Born &amp; Wolf</span>
+                <span class="source-card__page">с. 96</span>
+                <div class="source-card__snippet">Refractive index n is, in general, a function of frequency. The phenomenon is known as dispersion.</div>
+              </div>
+              <div class="source-card">
+                <span class="source-card__index">2</span>
+                <span class="source-card__title">Матвеев</span>
+                <span class="source-card__page">с. 112</span>
+                <div class="source-card__snippet">При нормальной дисперсии n монотонно убывает с увеличением длины волны...</div>
+              </div>
+              <div class="source-card">
+                <span class="source-card__index">3</span>
+                <span class="source-card__title">Yariv</span>
+                <span class="source-card__page">с. 28</span>
+                <div class="source-card__snippet">The wavelength dependence of the refractive index gives rise to the phenomenon of dispersion.</div>
+              </div>
+            </aside>
+          </div>
+        </div>
+      </div>
+
+      <!-- =================================================== -->
+      <!-- STATES                                              -->
+      <!-- =================================================== -->
+      <div class="sg-section" id="states">
+        <div class="sg-section__head">
+          <span class="sg-section__num">12</span>
+          <h2 class="sg-section__title">Состояния — пустота, загрузка, шаги, toast, modal</h2>
+        </div>
+
+        <h3 class="t-uppercase mb-3">Empty state</h3>
+        <div class="card mb-5">
+          <div class="empty">
+            <div class="empty__icon"><i class="bi bi-inbox" style="font-size:48px"></i></div>
+            <div class="empty__title">Попыток ещё нет</div>
+            <div class="empty__subtitle">Запустите первую самопроверку — результаты появятся здесь.</div>
+            <button class="btn btn--primary"><i class="bi bi-plus-lg"></i>Новая самопроверка</button>
+          </div>
+        </div>
+
+        <h3 class="t-uppercase mb-3">Spinner и step-badges</h3>
+        <div class="sg-row">
+          <span class="spinner"></span>
+          <span class="spinner spinner--lg"></span>
+          <span class="step-badge step-badge--done"><i class="bi bi-check"></i>Анализ темы</span>
+          <span class="step-badge step-badge--active"><span class="spinner" style="width:10px;height:10px;border-color:rgba(255,255,255,.4);border-top-color:#fff"></span>Составляю вопросы</span>
+          <span class="step-badge">Финализация</span>
+        </div>
+
+        <h3 class="t-uppercase mt-6 mb-3">Toast</h3>
+        <div class="sg-row" style="position: relative; height: 80px">
+          <span class="t-xs t-muted">Toast обычно фиксирован в углу экрана; здесь показан inline:</span>
+          <span class="toast" style="position:static">
+            <i class="bi bi-check-circle-fill" style="color: var(--c-success)"></i>
+            Файл загружен
+          </span>
+        </div>
+
+        <h3 class="t-uppercase mt-6 mb-3">Modal</h3>
+        <div class="sg-row">
+          <button class="btn btn--secondary" id="modal-toggle">Показать модалку</button>
+        </div>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<!-- Live modal (toggleable) -->
+<div class="overlay" id="demo-modal">
+  <div class="modal">
+    <div class="modal__title">Удалить материал?</div>
+    <p class="t-sm t-muted mb-4">Документ «born_wolf_principles_of_optics_1973» будет удалён, включая все чанки. Это действие нельзя отменить.</p>
+    <div class="flex gap-3 justify-end">
+      <button class="btn btn--ghost" onclick="closeModal()">Отмена</button>
+      <button class="btn btn--danger">Удалить</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Theme toggle
+  const root = document.documentElement;
+  const label = document.getElementById('theme-label');
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const next = root.dataset.theme === 'dark' ? 'light' : 'dark';
+    root.dataset.theme = next;
+    label.textContent = next === 'dark' ? 'Dark' : 'Light';
+  });
+
+  // Modal toggle
+  const modal = document.getElementById('demo-modal');
+  document.getElementById('modal-toggle').addEventListener('click', () => modal.classList.add('overlay--open'));
+  function closeModal() { modal.classList.remove('overlay--open'); }
+  modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+</script>
+
+</body>
+</html>
