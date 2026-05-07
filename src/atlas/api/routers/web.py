@@ -37,3 +37,21 @@ async def styleguide_page(request: Request):
     """Internal design-system showcase. No auth gate — page is harmless,
     but kept on `_/` prefix to signal internal use."""
     return templates.TemplateResponse(request=request, name="_styleguide.html")
+
+
+# Phase 3 wireframes — internal previews of redesigned screens.
+# All under /_/wf/* prefix, no auth, hard-coded sample data.
+# Will be deleted at end of Phase 5 once production templates are migrated.
+@router.get("/_/wf/chat", response_class=HTMLResponse)
+async def wf_chat(request: Request):
+    return templates.TemplateResponse(request=request, name="wf/chat.html")
+
+
+@router.get("/_/wf/refusal", response_class=HTMLResponse)
+async def wf_refusal(request: Request):
+    return templates.TemplateResponse(request=request, name="wf/refusal.html")
+
+
+@router.get("/_/wf/eval", response_class=HTMLResponse)
+async def wf_eval(request: Request):
+    return templates.TemplateResponse(request=request, name="wf/eval.html")

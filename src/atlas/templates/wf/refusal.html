@@ -1,0 +1,72 @@
+{% extends "wf/_layout.html" %}
+{% from "wf/_partials.html" import sidebar_student %}
+{% block title %}Hard-gate{% endblock %}
+{% block content_mode %}app__content--chat{% endblock %}
+{% block sidebar %}{{ sidebar_student(active='chat') }}{% endblock %}
+
+{% block content %}
+<div class="flex-col gap-3 mb-5">
+  <a href="/_/wf/chat" class="t-xs t-muted flex items-center gap-2" style="text-decoration:none">
+    <i class="bi bi-arrow-left"></i>Вернуться к чату
+  </a>
+</div>
+
+<!-- The user's question, shown above the refusal so context isn't lost -->
+<div class="bubble bubble--user mb-5" style="margin-left: auto; max-width: 60%">
+  <div class="bubble__author">Ваш вопрос</div>
+  Расскажи, как доказать гипотезу Римана.
+</div>
+
+<!-- First-class refusal screen -->
+<div class="refusal">
+  <div class="refusal__icon"><img src="/static/icons/atlas-shield.svg" alt=""></div>
+  <h1 class="refusal__title">Hard-gate: запрос отклонён</h1>
+  <p class="refusal__subtitle">
+    В корпусе кафедры не найдено достаточно доказательств, чтобы ответить на этот вопрос.
+    Защита от галлюцинаций сработала <b>до обращения к LLM</b> — на уровне retrieval-оценки.
+  </p>
+
+  <div class="refusal__metrics">
+    <div class="refusal__metric refusal__metric--breach">
+      <div class="refusal__metric-label">Лучший vector-score</div>
+      <div class="refusal__metric-value">0.31 / порог 0.55</div>
+    </div>
+    <div class="refusal__metric refusal__metric--breach">
+      <div class="refusal__metric-label">Чанков выше порога</div>
+      <div class="refusal__metric-value">0 / нужно ≥ 2</div>
+    </div>
+    <div class="refusal__metric">
+      <div class="refusal__metric-label">Время решения</div>
+      <div class="refusal__metric-value">1.7 s</div>
+    </div>
+    <div class="refusal__metric">
+      <div class="refusal__metric-label">LLM-вызов</div>
+      <div class="refusal__metric-value">не выполнен</div>
+    </div>
+  </div>
+
+  <p class="refusal__footnote">
+    Это поведение детерминировано на уровне retrieval. На off-topic eval-set'е метрика
+    <code class="t-mono">refusal_tnr = 1.000</code> (vs <code class="t-mono">0.000</code> у baseline без hard-gate).
+  </p>
+
+  <div class="flex gap-3 justify-center">
+    <a href="/_/wf/chat" class="btn btn--primary"><i class="bi bi-arrow-counterclockwise"></i>Задать другой вопрос</a>
+    <a href="/_/wf/eval" class="btn btn--ghost"><i class="bi bi-graph-up"></i>Посмотреть метрики</a>
+  </div>
+</div>
+
+<!-- Helpful follow-up: what's actually in this corpus -->
+<div class="card mt-6" style="max-width: 600px; margin-left: auto; margin-right: auto;">
+  <div class="card__title">Темы, по которым корпус кафедры даёт ответы</div>
+  <div class="t-sm t-muted mb-3">Эти 6 топиков покрыты материалами и проходят через retrieval-gate.</div>
+  <div class="flex flex-wrap gap-2">
+    <span class="badge badge--info">Геометрическая оптика</span>
+    <span class="badge badge--info">Волновая оптика</span>
+    <span class="badge badge--info">Поляризация</span>
+    <span class="badge badge--info">Дисперсия</span>
+    <span class="badge badge--info">Интерференция</span>
+    <span class="badge badge--info">Дифракция</span>
+  </div>
+</div>
+{% endblock %}

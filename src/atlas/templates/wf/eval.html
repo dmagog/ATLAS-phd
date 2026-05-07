@@ -1,0 +1,190 @@
+{% extends "wf/_layout.html" %}
+{% from "wf/_partials.html" import sidebar_super_admin %}
+{% block title %}Eval{% endblock %}
+{% block content_mode %}app__content--dashboard{% endblock %}
+{% block sidebar %}{{ sidebar_super_admin(active='eval') }}{% endblock %}
+{% block topbar %}
+  {% from "wf/_partials.html" import topbar %}
+  {{ topbar(role='super-admin', tenant='Платформа · все тенанты', email='georgy@mail.ru', initials='GM') }}
+{% endblock %}
+
+{% block content %}
+<div class="flex items-baseline justify-between mb-5">
+  <div class="flex-col gap-1">
+    <h1 class="t-2xl t-bold">Eval Dashboard</h1>
+    <div class="t-sm t-muted">Контроль качества RAG + agentic-конвейера. Метрики из последнего прогона eval-set v1.1.</div>
+  </div>
+  <div class="flex gap-2 items-center">
+    <span class="t-xs t-muted">Последний прогон:</span>
+    <span class="t-xs t-mono">2026-05-07 14:23</span>
+    <button class="btn btn--secondary btn--sm"><i class="bi bi-arrow-clockwise"></i>Перезапустить</button>
+  </div>
+</div>
+
+<!-- Hero metrics row -->
+<div class="grid grid-cols-3 mb-5">
+  <div class="hero-card">
+    <div class="hero-card__label">Refusal TNR</div>
+    <div class="hero-card__value hero-card__value--success">1.000</div>
+    <div class="hero-card__compare">
+      <span>vs baseline</span>
+      <span class="hero-card__compare-value">0.000</span>
+    </div>
+    <div class="t-xs t-muted mt-2">True negative rate на 20 off-topic вопросах. BDD 6.1.</div>
+  </div>
+
+  <div class="hero-card">
+    <div class="hero-card__label">κ binarized</div>
+    <div class="hero-card__value hero-card__value--brand">1.000</div>
+    <div class="hero-card__compare">
+      <span>self-check rubric vs expert</span>
+    </div>
+    <div class="t-xs t-muted mt-2">Cohen's κ на бинарной классификации зачёт/незачёт. 20/20 совпадений.</div>
+  </div>
+
+  <div class="hero-card">
+    <div class="hero-card__label">Hard-gate latency</div>
+    <div class="hero-card__value">&lt; 2<span class="t-xl t-muted">s</span></div>
+    <div class="hero-card__compare">
+      <span>p95, без LLM</span>
+    </div>
+    <div class="t-xs t-muted mt-2">Решение об отказе принимается на retrieval-уровне, без сетевого вызова к OpenRouter.</div>
+  </div>
+</div>
+
+<!-- Bar comparison: faithfulness per topic -->
+<div class="card mb-5">
+  <div class="flex items-baseline justify-between mb-4">
+    <div>
+      <h2 class="card__title">Faithfulness по топикам</h2>
+      <div class="card__subtitle">Доля заявлений ответа, подтверждённых процитированным фрагментом. LLM-judge.</div>
+    </div>
+    <div class="flex gap-3">
+      <span class="t-xs t-muted"><span style="display:inline-block;width:10px;height:10px;background:var(--c-text-3);border-radius:2px;margin-right:6px;vertical-align:middle"></span>baseline</span>
+      <span class="t-xs t-muted"><span style="display:inline-block;width:10px;height:10px;background:var(--c-primary);border-radius:2px;margin-right:6px;vertical-align:middle"></span>verifier</span>
+    </div>
+  </div>
+  <div class="bar-cmp">
+    {% set topics = [
+      ('Геометрическая оптика', 0.62, 0.94),
+      ('Волновая оптика',       0.58, 0.91),
+      ('Поляризация',           0.49, 0.88),
+      ('Дисперсия',             0.66, 0.95),
+      ('Интерференция',         0.71, 0.96),
+      ('Дифракция',             0.55, 0.89),
+    ] %}
+    {% for (t, b, v) in topics %}
+    <div class="bar-cmp__row">
+      <div class="bar-cmp__label">{{ t }}</div>
+      <div class="bar-cmp__pair">
+        <div class="bar-cmp__track"><div class="bar-cmp__fill bar-cmp__fill--baseline" style="width: {{ (b * 100) | round | int }}%"></div></div>
+        <div class="bar-cmp__track"><div class="bar-cmp__fill bar-cmp__fill--verifier" style="width: {{ (v * 100) | round | int }}%"></div></div>
+      </div>
+      <div class="bar-cmp__value">{{ '%.2f' | format(b) }} / {{ '%.2f' | format(v) }}</div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- Per-topic detailed table -->
+<div class="card">
+  <h2 class="card__title">Полная разбивка по топикам</h2>
+  <div class="card__subtitle">eval-set v1.1, 120 элементов, конфигурация <code class="t-mono">VERIFIER_ENABLED=true</code></div>
+
+  <table style="width:100%; border-collapse:collapse; font-size: var(--fs-sm); margin-top: var(--sp-3);">
+    <thead>
+      <tr style="border-bottom: 2px solid var(--c-border);">
+        <th style="text-align:left;  padding: 8px 6px; color: var(--c-text-2); font-weight: 500; font-size: var(--fs-xs);">Топик</th>
+        <th style="text-align:right; padding: 8px 6px; color: var(--c-text-2); font-weight: 500; font-size: var(--fs-xs);">Faithfulness</th>
+        <th style="text-align:right; padding: 8px 6px; color: var(--c-text-2); font-weight: 500; font-size: var(--fs-xs);">Citation acc.</th>
+        <th style="text-align:right; padding: 8px 6px; color: var(--c-text-2); font-weight: 500; font-size: var(--fs-xs);">Refusal TNR</th>
+        <th style="text-align:right; padding: 8px 6px; color: var(--c-text-2); font-weight: 500; font-size: var(--fs-xs);">Latency p95</th>
+        <th style="text-align:right; padding: 8px 6px; color: var(--c-text-2); font-weight: 500; font-size: var(--fs-xs);">N</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% set rows = [
+        ('Геометрическая оптика', 0.94, 0.96, 1.00, 4.2, 20),
+        ('Волновая оптика',       0.91, 0.93, 1.00, 4.5, 20),
+        ('Поляризация',           0.88, 0.91, 1.00, 4.8, 20),
+        ('Дисперсия',             0.95, 0.97, 1.00, 4.1, 20),
+        ('Интерференция',         0.96, 0.95, 1.00, 4.0, 20),
+        ('Дифракция',             0.89, 0.92, 1.00, 4.6, 20),
+      ] %}
+      {% for (t, f, c, r, l, n) in rows %}
+      <tr style="border-bottom: 1px solid var(--c-border);">
+        <td style="padding: 10px 6px;"><b>{{ t }}</b></td>
+        <td style="padding: 10px 6px; text-align: right; font-family: var(--font-mono); color: var(--c-success)">{{ '%.2f' | format(f) }}</td>
+        <td style="padding: 10px 6px; text-align: right; font-family: var(--font-mono);">{{ '%.2f' | format(c) }}</td>
+        <td style="padding: 10px 6px; text-align: right; font-family: var(--font-mono); color: var(--c-success)">{{ '%.2f' | format(r) }}</td>
+        <td style="padding: 10px 6px; text-align: right; font-family: var(--font-mono); color: var(--c-text-2)">{{ '%.1f' | format(l) }} s</td>
+        <td style="padding: 10px 6px; text-align: right; color: var(--c-text-3)">{{ n }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr style="border-top: 2px solid var(--c-border);">
+        <td style="padding: 12px 6px;"><b>Итого</b></td>
+        <td style="padding: 12px 6px; text-align: right; font-family: var(--font-mono); color: var(--c-success); font-weight: 600;">0.92</td>
+        <td style="padding: 12px 6px; text-align: right; font-family: var(--font-mono); font-weight: 600;">0.94</td>
+        <td style="padding: 12px 6px; text-align: right; font-family: var(--font-mono); color: var(--c-success); font-weight: 600;">1.00</td>
+        <td style="padding: 12px 6px; text-align: right; font-family: var(--font-mono); color: var(--c-text-2); font-weight: 600;">4.4 s</td>
+        <td style="padding: 12px 6px; text-align: right; font-weight: 600;">120</td>
+      </tr>
+    </tfoot>
+  </table>
+</div>
+
+<!-- Self-check rubric agreement -->
+<div class="grid grid-cols-2 mt-5">
+  <div class="card">
+    <h2 class="card__title">Self-check: rubric agreement</h2>
+    <div class="card__subtitle">20 попыток, оценённых системой и экспертом независимо.</div>
+    <div class="rubric mt-4">
+      <div class="rubric__cell rubric__cell--good">
+        <div class="rubric__label">Точность <span class="rubric__weight">40%</span></div>
+        <div class="rubric__value rubric__value--good">κ=1.00</div>
+      </div>
+      <div class="rubric__cell rubric__cell--good">
+        <div class="rubric__label">Полнота <span class="rubric__weight">30%</span></div>
+        <div class="rubric__value rubric__value--good">κ=0.92</div>
+      </div>
+      <div class="rubric__cell rubric__cell--good">
+        <div class="rubric__label">Логика <span class="rubric__weight">20%</span></div>
+        <div class="rubric__value rubric__value--good">κ=0.95</div>
+      </div>
+      <div class="rubric__cell rubric__cell--mid">
+        <div class="rubric__label">Терминология <span class="rubric__weight">10%</span></div>
+        <div class="rubric__value rubric__value--mid">κ=0.81</div>
+      </div>
+    </div>
+    <p class="t-xs t-muted mt-4">
+      На бинарной классификации <b>зачёт/незачёт</b> κ=1.000 (20/20).
+      На полной 5-балльной шкале расхождения только в терминологии.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2 class="card__title">Воспроизводимость</h2>
+    <div class="card__subtitle">Прогон одного и того же eval-set'а 7 раз подряд.</div>
+    <div class="grid grid-cols-2 mt-4 gap-3">
+      <div class="metric">
+        <div class="metric__value t-mono">6/7</div>
+        <div class="metric__label">прогонов в σ&lt;0.02 на faithfulness</div>
+      </div>
+      <div class="metric">
+        <div class="metric__value t-mono">7/7</div>
+        <div class="metric__label">прогонов с одинаковыми refusal-исходами</div>
+      </div>
+      <div class="metric">
+        <div class="metric__value t-mono">±0.01</div>
+        <div class="metric__label">разброс κ между прогонами</div>
+      </div>
+      <div class="metric">
+        <div class="metric__value t-mono">±0.3 s</div>
+        <div class="metric__label">разброс latency p50</div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
