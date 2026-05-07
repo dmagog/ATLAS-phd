@@ -1,193 +1,270 @@
-{% extends "base.html" %}
+{% extends "_app.html" %}
+{% from "_partials.html" import sidebar_student, topbar %}
 {% block title %}Самопроверка{% endblock %}
+{% block content_mode %}app__content--chat{% endblock %}
+{% block sidebar %}{{ sidebar_student(active='selfcheck') }}{% endblock %}
+{% block topbar %}{{ topbar() }}{% endblock %}
+
 {% block content %}
-<div class="card" id="start-card">
-  <h2 style="font-size:1rem;margin-bottom:14px">Самопроверка по теме</h2>
-  <div style="display:flex;gap:8px">
-    <input id="topic-input" placeholder="Введите тему (например: «Метод наименьших квадратов»)">
-    <select id="lang-select" style="width:auto">
-      <option value="ru">RU</option>
-      <option value="en">EN</option>
-    </select>
-    <button class="btn-primary" id="start-btn" style="white-space:nowrap">Начать</button>
-  </div>
-  <div id="start-status" style="display:none;margin-top:14px;padding:12px 14px;background:#eff6ff;border-radius:8px;border:1px solid #bfdbfe">
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
-      <span style="display:inline-block;width:16px;height:16px;border:2px solid #bfdbfe;border-top-color:#2563eb;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0"></span>
-      <span id="start-status-text" style="font-size:.9rem;font-weight:500;color:#1d4ed8"></span>
+
+<!-- ───────── Start state ───────── -->
+<div id="start-card" class="card">
+  <h1 class="t-xl t-bold mb-2">Самопроверка по теме</h1>
+  <p class="t-sm t-muted mb-5">
+    Введите тему — ATLAS сгенерирует 6 вопросов (MC + open-ended) и оценит ответы по рубрике
+    <span class="badge badge--info"><i class="bi bi-shield-check" aria-hidden="true"></i>κ = 1.000 vs expert</span>.
+  </p>
+
+  <div class="flex gap-2 items-end" style="flex-wrap: wrap;">
+    <div class="field" style="flex: 1; min-width: 280px; margin-bottom: 0;">
+      <label class="label" for="topic-input">Тема</label>
+      <input class="input" id="topic-input" placeholder="Например: «Метод наименьших квадратов»">
     </div>
-    <div id="start-steps" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+    <div class="field" style="margin-bottom: 0;">
+      <label class="label" for="lang-select">Язык</label>
+      <select class="select" id="lang-select" style="width: 80px;">
+        <option value="ru">RU</option>
+        <option value="en">EN</option>
+      </select>
+    </div>
+    <button class="btn btn--primary btn--lg" id="start-btn"><i class="bi bi-play-fill" aria-hidden="true"></i>Начать</button>
   </div>
-  <div id="start-error" class="error hidden"></div>
+
+  <!-- Loading state shown after 'Начать' -->
+  <div id="start-status" class="card card--flat mt-4 hidden" style="background: var(--c-primary-bg); border-left: 3px solid var(--c-primary);">
+    <div class="flex items-center gap-3 mb-2">
+      <span class="spinner"></span>
+      <span class="t-sm t-bold" id="start-status-text">Генерирую вопросы…</span>
+    </div>
+    <div class="flex gap-2 flex-wrap" id="start-steps"></div>
+  </div>
+
+  <div id="start-error" class="hidden mt-3" style="background: var(--c-danger-bg); color: var(--c-danger); padding: var(--sp-2) var(--sp-3); border-radius: var(--r-md); font-size: var(--fs-xs);"></div>
 </div>
 
+
+<!-- ───────── Questions state ───────── -->
 <div id="questions-card" class="card hidden">
-  <h2 style="font-size:1rem;margin-bottom:14px">Вопросы по теме: <span id="topic-label"></span></h2>
-  <div id="questions-list" style="display:flex;flex-direction:column;gap:16px"></div>
-  <button class="btn-primary" id="submit-btn" style="margin-top:16px">Отправить ответы</button>
-  <div id="submit-status" style="display:none;margin-top:12px;padding:12px 14px;background:#eff6ff;border-radius:8px;border:1px solid #bfdbfe">
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
-      <span style="display:inline-block;width:16px;height:16px;border:2px solid #bfdbfe;border-top-color:#2563eb;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0"></span>
-      <span id="submit-status-text" style="font-size:.9rem;font-weight:500;color:#1d4ed8"></span>
+  <div class="flex items-baseline justify-between mb-4">
+    <div>
+      <h1 class="t-xl t-bold">Вопросы по теме</h1>
+      <div class="t-sm t-muted"><span id="topic-label">—</span></div>
     </div>
-    <div id="submit-steps" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+    <button class="btn btn--ghost btn--sm" id="cancel-btn"><i class="bi bi-x" aria-hidden="true"></i>Отмена</button>
   </div>
-  <div id="submit-error" class="error hidden"></div>
+
+  <div id="questions-list" class="flex-col gap-4"></div>
+
+  <button class="btn btn--primary btn--lg btn--block mt-5" id="submit-btn">
+    <i class="bi bi-check2-square" aria-hidden="true"></i>Отправить ответы
+  </button>
+
+  <div id="submit-status" class="card card--flat mt-3 hidden" style="background: var(--c-primary-bg); border-left: 3px solid var(--c-primary);">
+    <div class="flex items-center gap-3 mb-2">
+      <span class="spinner"></span>
+      <span class="t-sm t-bold" id="submit-status-text">Оцениваю ответы…</span>
+    </div>
+    <div class="flex gap-2 flex-wrap" id="submit-steps"></div>
+  </div>
+
+  <div id="submit-error" class="hidden mt-3" style="background: var(--c-danger-bg); color: var(--c-danger); padding: var(--sp-2) var(--sp-3); border-radius: var(--r-md); font-size: var(--fs-xs);"></div>
 </div>
 
-<div id="results-card" class="card hidden">
-  <h2 style="font-size:1rem;margin-bottom:14px">Результаты</h2>
-  <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:4px">
-    <div id="score-display" style="font-size:2.4rem;font-weight:700;color:#2563eb"></div>
-    <div id="score-label" style="font-size:.9rem;color:#6b7280"></div>
+
+<!-- ───────── Results state ───────── -->
+<div id="results-card" class="hidden">
+  <!-- Header with topic + actions -->
+  <div class="flex items-baseline justify-between mb-5">
+    <div>
+      <h1 class="t-2xl t-bold" id="results-topic">—</h1>
+      <div class="t-sm t-muted">Самопроверка · 6 вопросов · <time id="results-time">—</time></div>
+    </div>
+    <div class="flex gap-2">
+      <a href="/self-check/history" class="btn btn--ghost btn--sm"><i class="bi bi-list-ul" aria-hidden="true"></i>История</a>
+      <button class="btn btn--secondary btn--sm" id="restart-btn"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i>Новая</button>
+    </div>
   </div>
-  <div id="score-bar" style="height:8px;background:#e5e7eb;border-radius:4px;margin-bottom:16px">
-    <div id="score-fill" style="height:100%;border-radius:4px;transition:width .4s"></div>
+
+  <!-- Hero score + rubric -->
+  <div class="card mb-4">
+    <div class="flex items-end gap-5 mb-5" style="flex-wrap: wrap;">
+      <div class="flex-col gap-1">
+        <div class="t-uppercase">Итоговая оценка</div>
+        <div class="t-hero" id="overall-score">—</div>
+      </div>
+      <div class="flex-col gap-1" style="flex: 1; min-width: 200px;">
+        <div class="t-md t-bold" id="overall-verdict">—</div>
+        <div class="t-sm t-muted" id="overall-summary">—</div>
+      </div>
+      <div class="flex-col gap-2" style="text-align: right;">
+        <a href="/eval" class="badge badge--info" style="text-decoration:none">
+          <i class="bi bi-shield-check" aria-hidden="true"></i>Rubric κ = 1.000 vs expert
+        </a>
+        <span class="t-xs t-muted">по бинарной классификации зачёт/незачёт</span>
+      </div>
+    </div>
+
+    <div class="rubric mb-3" id="rubric-grid"></div>
+
+    <div id="evaluator-summary-card" class="card card--flat hidden" style="background: var(--c-primary-bg); border-left: 3px solid var(--c-primary);">
+      <div class="t-uppercase mb-1">Резюме эксперта</div>
+      <p class="t-sm" id="evaluator-summary-text"></p>
+    </div>
+
+    <div id="error-tags" class="flex flex-wrap gap-2 mt-3"></div>
   </div>
-  <div id="criteria-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px"></div>
-  <div id="feedback-text" style="font-size:.9rem;line-height:1.6;color:#374151;margin-bottom:10px;padding:12px;background:#f9fafb;border-radius:6px;border-left:3px solid #2563eb"></div>
-  <div id="error-tags" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px"></div>
 
   <!-- Per-question breakdown -->
-  <h3 style="font-size:.95rem;margin-bottom:12px;border-top:1px solid #e5e7eb;padding-top:14px">Разбор по вопросам</h3>
-  <div id="questions-breakdown" style="display:flex;flex-direction:column;gap:12px"></div>
+  <h2 class="t-lg t-bold mb-3 mt-6">Разбор по вопросам</h2>
+  <div id="questions-breakdown" class="flex-col gap-3"></div>
 
-  <button class="btn-secondary" id="restart-btn" style="margin-top:20px">Новая проверка</button>
+  <div class="flex gap-3 justify-center mt-6 mb-5">
+    <a href="/self-check/history" class="btn btn--secondary"><i class="bi bi-list-ul" aria-hidden="true"></i>К истории</a>
+    <button class="btn btn--primary" id="restart-btn-2"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i>Новая проверка</button>
+  </div>
 </div>
+
 {% endblock %}
+
 {% block scripts %}
-<style>
-@keyframes spin { to { transform: rotate(360deg); } }
-.step-badge {
-  font-size:.78rem;padding:2px 8px;border-radius:12px;
-  background:#dbeafe;color:#1e40af;white-space:nowrap;
-  transition:background .3s,color .3s;
-}
-.step-badge.active { background:#2563eb;color:#fff; }
-.step-badge.done   { background:#dcfce7;color:#166534; }
-</style>
 <script>
+function escHtml(s) {
+  return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function scoreColor(s) { return s >= 4 ? 'var(--c-success)' : s >= 2.5 ? 'var(--c-warning)' : 'var(--c-danger)'; }
+function scoreLevel(s) { return s >= 4 ? 'good' : s >= 2.5 ? 'mid' : 'bad'; }
+function show(id) { document.getElementById(id).classList.remove('hidden'); }
+function hide(id) { document.getElementById(id).classList.add('hidden'); }
+
 let currentAttemptId = null;
 let currentQuestions = [];
-let stepTimers = [];
+let stepRotateTimer = null;
 
-const GENERATE_STEPS = ['<i class="bi bi-crosshair"></i> Анализирую тему', '<i class="bi bi-pencil"></i> Составляю вопросы', '<i class="bi bi-card-checklist"></i> Финализирую тест'];
-const EVALUATE_STEPS = ['<i class="bi bi-check2-square"></i> Проверяю ответы', '<i class="bi bi-bar-chart-line"></i> Оцениваю по критериям', '<i class="bi bi-lightbulb"></i> Формирую обратную связь'];
+const GENERATE_STEPS = [
+  '<i class="bi bi-crosshair"></i> Анализирую тему',
+  '<i class="bi bi-pencil"></i> Составляю вопросы',
+  '<i class="bi bi-card-checklist"></i> Финализирую тест',
+];
+const EVALUATE_STEPS = [
+  '<i class="bi bi-check2-square"></i> Проверяю ответы',
+  '<i class="bi bi-bar-chart-line"></i> Оцениваю по критериям',
+  '<i class="bi bi-lightbulb"></i> Формирую обратную связь',
+];
 
-let _stepSeq = 0; // unique prefix per startSteps call avoids id collisions
-
-function startSteps(textEl, stepsEl, steps) {
-  stopSteps();
-  const prefix = 'step-' + (++_stepSeq) + '-';
-  textEl.innerHTML = steps[0];
-  stepsEl.innerHTML = steps.map((s, i) =>
-    `<span class="step-badge ${i === 0 ? 'active' : ''}" id="${prefix}${i}">${s}</span>`
+function renderStepBadges(containerId, steps) {
+  const c = document.getElementById(containerId);
+  c.innerHTML = steps.map((s, i) =>
+    `<span class="step-badge ${i === 0 ? 'step-badge--active' : ''}" data-step="${i}">${s}</span>`
   ).join('');
+}
 
+function startStepRotation(containerId, steps, textElId) {
   let idx = 0;
-  const t = setInterval(() => {
-    stepsEl.querySelector(`#${prefix}${idx}`)?.classList.replace('active', 'done');
-    idx = Math.min(idx + 1, steps.length - 1);
-    const next = stepsEl.querySelector(`#${prefix}${idx}`);
-    if (next) { next.classList.add('active'); textEl.innerHTML = steps[idx]; }
+  if (stepRotateTimer) clearInterval(stepRotateTimer);
+  document.getElementById(textElId).innerHTML = steps[0];
+  renderStepBadges(containerId, steps);
+  stepRotateTimer = setInterval(() => {
+    const next = Math.min(idx + 1, steps.length - 1);
+    if (next === idx) return;
+    const c = document.getElementById(containerId);
+    c.querySelector(`[data-step="${idx}"]`)?.classList.replace('step-badge--active', 'step-badge--done');
+    c.querySelector(`[data-step="${next}"]`)?.classList.add('step-badge--active');
+    document.getElementById(textElId).innerHTML = steps[next];
+    idx = next;
   }, 4000);
-  stepTimers.push(t);
 }
 
-function stopSteps() {
-  stepTimers.forEach(t => clearInterval(t));
-  stepTimers = [];
+function stopStepRotation() {
+  if (stepRotateTimer) { clearInterval(stepRotateTimer); stepRotateTimer = null; }
 }
 
-// ── Start ─────────────────────────────────────────────────────────────────────
+const _KATEX_OPTS = { delimiters: [{left:'$$',right:'$$',display:true}, {left:'$',right:'$',display:false}] };
+function renderMath(el) { if (typeof renderMathInElement === 'function') renderMathInElement(el, _KATEX_OPTS); }
+
+
+// ───────── Start handler ─────────
 document.getElementById('start-btn').addEventListener('click', async () => {
   const topic = document.getElementById('topic-input').value.trim();
   if (!topic) return;
-  const btn = document.getElementById('start-btn');
-  const errEl = document.getElementById('start-error');
-  const statusEl = document.getElementById('start-status');
-  btn.disabled = true;
-  errEl.classList.add('hidden');
-  statusEl.style.display = 'block';
-  startSteps(
-    document.getElementById('start-status-text'),
-    document.getElementById('start-steps'),
-    GENERATE_STEPS,
-  );
+  hide('start-error');
+  document.getElementById('start-btn').disabled = true;
+  show('start-status');
+  startStepRotation('start-steps', GENERATE_STEPS, 'start-status-text');
+
   try {
-    const res = await fetch('/self-check/start', {
-      method: 'POST', headers: authHeaders(),
-      body: JSON.stringify({topic, language: document.getElementById('lang-select').value}),
+    const res = await authFetch('/self-check/start', {
+      method: 'POST',
+      body: JSON.stringify({ topic, language: document.getElementById('lang-select').value }),
     });
-    stopSteps();
-    statusEl.style.display = 'none';
-    if (checkUnauthorized(res)) { btn.disabled = false; return; }
+    stopStepRotation();
     if (!res.ok) {
+      hide('start-status');
       let msg = 'Ошибка генерации вопросов.';
-      try { const e = await res.json(); if (e.detail) msg = e.detail; } catch(_) {}
-      errEl.textContent = msg; errEl.classList.remove('hidden'); btn.disabled = false; return;
+      try { const e = await res.json(); if (e.detail) msg = e.detail; } catch (_) {}
+      const errEl = document.getElementById('start-error');
+      errEl.textContent = msg;
+      show('start-error');
+      document.getElementById('start-btn').disabled = false;
+      return;
     }
     const data = await res.json();
     currentAttemptId = data.attempt_id;
     currentQuestions = data.questions;
     renderQuestions(data.questions, topic);
-    document.getElementById('start-card').classList.add('hidden');
-    document.getElementById('questions-card').classList.remove('hidden');
-  } catch(e) {
-    stopSteps();
-    statusEl.style.display = 'none';
-    errEl.textContent = 'Ошибка соединения.'; errEl.classList.remove('hidden');
+    hide('start-card');
+    show('questions-card');
+  } catch (err) {
+    if (err.message !== 'unauthorized') {
+      stopStepRotation();
+      hide('start-status');
+      const errEl = document.getElementById('start-error');
+      errEl.textContent = 'Ошибка соединения.';
+      show('start-error');
+    }
+    document.getElementById('start-btn').disabled = false;
   }
-  btn.disabled = false;
 });
 
-const _KATEX_OPTS = {delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]};
 
-function renderMath(el) {
-  if (typeof renderMathInElement === 'function') renderMathInElement(el, _KATEX_OPTS);
-}
-
+// ───────── Render questions ─────────
 function renderQuestions(questions, topic) {
   document.getElementById('topic-label').textContent = topic;
   const container = document.getElementById('questions-list');
   container.innerHTML = '';
+
   questions.forEach((q, i) => {
-    const div = document.createElement('div');
-    div.style.cssText = 'border:1px solid #e5e7eb;border-radius:8px;padding:14px';
-    let inner = `<div style="font-weight:500;margin-bottom:8px">${i+1}. ${q.prompt}</div>`;
+    const card = document.createElement('div');
+    card.className = 'card card--flat';
+    card.style.background = 'var(--c-surface-2)';
+    let inner = `<div class="t-md t-bold mb-2">${i + 1}. ${escHtml(q.prompt)}</div>`;
     if (q.type === 'multiple_choice') {
       const maxLen = Math.max(...q.options.map(o => o.length));
       const twoCol = maxLen <= 48;
-      const gridStyle = twoCol
-        ? 'display:grid;grid-template-columns:1fr 1fr;gap:2px 12px;margin-top:4px'
-        : 'margin-top:4px';
-      inner += `<div style="${gridStyle}">` + q.options.map(opt =>
-        `<label style="display:flex;align-items:center;gap:6px;padding:4px 0;cursor:pointer">
-          <input type="radio" name="q_${q.question_id}" value="${opt.charAt(0)}" style="width:auto;flex-shrink:0">${opt}
+      const grid = twoCol
+        ? 'display:grid; grid-template-columns:1fr 1fr; gap:4px 12px; margin-top:6px;'
+        : 'display:flex; flex-direction:column; gap:4px; margin-top:6px;';
+      inner += `<div style="${grid}">` + q.options.map(opt =>
+        `<label style="display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius: var(--r-sm); cursor:pointer; transition: background var(--t-fast);">
+          <input type="radio" name="q_${q.question_id}" value="${opt.charAt(0)}" style="flex-shrink:0;"> <span class="t-sm">${escHtml(opt)}</span>
         </label>`
       ).join('') + '</div>';
     } else {
-      inner += `<textarea data-qid="${q.question_id}" placeholder="Ваш ответ..." style="margin-top:6px"></textarea>`;
+      inner += `<textarea data-qid="${q.question_id}" class="textarea" placeholder="Ваш ответ…" style="margin-top:8px;"></textarea>`;
     }
-    div.innerHTML = inner;
-    container.appendChild(div);
+    card.innerHTML = inner;
+    container.appendChild(card);
   });
   renderMath(container);
 }
 
-// ── Submit ────────────────────────────────────────────────────────────────────
+
+// ───────── Submit handler ─────────
 document.getElementById('submit-btn').addEventListener('click', async () => {
   const btn = document.getElementById('submit-btn');
-  const errEl = document.getElementById('submit-error');
-  const statusEl = document.getElementById('submit-status');
+  hide('submit-error');
   btn.disabled = true;
-  errEl.classList.add('hidden');
-  statusEl.style.display = 'block';
-  startSteps(
-    document.getElementById('submit-status-text'),
-    document.getElementById('submit-steps'),
-    EVALUATE_STEPS,
-  );
+  show('submit-status');
+  startStepRotation('submit-steps', EVALUATE_STEPS, 'submit-status-text');
 
   const answers = currentQuestions.map(q => {
     let answer_text = '';
@@ -198,137 +275,181 @@ document.getElementById('submit-btn').addEventListener('click', async () => {
       const ta = document.querySelector(`textarea[data-qid="${q.question_id}"]`);
       answer_text = ta ? ta.value.trim() : '';
     }
-    return {question_id: q.question_id, answer_text};
+    return { question_id: q.question_id, answer_text };
   });
 
   try {
-    const res = await fetch(`/self-check/${currentAttemptId}/submit`, {
-      method: 'POST', headers: authHeaders(),
+    const res = await authFetch(`/self-check/${currentAttemptId}/submit`, {
+      method: 'POST',
       body: JSON.stringify(answers),
     });
-    stopSteps();
-    statusEl.style.display = 'none';
-    if (checkUnauthorized(res)) { btn.disabled = false; return; }
+    stopStepRotation();
+    hide('submit-status');
     if (!res.ok) {
       let msg = 'Ошибка оценки.';
-      try { const e = await res.json(); if (e.detail) msg = e.detail; } catch(_) {}
-      errEl.textContent = msg; errEl.classList.remove('hidden'); btn.disabled = false; return;
+      try { const e = await res.json(); if (e.detail) msg = e.detail; } catch (_) {}
+      const errEl = document.getElementById('submit-error');
+      errEl.textContent = msg;
+      show('submit-error');
+      btn.disabled = false;
+      return;
     }
     const data = await res.json();
-    renderResults(data);
-    document.getElementById('questions-card').classList.add('hidden');
-    document.getElementById('results-card').classList.remove('hidden');
-  } catch(e) {
-    stopSteps();
-    statusEl.style.display = 'none';
-    errEl.textContent = 'Ошибка соединения.'; errEl.classList.remove('hidden');
+    renderResults(data, document.getElementById('topic-label').textContent);
+    hide('questions-card');
+    show('results-card');
+  } catch (err) {
+    if (err.message !== 'unauthorized') {
+      stopStepRotation();
+      hide('submit-status');
+      const errEl = document.getElementById('submit-error');
+      errEl.textContent = 'Ошибка соединения.';
+      show('submit-error');
+    }
+    btn.disabled = false;
   }
-  btn.disabled = false;
 });
 
-// ── Results ───────────────────────────────────────────────────────────────────
-function scoreColor(s) {
-  if (s >= 4) return '#16a34a';
-  if (s >= 2.5) return '#d97706';
-  return '#dc2626';
-}
+document.getElementById('cancel-btn').addEventListener('click', () => {
+  if (!confirm('Прервать самопроверку? Прогресс не сохранится.')) return;
+  hide('questions-card');
+  show('start-card');
+  currentAttemptId = null;
+  currentQuestions = [];
+});
 
-function renderResults(data) {
-  const score = data.overall_score.toFixed(1);
-  const color = scoreColor(data.overall_score);
-  document.getElementById('score-display').textContent = `${score} / 5`;
-  document.getElementById('score-display').style.color = color;
-  document.getElementById('score-fill').style.background = color;
-  document.getElementById('score-fill').style.width = (data.overall_score / 5 * 100) + '%';
 
-  const verdict = data.overall_score >= 4 ? 'Отлично' : data.overall_score >= 3 ? 'Хорошо' : data.overall_score >= 2 ? 'Удовлетворительно' : 'Нужно повторить';
-  document.getElementById('score-label').textContent = verdict;
+// ───────── Render results ─────────
+function renderResults(data, topic) {
+  const score = data.overall_score;
+  const color = scoreColor(score);
+  const verdict = score >= 4 ? 'Отлично' : score >= 3 ? 'Хорошо' : score >= 2 ? 'Удовлетворительно' : 'Нужно повторить';
 
-  const cs = data.criterion_scores;
-  const labels = {correctness:'Точность', completeness:'Полнота', logic:'Логика', terminology:'Терминология'};
-  const weights = {correctness:'40%', completeness:'30%', logic:'20%', terminology:'10%'};
-  document.getElementById('criteria-grid').innerHTML = Object.keys(labels).map(k => {
-    const v = cs[k] || 0;
-    return `<div style="background:#f9fafb;border-radius:6px;padding:10px;border-left:3px solid ${scoreColor(v)}">
-      <div style="font-size:.78rem;color:#6b7280">${labels[k]} (${weights[k]})</div>
-      <div style="font-size:1.3rem;font-weight:700;color:${scoreColor(v)}">${v.toFixed(1)}</div>
+  document.getElementById('results-topic').textContent = topic;
+  document.getElementById('results-time').textContent = new Date().toLocaleString('ru-RU', { dateStyle: 'medium', timeStyle: 'short' });
+
+  const overallEl = document.getElementById('overall-score');
+  overallEl.style.color = color;
+  overallEl.innerHTML = `${score.toFixed(1)}<span class="t-md t-muted" style="font-weight: 500"> / 5</span>`;
+  document.getElementById('overall-verdict').textContent = verdict;
+
+  // Summary text — count correct/partial/incorrect
+  const qrs = data.question_results || [];
+  const correct   = qrs.filter(r => r.status === 'correct').length;
+  const partial   = qrs.filter(r => r.status === 'partial').length;
+  const incorrect = qrs.filter(r => r.status === 'incorrect').length;
+  document.getElementById('overall-summary').textContent =
+    `${correct} верно · ${partial} частично · ${incorrect} неверно из ${qrs.length}.`;
+
+  // Rubric grid
+  const cs = data.criterion_scores || {};
+  const labels = { correctness: ['Точность', '40%'], completeness: ['Полнота', '30%'], logic: ['Логика', '20%'], terminology: ['Терминология', '10%'] };
+  const grid = document.getElementById('rubric-grid');
+  grid.innerHTML = Object.keys(labels).map(k => {
+    const v = cs[k] ?? 0;
+    const lvl = scoreLevel(v);
+    return `<div class="rubric__cell rubric__cell--${lvl}">
+      <div class="rubric__label">${labels[k][0]} <span class="rubric__weight">${labels[k][1]}</span></div>
+      <div class="rubric__value rubric__value--${lvl}">${v.toFixed(1)}</div>
     </div>`;
   }).join('');
 
+  // Evaluator summary
   if (data.evaluator_summary) {
-    document.getElementById('feedback-text').textContent = data.evaluator_summary;
+    document.getElementById('evaluator-summary-text').textContent = data.evaluator_summary;
+    show('evaluator-summary-card');
+  } else {
+    hide('evaluator-summary-card');
   }
 
+  // Error tags
   const tags = data.error_tags || [];
   document.getElementById('error-tags').innerHTML = tags.map(t =>
-    `<span class="tag" style="background:#fef3c7;color:#92400e">${t}</span>`
+    `<span class="badge badge--warning">${escHtml(t)}</span>`
   ).join('');
 
-  // ── Per-question breakdown ────────────────────────────────────────────────
+  // Per-question breakdown
   const breakdown = document.getElementById('questions-breakdown');
   breakdown.innerHTML = '';
-  (data.question_results || []).forEach((r, i) => {
-    const statusColors = {correct:'#dcfce7', partial:'#fef9c3', incorrect:'#fee2e2'};
-    const statusIcons  = {correct:'✓', partial:'~', incorrect:'✗'};
-    const statusText   = {correct:'Верно', partial:'Частично', incorrect:'Неверно'};
-    const bg = statusColors[r.status] || '#f9fafb';
-    const icon = statusIcons[r.status] || '?';
-
-    let body = `<div style="font-weight:500;margin-bottom:10px;font-size:.92rem">${i+1}. ${r.prompt}</div>`;
-
-    if (r.type === 'multiple_choice') {
-      body += r.options.map(opt => {
-        const letter = opt.charAt(0);
-        const isCorrect = letter === r.correct_answer;
-        const isUser    = letter === r.user_answer;
-        let style = 'display:block;padding:4px 8px;border-radius:4px;margin:3px 0;font-size:.85rem;';
-        if (isCorrect) style += 'background:#dcfce7;color:#166534;font-weight:600;';
-        else if (isUser && !isCorrect) style += 'background:#fee2e2;color:#991b1b;text-decoration:line-through;';
-        else style += 'color:#6b7280;';
-        const marker = isCorrect ? ' <i class="bi bi-check-lg"></i>' : (isUser && !isCorrect) ? ' <i class="bi bi-x-lg"></i>' : '';
-        return `<span style="${style}">${opt}${marker}</span>`;
-      }).join('');
-      if (!r.user_answer) {
-        body += '<div style="font-size:.8rem;color:#9ca3af;margin-top:4px">Ответ не выбран</div>';
-      }
-    } else {
-      // open-ended
-      body += `<div style="margin-top:6px">
-        <div style="font-size:.78rem;color:#6b7280;margin-bottom:2px">Ваш ответ:</div>
-        <div style="font-size:.85rem;padding:6px 10px;background:#fff;border-radius:4px;border:1px solid #e5e7eb;color:#374151">
-          ${r.user_answer || '<span style="color:#9ca3af">Не заполнено</span>'}
-        </div>
-      </div>`;
-    }
-
+  qrs.forEach((r, i) => {
     const isMC = r.type === 'multiple_choice';
-    const scoreDisplay = isMC
-      ? `<div style="font-size:1.4rem;font-weight:700;color:${scoreColor(r.score > 0 ? 4 : 0)}">${r.score > 0 ? '<i class="bi bi-check-circle-fill"></i>' : '<i class="bi bi-x-circle-fill"></i>'}</div>`
-      : `<div style="font-size:1.3rem;font-weight:700;color:${scoreColor(r.score)}">${r.score.toFixed(1)}<span style="font-size:.8rem;font-weight:400;color:#6b7280">/5</span></div>`;
+    const statusColor = scoreColor(r.score);
+    const statusLabel = { correct: 'Верно', partial: 'Частично', incorrect: 'Неверно' }[r.status] || r.status;
 
     const div = document.createElement('div');
-    div.style.cssText = `border-radius:8px;padding:14px;background:${bg};border:1px solid #e5e7eb`;
-    div.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
-        <div style="flex:1">${body}</div>
-        <div style="text-align:center;flex-shrink:0;min-width:52px">
-          ${scoreDisplay}
-          <div style="font-size:.72rem;color:#6b7280">${statusText[r.status] || r.status}</div>
-        </div>
-      </div>`;
+    div.className = 'card';
+    div.style.borderLeft = `4px solid ${statusColor}`;
+
+    let bodyHtml = `<div class="t-md t-bold mb-3">${i + 1}. ${escHtml(r.prompt)}</div>`;
+
+    if (isMC) {
+      bodyHtml += (r.options || []).map(opt => {
+        const letter = opt.charAt(0);
+        const isCorrect = letter === r.correct_answer;
+        const isUser = letter === r.user_answer;
+        if (isCorrect) {
+          return `<div style="padding: 6px 10px; border-radius: var(--r-sm); background: var(--c-success-bg); color: var(--c-success); font-weight: 500; font-size: var(--fs-sm); margin-bottom: 2px;">
+            <i class="bi bi-check-lg" aria-hidden="true"></i> ${escHtml(opt)}
+            ${isUser ? '<span class="t-xs" style="margin-left:8px; opacity:.7;">— ваш выбор</span>' : ''}
+          </div>`;
+        } else if (isUser) {
+          return `<div style="padding: 6px 10px; border-radius: var(--r-sm); background: var(--c-danger-bg); color: var(--c-danger); text-decoration: line-through; font-size: var(--fs-sm); margin-bottom: 2px;">
+            <i class="bi bi-x-lg" aria-hidden="true"></i> ${escHtml(opt)}
+            <span class="t-xs" style="margin-left:8px; opacity:.7; text-decoration:none; display:inline-block;">— ваш выбор</span>
+          </div>`;
+        } else {
+          return `<div style="padding: 6px 10px; color: var(--c-text-2); font-size: var(--fs-sm); margin-bottom: 2px;">${escHtml(opt)}</div>`;
+        }
+      }).join('');
+      if (!r.user_answer) {
+        bodyHtml += '<div class="t-xs t-faint mt-2">Ответ не выбран</div>';
+      }
+    } else {
+      bodyHtml += `<div class="t-uppercase mb-1">Ваш ответ</div>
+        <div class="card card--flat" style="background: var(--c-surface-2); font-size: var(--fs-sm); margin-bottom: var(--sp-2);">
+          ${r.user_answer ? escHtml(r.user_answer) : '<span class="t-faint">Не заполнено</span>'}
+        </div>`;
+    }
+
+    const scoreDisplay = isMC
+      ? `<i class="bi bi-${r.score > 0 ? 'check-circle-fill' : 'x-circle-fill'}" style="font-size: 1.4rem; color: ${statusColor}" aria-hidden="true"></i>`
+      : `<div class="t-md t-bold" style="color: ${statusColor}">${r.score.toFixed(1)} <span class="t-xs t-muted" style="font-weight:400">/5</span></div>`;
+
+    div.innerHTML = `<div class="flex items-start justify-between gap-3">
+      <div class="flex-1">${bodyHtml}</div>
+      <div style="text-align: center; flex-shrink: 0; min-width: 60px;">
+        ${scoreDisplay}
+        <div class="t-xs" style="color: ${statusColor}">${statusLabel}</div>
+      </div>
+    </div>`;
     breakdown.appendChild(div);
   });
   renderMath(document.getElementById('results-card'));
 }
 
-document.getElementById('restart-btn').addEventListener('click', () => {
-  document.getElementById('results-card').classList.add('hidden');
-  document.getElementById('start-card').classList.remove('hidden');
+
+// ───────── Restart ─────────
+function restart() {
+  hide('results-card');
+  show('start-card');
   document.getElementById('topic-input').value = '';
+  document.getElementById('topic-input').focus();
   currentAttemptId = null;
   currentQuestions = [];
+}
+document.getElementById('restart-btn').addEventListener('click', restart);
+document.getElementById('restart-btn-2').addEventListener('click', restart);
+
+// Enter to submit topic
+document.getElementById('topic-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    document.getElementById('start-btn').click();
+  }
 });
 
-function onAuthReady() {}
+window.onAuthReady = function () {
+  document.getElementById('topic-input').focus();
+};
 </script>
 {% endblock %}
