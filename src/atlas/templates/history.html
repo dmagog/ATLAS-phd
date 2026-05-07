@@ -70,10 +70,10 @@ function fmtDate(iso) {
 
 function statusBadge(s) {
   const map = {
-    created:   ['В процессе', 'badge--info'],
-    submitted: ['Отправлено', 'badge--warning'],
-    evaluated: ['Оценено',    'badge--success'],
-    invalid_evaluation: ['Ошибка оценки', 'badge--danger'],
+    in_progress:        ['В процессе',     'badge--info'],
+    completed:          ['Оценено',         'badge--success'],
+    abandoned:          ['Прервано',        ''],
+    invalid_evaluation: ['Ошибка оценки',  'badge--danger'],
   };
   const [label, cls] = map[s] || [s, ''];
   return `<span class="badge ${cls}">${label}</span>`;
@@ -103,7 +103,7 @@ async function loadHistory() {
         : `<div style="font-size: 1rem; min-width: 50px; text-align: center; padding: 6px 10px; border-radius: var(--r-md); color: var(--c-text-3); background: var(--c-surface-2);">—</div>`;
 
       const row = document.createElement('div');
-      row.className = a.status === 'evaluated' ? 'card card--interactive' : 'card card--flat';
+      row.className = a.status === 'completed' ? 'card card--interactive' : 'card card--flat';
       row.style.cssText = 'padding: var(--sp-3); display: flex; align-items: center; gap: var(--sp-3);';
       row.innerHTML = `
         ${scoreHtml}
@@ -112,9 +112,9 @@ async function loadHistory() {
           <div class="t-xs t-muted">${fmtDate(a.created_at)}</div>
         </div>
         ${statusBadge(a.status)}
-        ${a.status === 'evaluated' ? '<i class="bi bi-chevron-right" style="color: var(--c-text-3); font-size: 0.85rem;" aria-hidden="true"></i>' : ''}
+        ${a.status === 'completed' ? '<i class="bi bi-chevron-right" style="color: var(--c-text-3); font-size: 0.85rem;" aria-hidden="true"></i>' : ''}
       `;
-      if (a.status === 'evaluated') {
+      if (a.status === 'completed') {
         row.addEventListener('click', () => openDetail(a.attempt_id));
       }
       list.appendChild(row);
