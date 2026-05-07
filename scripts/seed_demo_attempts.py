@@ -239,7 +239,7 @@ async def seed() -> None:
                 User.tenant_id == tenant.id,
                 User.role == UserRole.student.value,
                 User.email.like("%@optics.demo"),
-            )
+            ).order_by(User.email)  # deterministic order so RNG is reproducible across runs
         )).scalars().all()
 
         if len(students) < 12:
