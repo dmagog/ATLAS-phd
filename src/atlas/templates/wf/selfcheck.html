@@ -1,0 +1,159 @@
+{% extends "wf/_layout.html" %}
+{% from "wf/_partials.html" import sidebar_student %}
+{% block title %}Самопроверка — результат{% endblock %}
+{% block content_mode %}app__content--chat{% endblock %}
+{% block sidebar %}{{ sidebar_student(active='selfcheck') }}{% endblock %}
+
+{% block content %}
+<div class="flex items-baseline justify-between mb-5">
+  <div>
+    <h1 class="t-2xl t-bold">Дисперсия света</h1>
+    <div class="t-sm t-muted">Самопроверка · 6 вопросов · 2026-05-07 14:47</div>
+  </div>
+  <div class="flex gap-2">
+    <a href="#" class="btn btn--ghost btn--sm"><i class="bi bi-arrow-counterclockwise"></i>Повторить</a>
+    <a href="#" class="btn btn--secondary btn--sm"><i class="bi bi-list-ul"></i>История</a>
+  </div>
+</div>
+
+<!-- Hero score + rubric -->
+<div class="card mb-4">
+  <div class="flex items-end gap-5 mb-5" style="flex-wrap: wrap;">
+    <div class="flex-col gap-1">
+      <div class="t-uppercase">Итоговая оценка</div>
+      <div class="t-hero" style="color: var(--c-success)">4.2<span class="t-xl t-muted" style="font-weight: 500"> / 5</span></div>
+    </div>
+    <div class="flex-col gap-1" style="flex: 1; min-width: 200px;">
+      <div class="t-md t-bold">Хорошо</div>
+      <div class="t-sm t-muted">5 из 6 вопросов в зелёной зоне; одно частичное попадание по терминологии.</div>
+    </div>
+    <div class="flex-col gap-2" style="text-align: right;">
+      <span class="badge badge--info"><i class="bi bi-shield-check"></i>Rubric κ = 1.000 vs expert</span>
+      <span class="t-xs t-muted">по бинарной классификации</span>
+    </div>
+  </div>
+
+  <!-- Rubric grid -->
+  <div class="rubric mb-3">
+    <div class="rubric__cell rubric__cell--good">
+      <div class="rubric__label">Точность <span class="rubric__weight">40%</span></div>
+      <div class="rubric__value rubric__value--good">4.5</div>
+    </div>
+    <div class="rubric__cell rubric__cell--mid">
+      <div class="rubric__label">Полнота <span class="rubric__weight">30%</span></div>
+      <div class="rubric__value rubric__value--mid">3.0</div>
+    </div>
+    <div class="rubric__cell rubric__cell--good">
+      <div class="rubric__label">Логика <span class="rubric__weight">20%</span></div>
+      <div class="rubric__value rubric__value--good">4.5</div>
+    </div>
+    <div class="rubric__cell rubric__cell--mid">
+      <div class="rubric__label">Терминология <span class="rubric__weight">10%</span></div>
+      <div class="rubric__value rubric__value--mid">3.5</div>
+    </div>
+  </div>
+
+  <!-- Evaluator summary -->
+  <div class="card card--flat" style="background: var(--c-primary-bg); border-left: 3px solid var(--c-primary);">
+    <div class="t-uppercase mb-1">Резюме эксперта</div>
+    <p class="t-sm">Студент уверенно различает нормальную и аномальную дисперсию, корректно применяет формулу Зельмейера. Слабая зона — терминология (путаница «фазовая скорость» / «групповая скорость»). Полнота снижена в вопросе 4: не упомянуты квантово-механические корни дисперсии.</p>
+  </div>
+</div>
+
+<!-- Per-question breakdown -->
+<h2 class="t-lg t-bold mb-3 mt-6">Разбор по вопросам</h2>
+
+{% set questions = [
+  {'i': 1, 'type': 'mc',   'status': 'correct',   'score': 1, 'q': 'Что характеризует дисперсия среды?',
+   'opts': [('A', 'Зависимость показателя преломления от частоты', true),
+            ('B', 'Зависимость скорости света от плотности среды', false),
+            ('C', 'Зависимость угла преломления от длины волны', false),
+            ('D', 'Зависимость поглощения от температуры', false)],
+   'user_answer': 'A'},
+  {'i': 2, 'type': 'mc',   'status': 'correct',   'score': 1, 'q': 'При нормальной дисперсии…',
+   'opts': [('A', 'n монотонно убывает с λ', true),
+            ('B', 'n возрастает с λ',         false),
+            ('C', 'n постоянен',              false),
+            ('D', 'наблюдается полоса поглощения', false)],
+   'user_answer': 'A'},
+  {'i': 3, 'type': 'open', 'status': 'partial',   'score': 3.5,
+   'q': 'Объясните разницу между фазовой и групповой скоростями для пакета волн в среде с дисперсией.',
+   'user_answer': 'Фазовая скорость — это скорость, с которой движется фронт одной монохроматической волны, v_ph = c/n. Групповая — скорость огибающей пакета.',
+   'feedback': 'Определения корректны, но не показано, как они связаны через дисперсионное соотношение dω/dk.'},
+  {'i': 4, 'type': 'open', 'status': 'partial',   'score': 3.0,
+   'q': 'Запишите формулу Зельмейера и объясните физический смысл коэффициентов.',
+   'user_answer': 'n²(λ) = 1 + Σ B_i λ² / (λ² − C_i). B_i — амплитуды, C_i — резонансы.',
+   'feedback': 'Формула верна, но не упомянуто квантово-механическое происхождение коэффициентов через переходы.'},
+  {'i': 5, 'type': 'mc',   'status': 'incorrect', 'score': 0,
+   'q': 'Аномальная дисперсия наблюдается…',
+   'opts': [('A', 'вдали от полос поглощения',  false),
+            ('B', 'в области полос поглощения', true),
+            ('C', 'в вакууме',                  false),
+            ('D', 'только в стекле',            false)],
+   'user_answer': 'A'},
+  {'i': 6, 'type': 'mc',   'status': 'correct',   'score': 1, 'q': 'Какой эксперимент демонстрирует дисперсию?',
+   'opts': [('A', 'Опыт Юнга',           false),
+            ('B', 'Опыт с призмой Ньютона', true),
+            ('C', 'Опыт Майкельсона',     false),
+            ('D', 'Опыт Штерна–Герлаха',  false)],
+   'user_answer': 'B'},
+] %}
+
+<div class="flex-col gap-3">
+{% for q in questions %}
+  {% set bg_map = {'correct': 'var(--c-success-bg)', 'partial': 'var(--c-warning-bg)', 'incorrect': 'var(--c-danger-bg)'} %}
+  {% set status_label = {'correct': 'Верно', 'partial': 'Частично', 'incorrect': 'Неверно'} %}
+  {% set status_color = {'correct': 'var(--c-success)', 'partial': 'var(--c-warning)', 'incorrect': 'var(--c-danger)'} %}
+  <div class="card" style="background: {{ bg_map[q.status] }}; border-left: 4px solid {{ status_color[q.status] }};">
+    <div class="flex items-start justify-between gap-3 mb-3">
+      <div class="t-md t-bold flex-1">{{ q.i }}. {{ q.q }}</div>
+      <div class="text-right flex-col gap-1" style="flex-shrink: 0;">
+        {% if q.type == 'mc' %}
+          {% if q.score > 0 %}
+            <i class="bi bi-check-circle-fill" style="font-size: 1.4rem; color: {{ status_color[q.status] }}"></i>
+          {% else %}
+            <i class="bi bi-x-circle-fill" style="font-size: 1.4rem; color: {{ status_color[q.status] }}"></i>
+          {% endif %}
+        {% else %}
+          <div class="t-md t-bold" style="color: {{ status_color[q.status] }}">{{ '%.1f' | format(q.score) }} <span class="t-xs t-muted">/5</span></div>
+        {% endif %}
+        <div class="t-xs" style="color: {{ status_color[q.status] }}">{{ status_label[q.status] }}</div>
+      </div>
+    </div>
+
+    {% if q.type == 'mc' %}
+      <div class="flex-col gap-1">
+      {% for letter, text, is_correct in q.opts %}
+        {% set is_user = (letter == q.user_answer) %}
+        {% if is_correct %}
+          <div style="padding: 6px 10px; border-radius: var(--r-sm); background: var(--c-success-bg); color: var(--c-success); font-weight: 500; font-size: var(--fs-sm);">
+            <i class="bi bi-check-lg"></i> {{ letter }}. {{ text }}
+            {% if is_user %}<span class="t-xs" style="margin-left: 8px; opacity: 0.7;">— ваш выбор</span>{% endif %}
+          </div>
+        {% elif is_user %}
+          <div style="padding: 6px 10px; border-radius: var(--r-sm); background: var(--c-danger-bg); color: var(--c-danger); text-decoration: line-through; font-size: var(--fs-sm);">
+            <i class="bi bi-x-lg"></i> {{ letter }}. {{ text }}
+            <span class="t-xs" style="margin-left: 8px; opacity: 0.7; text-decoration: none; display: inline-block;">— ваш выбор</span>
+          </div>
+        {% else %}
+          <div style="padding: 6px 10px; color: var(--c-text-2); font-size: var(--fs-sm);">{{ letter }}. {{ text }}</div>
+        {% endif %}
+      {% endfor %}
+      </div>
+    {% else %}
+      <div class="t-uppercase mb-1">Ваш ответ</div>
+      <div class="card card--flat" style="background: var(--c-surface); font-size: var(--fs-sm); margin-bottom: var(--sp-3);">
+        {{ q.user_answer }}
+      </div>
+      <div class="t-uppercase mb-1">Замечание эксперта</div>
+      <div class="t-sm" style="font-style: italic; color: var(--c-text-2);">{{ q.feedback }}</div>
+    {% endif %}
+  </div>
+{% endfor %}
+</div>
+
+<div class="flex gap-3 justify-center mt-6 mb-5">
+  <a href="#" class="btn btn--secondary"><i class="bi bi-list-ul"></i>К истории</a>
+  <a href="#" class="btn btn--primary"><i class="bi bi-arrow-clockwise"></i>Новая проверка</a>
+</div>
+{% endblock %}

@@ -55,3 +55,23 @@ async def wf_refusal(request: Request):
 @router.get("/_/wf/eval", response_class=HTMLResponse)
 async def wf_eval(request: Request):
     return templates.TemplateResponse(request=request, name="wf/eval.html")
+
+
+@router.get("/_/wf/selfcheck", response_class=HTMLResponse)
+async def wf_selfcheck(request: Request):
+    return templates.TemplateResponse(request=request, name="wf/selfcheck.html")
+
+
+@router.get("/_/wf/supervisor", response_class=HTMLResponse)
+async def wf_supervisor(request: Request):
+    return templates.TemplateResponse(request=request, name="wf/supervisor.html")
+
+
+@router.get("/_/wf/tenant-admin", response_class=HTMLResponse)
+async def wf_tenant_admin(request: Request):
+    return templates.TemplateResponse(request=request, name="wf/tenant-admin.html")
+
+
+@router.get("/_/wf/login", response_class=HTMLResponse)
+async def wf_login(request: Request):
+    return templates.TemplateResponse(request=request, name="wf/login.html")
