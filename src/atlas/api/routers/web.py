@@ -54,6 +54,14 @@ async def eval_page(request: Request):
     return templates.TemplateResponse(request=request, name="eval.html")
 
 
+@router.get("/supervisor", response_class=HTMLResponse)
+async def supervisor_page(request: Request):
+    """Supervisor dashboard (Phase 5.5). Per-topic aggregates + students
+    list with privacy mask. Data fetched client-side from
+    /tenants/{slug}/supervisor/* using the tenant_slug from /me."""
+    return templates.TemplateResponse(request=request, name="supervisor.html")
+
+
 # Phase 3 wireframes — internal previews of redesigned screens.
 # All under /_/wf/* prefix, no auth, hard-coded sample data.
 # Will be deleted at end of Phase 5 once production templates are migrated.

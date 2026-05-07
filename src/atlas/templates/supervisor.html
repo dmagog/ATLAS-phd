@@ -1,0 +1,239 @@
+{% extends "_app.html" %}
+{% from "_partials.html" import sidebar_supervisor, topbar %}
+{% block title %}Supervisor Dashboard{% endblock %}
+{% block content_mode %}app__content--dashboard{% endblock %}
+{% block sidebar %}{{ sidebar_supervisor(active='dashboard') }}{% endblock %}
+{% block topbar %}{{ topbar() }}{% endblock %}
+
+{% block content %}
+<div class="flex items-baseline justify-between mb-5">
+  <div>
+    <h1 class="t-2xl t-bold">Supervisor Dashboard</h1>
+    <div class="t-sm t-muted">Per-topic агрегаты по студентам тенанта. Текст ответов студентов не показывается (M5 supervisor-privacy).</div>
+  </div>
+</div>
+
+<!-- States -->
+<div id="sup-loading" class="card">
+  <div class="empty">
+    <div class="empty__icon"><span class="spinner spinner--lg"></span></div>
+    <div class="empty__title">Загружаю данные…</div>
+  </div>
+</div>
+
+<div id="sup-forbidden" class="card hidden">
+  <div class="empty">
+    <div class="empty__icon"><i class="bi bi-shield-exclamation" style="font-size: 48px;"></i></div>
+    <div class="empty__title">Доступ только для supervisor / tenant-admin / super-admin</div>
+    <div class="empty__subtitle">Эта страница показывает per-topic метрики кафедры. Войдите под соответствующей ролью.</div>
+  </div>
+</div>
+
+<div id="sup-no-tenant" class="card hidden">
+  <div class="empty">
+    <div class="empty__icon"><i class="bi bi-building-x" style="font-size: 48px;"></i></div>
+    <div class="empty__title">Нет привязки к тенанту</div>
+    <div class="empty__subtitle">Ваша учётка не связана с конкретной кафедрой.</div>
+  </div>
+</div>
+
+<div id="sup-empty-aggregate" class="card hidden">
+  <div class="empty">
+    <div class="empty__icon"><i class="bi bi-shield-lock" style="font-size: 48px;"></i></div>
+    <div class="empty__title">Недостаточно данных для агрегата</div>
+    <div class="empty__subtitle" id="sup-empty-aggregate-reason">—</div>
+  </div>
+</div>
+
+<!-- Main dashboard -->
+<div id="sup-dashboard" class="hidden">
+  <!-- Hero row -->
+  <div class="grid grid-cols-4 mb-5" id="sup-hero-row"></div>
+
+  <!-- Per-topic table -->
+  <div class="card mb-5">
+    <h2 class="card__title">Покрытие топиков программы</h2>
+    <div class="card__subtitle" id="sup-program-info">—</div>
+
+    <table style="width:100%; border-collapse:collapse; font-size: var(--fs-sm); margin-top: var(--sp-3);">
+      <thead>
+        <tr style="border-bottom: 2px solid var(--c-border);">
+          <th style="text-align:left;  padding: 8px 6px; color: var(--c-text-2); font-weight: 500; font-size: var(--fs-xs);">Топик</th>
+          <th style="text-align:right; padding: 8px 6px; color: var(--c-text-2); font-weight: 500; font-size: var(--fs-xs);">Студентов</th>
+          <th style="text-align:right; padding: 8px 6px; color: var(--c-text-2); font-weight: 500; font-size: var(--fs-xs);">Попыток</th>
+          <th style="text-align:right; padding: 8px 6px; color: var(--c-text-2); font-weight: 500; font-size: var(--fs-xs);">Ниже порога</th>
+          <th style="text-align:right; padding: 8px 6px; color: var(--c-text-2); font-weight: 500; font-size: var(--fs-xs);">Fail rate</th>
+        </tr>
+      </thead>
+      <tbody id="sup-topics-tbody"></tbody>
+    </table>
+  </div>
+
+  <!-- Students list with privacy mask -->
+  <div class="card" id="students">
+    <div class="flex items-baseline justify-between mb-3">
+      <div>
+        <h2 class="card__title" style="margin-bottom: 4px;">Студенты</h2>
+        <div class="card__subtitle" id="sup-students-info">—</div>
+      </div>
+      <span class="badge badge--info" id="sup-visible-count">—</span>
+    </div>
+    <div id="sup-students-list" class="flex-col gap-2"></div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function fmt(n, digits) { return (n === null || n === undefined) ? '—' : (typeof n === 'number' ? n.toFixed(digits) : String(n)); }
+function fmtPct(n) { return (n === null || n === undefined) ? '—' : (n * 100).toFixed(0) + '%'; }
+function fmtTime(iso) {
+  if (!iso) return 'нет попыток';
+  try {
+    const d = new Date(iso);
+    return d.toLocaleString('ru-RU', { dateStyle: 'medium', timeStyle: 'short' });
+  } catch { return iso; }
+}
+function show(id) { document.getElementById(id).classList.remove('hidden'); }
+function hide(id) { document.getElementById(id).classList.add('hidden'); }
+
+function heroCard(label, value, valueMod, footnote) {
+  const valClass = 'hero-card__value' + (valueMod ? ' hero-card__value--' + valueMod : '');
+  return `<div class="hero-card">
+    <div class="hero-card__label">${label}</div>
+    <div class="${valClass}">${value}</div>
+    ${footnote ? `<div class="hero-card__compare"><span>${footnote}</span></div>` : ''}
+  </div>`;
+}
+
+function thresholdReason(r) {
+  if (r === 'n_students') return 'Слишком мало студентов с попытками для приватного агрегата.';
+  if (r === 'n_attempts') return 'Слишком мало завершённых попыток для агрегата.';
+  return 'Минимальный порог приватности не достигнут.';
+}
+
+function renderHeatmap(data) {
+  // Hero metrics
+  const failedTopics = data.topics.filter(t => t.fail_rate >= 0.5).length;
+  const cards = [
+    heroCard('Студентов активных', data.n_students_active, null, 'с попытками в этом тенанте'),
+    heroCard('Попыток завершено', data.n_attempts_completed, null, 'учтено в агрегатах'),
+    heroCard('Топиков с fail-rate ≥ 50%', failedTopics, failedTopics > 0 ? 'primary' : null, 'требуют внимания'),
+    heroCard('Порог приватности', data.threshold_score.toFixed(1), null, 'ниже = «не сдал»'),
+  ];
+  document.getElementById('sup-hero-row').innerHTML = cards.join('');
+
+  document.getElementById('sup-program-info').textContent =
+    data.program_version ? `program version ${data.program_version}` : 'программа не определена';
+
+  // Per-topic table
+  const tbody = document.getElementById('sup-topics-tbody');
+  if (!data.topics.length) {
+    tbody.innerHTML = `<tr><td colspan="5" class="text-center t-muted" style="padding: var(--sp-5)">Нет топиков с агрегатными данными.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = data.topics.map(t => {
+    const failColor = t.fail_rate >= 0.5 ? 'var(--c-danger)' : (t.fail_rate >= 0.25 ? 'var(--c-warning)' : 'var(--c-success)');
+    return `<tr style="border-bottom: 1px solid var(--c-border);">
+      <td style="padding: 10px 6px;"><b>${t.external_id}</b> <span class="t-muted">${escapeHtml(t.title)}</span></td>
+      <td style="padding: 10px 6px; text-align: right; font-family: var(--font-mono); color: var(--c-text-2)">${t.distinct_students}</td>
+      <td style="padding: 10px 6px; text-align: right; font-family: var(--font-mono);">${t.total_attempts}</td>
+      <td style="padding: 10px 6px; text-align: right; font-family: var(--font-mono); color: ${t.below_threshold > 0 ? 'var(--c-warning)' : 'var(--c-text-3)'}">${t.below_threshold}</td>
+      <td style="padding: 10px 6px; text-align: right; font-family: var(--font-mono); font-weight: 600; color: ${failColor}">${fmtPct(t.fail_rate)}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderStudents(data) {
+  document.getElementById('sup-students-info').textContent =
+    `Всего ${data.n_total} · показывают прогресс ${data.n_visible}.`;
+  document.getElementById('sup-visible-count').textContent =
+    `${data.n_visible} / ${data.n_total} opted-in`;
+
+  // Update sidebar count
+  document.querySelectorAll('[data-count-students]').forEach(el => el.textContent = data.n_total);
+
+  const list = document.getElementById('sup-students-list');
+  if (!data.students.length) {
+    list.innerHTML = '<div class="empty"><div class="empty__title">Нет студентов</div></div>';
+    return;
+  }
+  list.innerHTML = data.students.map(s => {
+    const ini = s.visible && s.display_name
+      ? s.display_name.split(/[._@-]/).slice(0,2).map(p => p[0] || '').join('').toUpperCase().slice(0,2)
+      : '#';
+    const visibilityBadge = s.visible
+      ? '<span class="badge badge--success" title="Студент opted-in для показа имени">opted-in</span>'
+      : '<span class="badge" title="Anonymized — supervisor видит только агрегат">anonymous</span>';
+    return `<div class="flex items-center gap-3" style="padding: var(--sp-2) var(--sp-3); border-radius: var(--r-md); background: var(--c-surface-2);">
+      <div class="sidebar__user-avatar" style="width: 28px; height: 28px; font-size: 11px; flex-shrink: 0;">${escapeHtml(ini)}</div>
+      <div class="flex-1" style="min-width: 0;">
+        <div class="t-sm t-bold" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(s.display_name)}</div>
+        <div class="t-xs t-muted">Последняя попытка: ${fmtTime(s.last_attempt_at)} · попыток: ${s.total_attempts}</div>
+      </div>
+      ${visibilityBadge}
+    </div>`;
+  }).join('');
+}
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+window.onAuthReady = async function (me) {
+  if (!['supervisor', 'tenant-admin', 'super-admin'].includes(me.role)) {
+    hide('sup-loading');
+    show('sup-forbidden');
+    return;
+  }
+  if (!me.tenant_slug) {
+    hide('sup-loading');
+    show('sup-no-tenant');
+    return;
+  }
+
+  const slug = me.tenant_slug;
+  try {
+    const [hRes, sRes] = await Promise.all([
+      authFetch(`/tenants/${encodeURIComponent(slug)}/supervisor/heatmap`),
+      authFetch(`/tenants/${encodeURIComponent(slug)}/supervisor/students`),
+    ]);
+    if (hRes.status === 403 || sRes.status === 403) {
+      hide('sup-loading');
+      show('sup-forbidden');
+      return;
+    }
+    if (!hRes.ok || !sRes.ok) {
+      hide('sup-loading');
+      show('sup-no-tenant');
+      return;
+    }
+    const heatmap = await hRes.json();
+    const students = await sRes.json();
+    hide('sup-loading');
+
+    if (heatmap.is_below_threshold) {
+      show('sup-empty-aggregate');
+      document.getElementById('sup-empty-aggregate-reason').textContent = thresholdReason(heatmap.threshold_reason);
+      // Still show students list
+      show('sup-dashboard');
+      hide('sup-hero-row');
+      document.querySelector('#sup-dashboard .card.mb-5')?.classList.add('hidden');
+      renderStudents(students);
+      return;
+    }
+
+    show('sup-dashboard');
+    renderHeatmap(heatmap);
+    renderStudents(students);
+  } catch (err) {
+    if (err.message !== 'unauthorized') {
+      hide('sup-loading');
+      show('sup-no-tenant');
+      console.error('supervisor load:', err);
+    }
+  }
+};
+</script>
+{% endblock %}
