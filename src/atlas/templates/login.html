@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ATLAS phd — Вход</title>
+  <link rel="icon" type="image/svg+xml" href="/static/icons/atlas-shield.svg">
+  <link rel="stylesheet" href="/static/atlas.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <style>
+    .login-page {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+    }
+    @media (max-width: 900px) {
+      .login-page { grid-template-columns: 1fr; }
+      .login-page__brand { display: none; }
+    }
+    .login-page__brand {
+      background: linear-gradient(135deg, var(--brand-slate) 0%, #0F172A 100%);
+      color: #fff;
+      padding: var(--sp-12) var(--sp-10);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .login-page__brand-mark { width: 88px; height: 88px; margin-bottom: var(--sp-5); filter: brightness(1.1); }
+    .login-page__tagline { font-size: var(--fs-2xl); font-weight: 600; line-height: 1.25; margin-bottom: var(--sp-4); letter-spacing: -0.01em; }
+    .login-page__sub { color: rgba(255,255,255,0.65); font-size: var(--fs-base); line-height: 1.6; max-width: 420px; }
+    .login-page__bullet { display: flex; gap: var(--sp-3); align-items: flex-start; margin-bottom: var(--sp-3); }
+    .login-page__bullet i { color: #60A5FA; font-size: 1.1rem; margin-top: 2px; }
+    .login-page__bullet-title { font-weight: 500; color: #fff; }
+    .login-page__bullet-desc  { font-size: var(--fs-xs); color: rgba(255,255,255,0.55); }
+    .login-page__form-side {
+      padding: var(--sp-10);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .login-card { width: 100%; max-width: 380px; }
+    .login-page__theme-toggle { position: absolute; top: var(--sp-4); right: var(--sp-5); }
+  </style>
+</head>
+<body>
+
+<div class="login-page" style="position: relative;">
+
+  <button class="btn btn--ghost btn--sm login-page__theme-toggle" data-theme-toggle aria-label="Переключить тему">
+    <i class="bi bi-moon-stars-fill" aria-hidden="true"></i>
+    <span data-theme-label>Dark</span>
+  </button>
+
+  <aside class="login-page__brand">
+    <div>
+      <img src="/static/icons/atlas-shield-inverted.svg" class="login-page__brand-mark" alt="ATLAS phd">
+      <h1 class="login-page__tagline">ATLAS phd</h1>
+      <div class="login-page__sub">
+        Подготовка к кандидатскому минимуму с заземлением в учебных материалах кафедры. Защита от галлюцинаций — детерминированная, на уровне retrieval.
+      </div>
+    </div>
+
+    <div class="flex-col gap-2" style="margin-top: var(--sp-8);">
+      <div class="login-page__bullet">
+        <i class="bi bi-shield-check" aria-hidden="true"></i>
+        <div>
+          <div class="login-page__bullet-title">Hard-gate retrieval</div>
+          <div class="login-page__bullet-desc">refusal_tnr = 1.000 на off-topic eval-set'е</div>
+        </div>
+      </div>
+      <div class="login-page__bullet">
+        <i class="bi bi-card-checklist" aria-hidden="true"></i>
+        <div>
+          <div class="login-page__bullet-title">Self-check с рубрикой</div>
+          <div class="login-page__bullet-desc">κ = 1.000 vs экспертная разметка</div>
+        </div>
+      </div>
+      <div class="login-page__bullet">
+        <i class="bi bi-people" aria-hidden="true"></i>
+        <div>
+          <div class="login-page__bullet-title">Кафедральный режим</div>
+          <div class="login-page__bullet-desc">Научрук видит прогресс, без раскрытия ответов</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <main class="login-page__form-side">
+    <div class="login-card">
+      <h2 class="t-xl t-bold mb-2">Вход в ATLAS phd</h2>
+      <p class="t-sm t-muted mb-5">Войдите по корпоративному email и паролю.</p>
+
+      <form class="flex-col gap-2" id="login-form" aria-label="Форма входа">
+        <div class="field field--lg">
+          <label class="label" for="login-email">Email</label>
+          <input class="input" id="login-email" type="email" placeholder="ivanov@itmo.ru" autocomplete="email" required>
+        </div>
+        <div class="field field--lg">
+          <div class="flex items-center justify-between">
+            <label class="label" for="login-pw">Пароль</label>
+            <span class="t-xs t-faint" title="Восстановление пока не реализовано">Забыли пароль?</span>
+          </div>
+          <input class="input" id="login-pw" type="password" placeholder="••••••••" autocomplete="current-password" required>
+        </div>
+
+        <div id="login-error" class="hidden" style="background: var(--c-danger-bg); color: var(--c-danger); padding: var(--sp-2) var(--sp-3); border-radius: var(--r-md); font-size: var(--fs-xs);"></div>
+
+        <button type="submit" class="btn btn--primary btn--block btn--lg mt-2" id="login-submit">
+          <span data-label>Войти</span>
+          <span class="spinner hidden" data-spin style="border-color: rgba(255,255,255,.4); border-top-color: #fff; margin-left: 6px;"></span>
+        </button>
+      </form>
+
+      <div class="flex items-center gap-3 mt-6 mb-4">
+        <div style="flex: 1; height: 1px; background: var(--c-border);"></div>
+        <span class="t-xs t-faint">или</span>
+        <div style="flex: 1; height: 1px; background: var(--c-border);"></div>
+      </div>
+
+      <button class="btn btn--secondary btn--block" id="invite-btn" aria-label="Войти по инвайт-коду">
+        <i class="bi bi-envelope-paper" aria-hidden="true"></i>
+        Войти по инвайт-коду
+      </button>
+      <p class="t-xs t-muted mt-3 text-center">
+        Получили приглашение от научрука или админа кафедры? <br>
+        Активируйте код и создайте аккаунт.
+      </p>
+    </div>
+  </main>
+</div>
+
+<!-- Invite redeem modal (placeholder — full flow lands in Phase 5.6+) -->
+<div class="overlay" id="invite-modal">
+  <div class="modal">
+    <div class="modal__title">Активировать инвайт-код</div>
+    <p class="t-sm t-muted mb-4">Введите код, полученный от админа кафедры или научрука.</p>
+    <div class="field field--lg">
+      <label class="label" for="invite-code">Инвайт-код</label>
+      <input class="input" id="invite-code" placeholder="OPT-XXXX-XXXX">
+    </div>
+    <div class="field field--lg">
+      <label class="label" for="invite-email">Ваш email</label>
+      <input class="input" id="invite-email" type="email" placeholder="ivanov@itmo.ru">
+    </div>
+    <div class="field field--lg">
+      <label class="label" for="invite-pw">Придумайте пароль</label>
+      <input class="input" id="invite-pw" type="password" placeholder="Минимум 8 символов" autocomplete="new-password">
+    </div>
+    <div id="invite-error" class="hidden mb-3" style="background: var(--c-danger-bg); color: var(--c-danger); padding: var(--sp-2) var(--sp-3); border-radius: var(--r-md); font-size: var(--fs-xs);"></div>
+    <div class="flex gap-3 justify-end">
+      <button class="btn btn--ghost" id="invite-cancel">Отмена</button>
+      <button class="btn btn--primary" id="invite-submit">Активировать</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Theme toggle
+  document.addEventListener('click', e => {
+    const btn = e.target.closest('[data-theme-toggle]');
+    if (!btn) return;
+    const root = document.documentElement;
+    root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark';
+    localStorage.setItem('atlas_theme', root.dataset.theme);
+    const lbl = btn.querySelector('[data-theme-label]');
+    if (lbl) lbl.textContent = root.dataset.theme === 'dark' ? 'Dark' : 'Light';
+    const ic = btn.querySelector('i');
+    if (ic) ic.className = root.dataset.theme === 'dark' ? 'bi bi-moon-stars-fill' : 'bi bi-sun-fill';
+  });
+  // Restore theme
+  (function () {
+    const saved = localStorage.getItem('atlas_theme');
+    if (saved && saved !== 'dark') document.documentElement.dataset.theme = saved;
+  })();
+
+  // ── Login submit ────────────────────────────────────────────────────────────
+  function nextUrl() {
+    const p = new URLSearchParams(location.search).get('next');
+    if (!p) return '/';
+    // Prevent open-redirect: only allow same-origin paths starting with /
+    if (p.startsWith('/') && !p.startsWith('//')) return p;
+    return '/';
+  }
+
+  function showError(elId, msg) {
+    const el = document.getElementById(elId);
+    el.textContent = msg;
+    el.classList.remove('hidden');
+  }
+  function hideError(elId) {
+    document.getElementById(elId).classList.add('hidden');
+  }
+  function setBusy(btnId, busy) {
+    const btn = document.getElementById(btnId);
+    btn.disabled = busy;
+    btn.querySelector('[data-spin]').classList.toggle('hidden', !busy);
+    btn.querySelector('[data-label]').textContent = busy ? 'Входим…' : 'Войти';
+  }
+
+  document.getElementById('login-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    hideError('login-error');
+    const email = document.getElementById('login-email').value.trim();
+    const pw    = document.getElementById('login-pw').value;
+    if (!email || !pw) return;
+    setBusy('login-submit', true);
+    try {
+      const res = await fetch('/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password: pw }),
+      });
+      if (!res.ok) {
+        showError('login-error', res.status === 401 ? 'Неверный email или пароль.' : 'Ошибка сервера.');
+        setBusy('login-submit', false);
+        return;
+      }
+      const data = await res.json();
+      localStorage.setItem('atlas_token', data.access_token);
+      localStorage.setItem('atlas_email', email);
+      location.href = nextUrl();
+    } catch (err) {
+      showError('login-error', 'Ошибка соединения.');
+      setBusy('login-submit', false);
+    }
+  });
+
+  // ── Invite flow ─────────────────────────────────────────────────────────────
+  const inviteModal = document.getElementById('invite-modal');
+  document.getElementById('invite-btn').addEventListener('click', () => inviteModal.classList.add('overlay--open'));
+  document.getElementById('invite-cancel').addEventListener('click', () => inviteModal.classList.remove('overlay--open'));
+  inviteModal.addEventListener('click', e => { if (e.target === inviteModal) inviteModal.classList.remove('overlay--open'); });
+
+  document.getElementById('invite-submit').addEventListener('click', async () => {
+    hideError('invite-error');
+    const code  = document.getElementById('invite-code').value.trim();
+    const email = document.getElementById('invite-email').value.trim();
+    const pw    = document.getElementById('invite-pw').value;
+    if (!code || !email || !pw) {
+      showError('invite-error', 'Заполните все поля.');
+      return;
+    }
+    if (pw.length < 8) {
+      showError('invite-error', 'Пароль должен содержать минимум 8 символов.');
+      return;
+    }
+    try {
+      const res = await fetch('/invites/' + encodeURIComponent(code) + '/redeem', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password: pw }),
+      });
+      if (!res.ok) {
+        let msg = 'Не удалось активировать инвайт.';
+        try { const e = await res.json(); if (e.detail) msg = e.detail; } catch(_){}
+        showError('invite-error', msg);
+        return;
+      }
+      // After redeem, do auto-login
+      const loginRes = await fetch('/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password: pw }),
+      });
+      if (!loginRes.ok) {
+        showError('invite-error', 'Аккаунт создан, но не удалось войти. Используйте форму выше.');
+        return;
+      }
+      const data = await loginRes.json();
+      localStorage.setItem('atlas_token', data.access_token);
+      localStorage.setItem('atlas_email', email);
+      location.href = '/';
+    } catch (err) {
+      showError('invite-error', 'Ошибка соединения.');
+    }
+  });
+
+  // If token already present, skip login screen
+  if (localStorage.getItem('atlas_token')) {
+    location.href = nextUrl();
+  }
+</script>
+
+</body>
+</html>

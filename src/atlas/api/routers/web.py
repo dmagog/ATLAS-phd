@@ -7,6 +7,13 @@ templates = Jinja2Templates(directory=str(Path(__file__).parent.parent.parent / 
 router = APIRouter(tags=["web"])
 
 
+@router.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request):
+    """Production login page (Phase 5.1). Anonymous access; client-side
+    redirect to ?next= on success or to / by default."""
+    return templates.TemplateResponse(request=request, name="login.html")
+
+
 @router.get("/", response_class=HTMLResponse)
 async def chat_page(request: Request):
     return templates.TemplateResponse(request=request, name="chat.html")

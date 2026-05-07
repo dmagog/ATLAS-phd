@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ATLAS phd — {% block title %}{% endblock %}</title>
+  <link rel="icon" type="image/svg+xml" href="/static/icons/atlas-shield.svg">
+  <link rel="stylesheet" href="/static/atlas.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body, {delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]})"></script>
+  {% block head_extra %}{% endblock %}
+</head>
+<body>
+
+<div class="app">
+  {% block sidebar %}
+    {% from "_partials.html" import sidebar_student %}
+    {{ sidebar_student(active='') }}
+  {% endblock %}
+
+  <main class="app__main">
+    {% block topbar %}
+      {% from "_partials.html" import topbar %}
+      {{ topbar() }}
+    {% endblock %}
+
+    <div class="app__content {% block content_mode %}app__content--dashboard{% endblock %}">
+      {% block content %}{% endblock %}
+    </div>
+  </main>
+</div>
+
+<script>
+// ── Auth ──────────────────────────────────────────────────────────────────────
+const TOKEN_KEY = 'atlas_token';
+const EMAIL_KEY = 'atlas_email';
+
+function getToken()  { return localStorage.getItem(TOKEN_KEY); }
+function clearToken() { localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(EMAIL_KEY); }
+function authHeaders(extra = {}) {
+  return { 'Authorization': 'Bearer ' + getToken(), 'Content-Type': 'application/json', ...extra };
+}
+function redirectToLogin() {
+  const next = encodeURIComponent(location.pathname + location.search);
+  location.href = '/login?next=' + next;
+}
+async function authFetch(url, opts = {}) {
+  const headers = { ...authHeaders(), ...(opts.headers || {}) };
+  const res = await fetch(url, { ...opts, headers });
+  if (res.status === 401) { clearToken(); redirectToLogin(); throw new Error('unauthorized'); }
+  return res;
+}
+
+function initialsFromEmail(email) {
+  if (!email) return '—';
+  const local = email.split('@')[0];
+  const parts = local.split(/[._-]+/).filter(Boolean);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[1][0]).toUpperCase();
+}
+
+async function loadMe() {
+  const res = await authFetch('/me');
+  if (!res.ok) throw new Error('me failed');
+  const me = await res.json();
+  // Populate all data-* placeholders
+  document.querySelectorAll('[data-user-email]').forEach(el => el.textContent = me.email);
+  document.querySelectorAll('[data-user-initials]').forEach(el => el.textContent = initialsFromEmail(me.email));
+  document.querySelectorAll('[data-user-role]').forEach(el => {
+    el.textContent = me.role;
+    el.className = 'tenant-ctx__role tenant-ctx__role--' + me.role;
+  });
+  document.querySelectorAll('[data-tenant-name]').forEach(el => {
+    el.textContent = me.tenant_display_name || (me.role === 'super-admin' ? 'Платформа · все тенанты' : '—');
+  });
+  return me;
+}
+
+// ── Theme toggle ──────────────────────────────────────────────────────────────
+document.addEventListener('click', e => {
+  const btn = e.target.closest('[data-theme-toggle]');
+  if (btn) {
+    const root = document.documentElement;
+    root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark';
+    localStorage.setItem('atlas_theme', root.dataset.theme);
+    const lbl = btn.querySelector('[data-theme-label]');
+    if (lbl) lbl.textContent = root.dataset.theme === 'dark' ? 'Dark' : 'Light';
+    const ic = btn.querySelector('i');
+    if (ic) ic.className = root.dataset.theme === 'dark' ? 'bi bi-moon-stars-fill' : 'bi bi-sun-fill';
+    return;
+  }
+  const logoutBtn = e.target.closest('[data-logout]');
+  if (logoutBtn) { clearToken(); location.href = '/login'; }
+});
+
+// Restore saved theme before render (avoid flash)
+(function restoreTheme() {
+  const saved = localStorage.getItem('atlas_theme');
+  if (saved && saved !== 'dark') document.documentElement.dataset.theme = saved;
+})();
+
+// ── Bootstrap auth on page load ───────────────────────────────────────────────
+(async function bootstrap() {
+  if (!getToken()) { redirectToLogin(); return; }
+  try {
+    const me = await loadMe();
+    if (typeof window.onAuthReady === 'function') {
+      try { await window.onAuthReady(me); } catch (e) { console.error('onAuthReady error:', e); }
+    }
+  } catch (e) {
+    if (e.message !== 'unauthorized') console.error('bootstrap error:', e);
+  }
+})();
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

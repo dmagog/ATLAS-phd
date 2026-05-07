@@ -15,11 +15,12 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from atlas.core.deps import get_current_user
 from atlas.db.audit import write_audit
-from atlas.db.models import SupervisorVisibility, User
+from atlas.db.models import SupervisorVisibility, Tenant, User
 from atlas.db.session import get_db
 
 router = APIRouter(prefix="/me", tags=["me"])
@@ -30,6 +31,8 @@ class MeOut(BaseModel):
     email: str
     role: str
     tenant_id: str | None
+    tenant_slug: str | None
+    tenant_display_name: str | None
     supervisor_visibility: str
     visibility_changed_at: datetime | None
 
@@ -44,12 +47,26 @@ class SetVisibilityRequest(BaseModel):
 
 
 @router.get("", response_model=MeOut)
-async def me(current_user: User = Depends(get_current_user)) -> MeOut:
+async def me(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> MeOut:
+    tenant_slug = None
+    tenant_display_name = None
+    if current_user.tenant_id is not None:
+        tenant = (
+            await db.execute(select(Tenant).where(Tenant.id == current_user.tenant_id))
+        ).scalar_one_or_none()
+        if tenant is not None:
+            tenant_slug = tenant.slug
+            tenant_display_name = tenant.display_name
     return MeOut(
         id=str(current_user.id),
         email=current_user.email,
         role=current_user.role,
         tenant_id=str(current_user.tenant_id) if current_user.tenant_id else None,
+        tenant_slug=tenant_slug,
+        tenant_display_name=tenant_display_name,
         supervisor_visibility=current_user.supervisor_visibility,
         visibility_changed_at=current_user.visibility_changed_at,
     )

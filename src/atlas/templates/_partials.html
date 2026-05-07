@@ -1,0 +1,152 @@
+{# Production partials — sidebars per role + topbar.
+   User/tenant data populated by JS in _app.html via /me API.
+   Counts (history, students, etc.) are populated by per-page JS. #}
+
+{# ============================================================== #}
+{# Topbar — tenant context + theme toggle + user menu              #}
+{# ============================================================== #}
+{% macro topbar() %}
+<header class="app__topbar">
+  <div class="tenant-ctx">
+    <span class="tenant-ctx__name" data-tenant-name>—</span>
+    <span class="tenant-ctx__role" data-user-role>—</span>
+  </div>
+  <div style="margin-left:auto" class="flex items-center gap-3">
+    <button class="btn btn--ghost btn--sm" data-theme-toggle aria-label="Переключить тему">
+      <i class="bi bi-moon-stars-fill" aria-hidden="true"></i>
+      <span data-theme-label>Dark</span>
+    </button>
+    <div class="flex items-center gap-2">
+      <div class="sidebar__user-avatar" data-user-initials>—</div>
+      <span class="t-xs t-muted" data-user-email>—</span>
+    </div>
+    <button class="btn btn--ghost btn--sm" title="Выйти" aria-label="Выйти" data-logout>
+      <i class="bi bi-box-arrow-right" aria-hidden="true"></i>
+    </button>
+  </div>
+</header>
+{% endmacro %}
+
+{# ============================================================== #}
+{# Sidebar — student                                               #}
+{# ============================================================== #}
+{% macro sidebar_student(active='') %}
+<aside class="sidebar">
+  <div class="sidebar__brand">
+    <img src="/static/icons/atlas-shield.svg" class="sidebar__brand-mark" alt="">
+    <span class="sidebar__brand-name">ATLAS phd</span>
+  </div>
+
+  <a class="sidebar__link {% if active == 'chat' %}sidebar__link--active{% endif %}" href="/">
+    <i class="bi bi-chat-dots-fill sidebar__icon" aria-hidden="true"></i>Чат
+  </a>
+  <a class="sidebar__link {% if active == 'selfcheck' %}sidebar__link--active{% endif %}" href="/self-check">
+    <i class="bi bi-card-checklist sidebar__icon" aria-hidden="true"></i>Самопроверка
+  </a>
+  <a class="sidebar__link {% if active == 'history' %}sidebar__link--active{% endif %}" href="/self-check/history">
+    <i class="bi bi-clock-history sidebar__icon" aria-hidden="true"></i>История
+    <span class="sidebar__count" data-count-history></span>
+  </a>
+
+  <div class="sidebar__footer">
+    <div class="sidebar__user">
+      <div class="sidebar__user-avatar" data-user-initials>—</div>
+      <span class="sidebar__user-email" data-user-email>—</span>
+    </div>
+  </div>
+</aside>
+{% endmacro %}
+
+{# ============================================================== #}
+{# Sidebar — supervisor                                            #}
+{# ============================================================== #}
+{% macro sidebar_supervisor(active='') %}
+<aside class="sidebar">
+  <div class="sidebar__brand">
+    <img src="/static/icons/atlas-shield.svg" class="sidebar__brand-mark" alt="">
+    <span class="sidebar__brand-name">ATLAS phd</span>
+  </div>
+
+  <a class="sidebar__link {% if active == 'dashboard' %}sidebar__link--active{% endif %}" href="/supervisor">
+    <i class="bi bi-grid-3x3 sidebar__icon" aria-hidden="true"></i>Heatmap
+  </a>
+  <a class="sidebar__link {% if active == 'students' %}sidebar__link--active{% endif %}" href="/supervisor#students">
+    <i class="bi bi-people sidebar__icon" aria-hidden="true"></i>Студенты<span class="sidebar__count" data-count-students></span>
+  </a>
+
+  <div class="sidebar__group-label">Личное</div>
+  <a class="sidebar__link {% if active == 'chat' %}sidebar__link--active{% endif %}" href="/">
+    <i class="bi bi-chat-dots sidebar__icon" aria-hidden="true"></i>Чат
+  </a>
+  <a class="sidebar__link {% if active == 'selfcheck' %}sidebar__link--active{% endif %}" href="/self-check">
+    <i class="bi bi-card-checklist sidebar__icon" aria-hidden="true"></i>Самопроверка
+  </a>
+
+  <div class="sidebar__footer">
+    <div class="sidebar__user">
+      <div class="sidebar__user-avatar" data-user-initials>—</div>
+      <span class="sidebar__user-email" data-user-email>—</span>
+    </div>
+  </div>
+</aside>
+{% endmacro %}
+
+{# ============================================================== #}
+{# Sidebar — tenant-admin                                          #}
+{# ============================================================== #}
+{% macro sidebar_tenant_admin(active='') %}
+<aside class="sidebar">
+  <div class="sidebar__brand">
+    <img src="/static/icons/atlas-shield.svg" class="sidebar__brand-mark" alt="">
+    <span class="sidebar__brand-name">ATLAS phd</span>
+  </div>
+
+  <a class="sidebar__link {% if active == 'program' %}sidebar__link--active{% endif %}" href="/tenant-admin">
+    <i class="bi bi-book sidebar__icon" aria-hidden="true"></i>Программа
+  </a>
+  <a class="sidebar__link {% if active == 'materials' %}sidebar__link--active{% endif %}" href="/admin">
+    <i class="bi bi-file-earmark-text sidebar__icon" aria-hidden="true"></i>Материалы<span class="sidebar__count" data-count-materials></span>
+  </a>
+  <a class="sidebar__link {% if active == 'invites' %}sidebar__link--active{% endif %}" href="/tenant-admin#invites">
+    <i class="bi bi-envelope-paper sidebar__icon" aria-hidden="true"></i>Инвайты
+  </a>
+
+  <div class="sidebar__footer">
+    <div class="sidebar__user">
+      <div class="sidebar__user-avatar" data-user-initials>—</div>
+      <span class="sidebar__user-email" data-user-email>—</span>
+    </div>
+  </div>
+</aside>
+{% endmacro %}
+
+{# ============================================================== #}
+{# Sidebar — super-admin                                           #}
+{# ============================================================== #}
+{% macro sidebar_super_admin(active='') %}
+<aside class="sidebar">
+  <div class="sidebar__brand">
+    <img src="/static/icons/atlas-shield.svg" class="sidebar__brand-mark" alt="">
+    <span class="sidebar__brand-name">ATLAS phd</span>
+  </div>
+
+  <a class="sidebar__link {% if active == 'eval' %}sidebar__link--active{% endif %}" href="/eval">
+    <i class="bi bi-graph-up sidebar__icon" aria-hidden="true"></i>Eval
+  </a>
+  <a class="sidebar__link {% if active == 'admin' %}sidebar__link--active{% endif %}" href="/admin">
+    <i class="bi bi-file-earmark-text sidebar__icon" aria-hidden="true"></i>Материалы
+  </a>
+
+  <div class="sidebar__group-label">Инструменты</div>
+  <a class="sidebar__link" href="/_/styleguide" target="_blank">
+    <i class="bi bi-palette sidebar__icon" aria-hidden="true"></i>Styleguide
+  </a>
+
+  <div class="sidebar__footer">
+    <div class="sidebar__user">
+      <div class="sidebar__user-avatar" data-user-initials>—</div>
+      <span class="sidebar__user-email" data-user-email>—</span>
+    </div>
+  </div>
+</aside>
+{% endmacro %}
