@@ -56,6 +56,10 @@ class QAEntry(_BaseEntry):
     acceptable_citations: list[CitationSpec]
     reference_answer: str
     difficulty: Literal["easy", "medium", "hard"] = "medium"
+    # M4.5.E: external_id of program_topic that this entry belongs to.
+    # None for refusal-block entries (off-topic by design). Allows per-topic
+    # heatmap aggregation in M5 supervisor analytics.
+    topic_external_id: str | None = None
 
 
 class RefusalEntry(_BaseEntry):
@@ -77,6 +81,7 @@ class FormulaEntry(_BaseEntry):
     reference_answer: str
     formula_required: bool = True
     difficulty: Literal["easy", "medium", "hard"] = "hard"
+    topic_external_id: str | None = None  # see QAEntry
 
 
 class SelfCheckEntry(_BaseEntry):
@@ -94,6 +99,7 @@ class SelfCheckEntry(_BaseEntry):
     expected_scores: dict[RubricCriterion, float]
     expected_overall: float = Field(ge=0, le=5)
     reference_answer: str
+    topic_external_id: str | None = None  # see QAEntry
 
 
 GoldenSetEntry = Annotated[

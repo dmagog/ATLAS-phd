@@ -279,6 +279,72 @@ MAE стабилен в пределах 0.020 (ниже 0.03 floor'а). κ_bina
 
 ---
 
+## M4.5.E Per-topic annotations (eval-set v1.1, 2026-05-07)
+
+Каждой не-refusal entry присвоен `topic_external_id` — идентификатор topic'а
+из активной программы тенанта `optics-kafedra` (BDD 4.5). Это позволяет
+делать per-topic breakdown метрик и связывает eval-set с supervisor
+heatmap'ом (M5.B).
+
+### Distribution
+
+| Topic | external_id | Entries |
+|---|---|---|
+| Принципы Ферма и Гюйгенса | 1.1 | 18 |
+| Тонкие линзы и зеркала | 1.2 | 8 |
+| Полное внутреннее отражение | 1.3 | 2 |
+| Интерференция света | 2.1 | 24 |
+| Дифракция Френеля и Фраунгофера | 2.2 | 18 |
+| Поляризация света | 2.3 | 30 |
+| **Total non-refusal** | | **100** |
+
+### Per-topic метрики (на M3.C run, paid llama 3.3 70b)
+
+| Topic | Total | Answered | Faithfulness μ | Selfcheck MAE |
+|---|---|---|---|---|
+| 1.1 Принципы Ферма+Гюйгенс | 18 | 14 (78%) | 0.440 | 0.600 |
+| 1.2 Линзы и зеркала | 8 | 8 (100%) | 0.318 | — |
+| 1.3 Полное внутр. отражение | **2** | 2 | **0.208** | — |
+| 2.1 Интерференция | 24 | 16 (67%) | 0.471 | 0.775 |
+| 2.2 Дифракция | 18 | 18 (100%) | 0.579 | — |
+| **2.3 Поляризация** | **30** | 22 (73%) | **0.600** | 0.413 |
+
+### Insights для supervisor narrative
+
+1. **2.3 Поляризация — самый проработанный topic**: больше всего entries
+   (30), highest faithfulness (0.600), lowest selfcheck MAE (0.413).
+   В eval-set'е сосредоточен на этой теме потому что много нелинейно-оптических
+   эффектов (Брюстер, Малюс, Поккельс, Керр, Фарадей, Зееман, Штарк, Раман,
+   гармоники, параметрика).
+2. **1.3 Полное внутреннее отражение — слабо покрыта**: всего 2 entries,
+   faithfulness 0.208. Action: расширить eval-set v1.2 entries по этому topic'у.
+3. **1.2 Линзы — высокий answered rate (100%) при низком faithfulness (0.318)**:
+   модель отвечает уверенно, но судья детектирует hallucinations или uncited
+   claims. Action: проверить retrieval по линзам — возможно chunks не самые
+   релевантные.
+4. **per-topic breakdown воспроизводит heatmap'у supervisor'а** на уровне
+   eval-set'а: точно так же скоро можно будет видеть, где аспиранты падают
+   чаще.
+
+### Артефакты
+
+- `eval/golden_set_v1/golden_set_v1.0.jsonl` — eval-set v1.1 (120 entries
+  с `topic_external_id` в каждой не-refusal entry)
+- `eval/schema.py` — schema accepts `topic_external_id: str | None` на всех
+  entry types кроме RefusalEntry
+- `eval/per_topic_breakdown.py` — новый скрипт для per-topic анализа любого
+  run-dir'а (responses.jsonl + faithfulness_detail.json)
+
+### Action items
+
+- [ ] eval-set v1.2: расширить 1.3 Полное внутреннее отражение (минимум +5 entries)
+- [ ] M5.D supervisor heatmap: добавить per-topic faithfulness aggregation
+      из production-judge sample'а (требует M3.E sampler)
+- [ ] M3.D CI regression gate: считать per-topic Δ vs предыдущий run, fail
+      если хоть один topic просел > 0.1 на faithfulness
+
+---
+
 ## Версия отчёта
 
 - **v1.0** (2026-05-03) — первый M3.B A/B на free-tier llama. Refusal+formula 40 entries. Полный прогон blocked rate-limit'ом.
@@ -286,3 +352,4 @@ MAE стабилен в пределах 0.020 (ниже 0.03 floor'а). κ_bina
 - **v2.0** (2026-05-06) — paid llama 3.3 70b. Полный 100-entry прогон baseline + treatment + treatment-postfix + judge × 3. Все базовые BDD (1.3, 6.1, 6.2) passing. Faithfulness measured: 0.541 (treatment), 0.550 (baseline).
 - **v2.1** (2026-05-06 evening) — M3.A self-check блок 0/20 → 20/20: новый `/self-check/evaluate` debug endpoint, schema fix, MAE 0.615, κ binarized 1.0, 75% within ±1.0. Eval-set вырос до 120 entries.
 - **v2.2** (2026-05-07) — M3.C reproducibility check на полном 120-entry eval-set v1.0. 6/7 PASS, 1 FAIL (faithfulness Δ=0.040 vs 0.030 floor). Детерминированные метрики Δ=0 perfectly. Faithfulness variance — inherent LLM-judge stochasticity, решается switch'ем на gpt-4o-class судьи.
+- **v2.3** (2026-05-07) — M4.5.E: eval-set v1.1 с per-topic annotations. 100/100 non-refusal entries замаплены на 6 topics программы. Distribution skewed: 2.3 Поляризация (30) >> 1.3 ТIR (2). Per-topic faithfulness reveals: 2.3 best (0.600), 1.3 lowest (0.208) — нужно расширить eval-set по слабо покрытым topic'ам. Новый скрипт `eval/per_topic_breakdown.py`.
