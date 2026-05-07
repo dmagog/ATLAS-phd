@@ -94,17 +94,17 @@
       <h2 class="t-xl t-bold mb-2">Вход в ATLAS phd</h2>
       <p class="t-sm t-muted mb-5">Войдите по корпоративному email и паролю.</p>
 
-      <form class="flex-col gap-3">
-        <div class="field">
-          <label class="label">Email</label>
-          <input class="input" type="email" placeholder="ivanov@itmo.ru" autocomplete="email">
+      <form class="flex-col gap-2" aria-label="Форма входа">
+        <div class="field field--lg">
+          <label class="label" for="login-email">Email</label>
+          <input class="input" id="login-email" type="email" placeholder="ivanov@itmo.ru" autocomplete="email" required>
         </div>
-        <div class="field">
+        <div class="field field--lg">
           <div class="flex items-center justify-between">
-            <label class="label">Пароль</label>
+            <label class="label" for="login-pw">Пароль</label>
             <a href="#" class="t-xs">Забыли пароль?</a>
           </div>
-          <input class="input" type="password" placeholder="••••••••" autocomplete="current-password">
+          <input class="input" id="login-pw" type="password" placeholder="••••••••" autocomplete="current-password" required>
         </div>
         <button type="button" class="btn btn--primary btn--block btn--lg mt-2">Войти</button>
       </form>

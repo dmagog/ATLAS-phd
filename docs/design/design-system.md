@@ -194,4 +194,22 @@ Sidebar — `240px`, фиксированной ширины. Source-panel — `
 
 ## 9. Changelog
 
+- **0.2 (2026-05-07, Фаза 4 полировка):** Добавлен дискретный «Phase 4 polish» блок (~6 KB) в конце [`atlas.css`](../../src/atlas/static/atlas.css). Изменения:
+  - **Motion (раздел 26).** Keyframes `atlas-fade-in-up`, `atlas-scale-in`, `atlas-pulse-ring`. Stagger entrance для hero-card на дашбордах (60ms/120ms/180ms задержки). Refusal с `atlas-scale-in` (360ms) — emotional moment. Citation pill: `translateY(-1px)` на hover. Hard-gate badge: 2-кратный pulse-ring через 1.2s после загрузки (привлекает взгляд комиссии на demo). Полное уважение к `prefers-reduced-motion`.
+  - **Focus (раздел 27).** Усилен `:focus-visible` на dark: outline `#93C5FD` + 4px box-shadow rgba(96,165,250,.2). На light оставлен primary outline.
+  - **Bar-cmp responsive (раздел 28).** Container query (max-width: 480px) переключает grid на vertical (label/value сверху, pair снизу). Fallback через media (max-width: 720px) для старых браузеров.
+  - **Field--lg (раздел 29).** Увеличенные отступы для login-формы.
+  - **Heatmap tooltip (раздел 30).** CSS-only tooltip через `data-tip` атрибут. Появляется на hover с opacity-transition. Используется в supervisor heatmap с полным контекстом (ФИО · топик · score).
+  - **Refusal narrow viewport (раздел 31).** При <600px — single-column metrics grid, уменьшенный icon (96 → 64), уменьшенный title.
+  - **Card hover lift (раздел 32).** Subtle `translateY(-1px)` для interactive-cards.
+  - **Source-card (раздел 33).** Hover: `translateX(2px)`. Active: fade-in entrance.
+  - **Light-mode shadows (раздел 34).** Перетюнены через slate-tinted rgba (15, 23, 42) вместо нейтрального чёрного — выглядит «холоднее», подходит к brand-slate.
+  - **Sidebar link (раздел 35).** Padding-left на hover увеличивается на 2px — мягкая обратная связь.
+  - **Topbar sticky (раздел 36).** `position: sticky` для удержания контекста при скролле дашборда.
+  - **Print (раздел 37).** Скрытие sidebar/topbar при печати — для возможного экспорта скриншотов через браузерное «Сохранить как PDF».
+
+  Wireframes: aria-labels на всех icon-only кнопках (chat / eval / tenant-admin / supervisor), `<time>` элемент для timestamps, форма login с `for`/`id`-связками лейблов, role/gridcell aria для heatmap. κ-бейдж в selfcheck стал кликабельной ссылкой на `/eval`. Supervisor heatmap получил полные tooltip'ы с ФИО + топиком + score (исправлен Jinja-баг с shadowing внешнего `loop` во внутреннем).
+
+  Closed: 5 находок из конца Фазы 3 (login density, focus-state на dark, heatmap tooltip, refusal narrow viewport, bar-cmp responsive). Verified: все 7 wf-роутов + styleguide отвечают 200, atlas.css 33.7 KB.
+
 - **0.1 (2026-05-07):** Первая фиксация. 18 компонентов, light/dark темы, бренд-иконка интегрирована, styleguide рендерится через Jinja2 на `/_/styleguide`, рендер verified (200 OK, 44 KB HTML, 27 KB CSS).

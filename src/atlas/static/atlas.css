@@ -727,3 +727,176 @@ img, svg { display: block; max-width: 100%; }
   outline-offset: 2px;
   border-radius: var(--r-sm);
 }
+
+/* ============================================================ */
+/* ============ PHASE 4 POLISH (v0.2, 2026-05-07) ============= */
+/* ============================================================ */
+
+/* 26. Motion — keyframes + functional micro-animations          */
+@keyframes atlas-fade-in-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes atlas-scale-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes atlas-pulse-ring {
+  0%, 100% { box-shadow: 0 0 0 0 var(--c-primary-bg); }
+  50%      { box-shadow: 0 0 0 6px transparent; }
+}
+
+/* Stagger entrance for hero-cards in dashboards */
+.hero-card {
+  animation: atlas-fade-in-up 320ms ease-out backwards;
+}
+.grid-cols-3 > .hero-card:nth-child(1),
+.grid-cols-4 > .hero-card:nth-child(1) { animation-delay: 0ms; }
+.grid-cols-3 > .hero-card:nth-child(2),
+.grid-cols-4 > .hero-card:nth-child(2) { animation-delay: 60ms; }
+.grid-cols-3 > .hero-card:nth-child(3),
+.grid-cols-4 > .hero-card:nth-child(3) { animation-delay: 120ms; }
+.grid-cols-4 > .hero-card:nth-child(4) { animation-delay: 180ms; }
+
+/* Refusal screen — emotional moment, slightly slower, scale-in */
+.refusal { animation: atlas-scale-in 360ms ease-out; }
+
+/* Citation pills — subtle scale on hover */
+.cite { transition: background var(--t-fast), color var(--t-fast), transform var(--t-fast); }
+.cite:hover { transform: translateY(-1px); }
+
+/* Hard-gate verified badge — gentle pulse to draw eye on demo */
+.badge--brand {
+  position: relative;
+  animation: atlas-pulse-ring 2.4s ease-out 1.2s 2;
+}
+
+/* Reduced motion — disable everything except opacity */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* 27. Focus — stronger ring on dark, softer on light             */
+:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 3px;
+  border-radius: var(--r-sm);
+}
+[data-theme="dark"] :focus-visible {
+  outline-color: #93C5FD;
+  box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.2);
+}
+.input:focus-visible, .textarea:focus-visible, .select:focus-visible {
+  outline: none; /* native focus replaced by border + box-shadow combo */
+}
+[data-theme="dark"] .input:focus, [data-theme="dark"] .textarea:focus, [data-theme="dark"] .select:focus {
+  border-color: #93C5FD;
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.25);
+}
+
+/* 28. Bar-cmp responsive — switch to vertical when narrow        */
+.bar-cmp__row {
+  /* Default 3-col grid (140 / 1fr / 60). On narrow card, collapse to 2-row. */
+  container-type: inline-size;
+}
+@container (max-width: 480px) {
+  .bar-cmp__row {
+    grid-template-columns: 1fr 60px;
+    grid-template-areas: 'label value' 'pair pair';
+  }
+  .bar-cmp__label { grid-area: label; }
+  .bar-cmp__value { grid-area: value; }
+  .bar-cmp__pair  { grid-area: pair; }
+}
+/* Fallback for older browsers without container queries: media query at 720px viewport */
+@media (max-width: 720px) {
+  .bar-cmp__row {
+    grid-template-columns: 1fr 60px;
+    grid-template-areas: 'label value' 'pair pair';
+    gap: var(--sp-2);
+  }
+}
+
+/* 29. Field — looser variant for hero forms (login)              */
+.field--lg              { margin-bottom: var(--sp-4); }
+.field--lg .label       { font-size: var(--fs-sm); margin-bottom: 6px; }
+.field--lg .input,
+.field--lg .textarea,
+.field--lg .select      { padding: 11px 14px; font-size: var(--fs-base); }
+
+/* 30. Heatmap tooltip — show on hover via CSS-only              */
+.heatmap__cell { position: relative; }
+.heatmap__cell[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  background: var(--c-text);
+  color: var(--c-bg);
+  padding: 6px 10px;
+  border-radius: var(--r-md);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--t-fast), transform var(--t-fast);
+  z-index: 10;
+  box-shadow: var(--sh-md);
+}
+.heatmap__cell[data-tip]:hover::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* 31. Refusal — narrow viewport adaptation                       */
+@media (max-width: 600px) {
+  .refusal { padding: var(--sp-6) var(--sp-5); margin: var(--sp-4) auto; }
+  .refusal__icon { width: 64px; height: 64px; }
+  .refusal__metrics { grid-template-columns: 1fr; }
+  .refusal__title { font-size: var(--fs-lg); }
+}
+
+/* 32. Card hover lift (used on .card--interactive)               */
+.card--interactive:hover { transform: translateY(-1px); }
+
+/* 33. Source-card — readable click affordance                    */
+.source-card {
+  transition: border-color var(--t-fast), background var(--t-fast), transform var(--t-fast);
+}
+.source-card:hover { transform: translateX(2px); }
+.source-card--active { animation: atlas-fade-in-up 200ms ease-out; }
+
+/* 34. Light-mode shadow strengthening (default was tuned for dark) */
+:root {
+  --sh-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --sh-md: 0 1px 3px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(15, 23, 42, 0.04);
+  --sh-lg: 0 8px 24px rgba(15, 23, 42, 0.12);
+}
+
+/* 35. Sidebar — refined active state visibility                  */
+.sidebar__link {
+  /* Slight padding adjust for visual balance with active marker */
+  transition: background var(--t-fast), color var(--t-fast), padding-left var(--t-fast);
+}
+.sidebar__link:hover { padding-left: calc(var(--sp-3) + 2px); }
+.sidebar__link--active:hover { padding-left: var(--sp-3); }
+
+/* 36. Topbar — subtle separator on scroll                        */
+.app__topbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--c-surface);
+}
+
+/* 37. Print — hide chrome for screenshot exports                 */
+@media print {
+  .sidebar, .app__topbar { display: none; }
+  .app__content { padding: 0; }
+}
