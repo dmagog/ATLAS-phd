@@ -1,7 +1,9 @@
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
+
+from atlas.core.config import settings
 
 templates = Jinja2Templates(directory=str(Path(__file__).parent.parent.parent / "templates"))
 router = APIRouter(tags=["web"])
@@ -60,3 +62,84 @@ async def styleguide_page(request: Request):
     """Internal design-system showcase. No auth gate — page is harmless,
     but kept on `_/` prefix to signal internal use."""
     return templates.TemplateResponse(request=request, name="_styleguide.html")
+
+
+@router.get("/_/demo-seed-superadmin", response_class=HTMLResponse)
+async def demo_seed_superadmin_helper():
+    """Phase 6 screenshot helper: idempotently creates super@optics.demo
+    super-admin user (cross-tenant). Returns plain text. Disabled in
+    production. Same security guard as demo-login (env != production)."""
+    if getattr(settings, "app_env", "development") == "production":
+        raise HTTPException(status_code=404)
+    from sqlalchemy import select
+    from atlas.core.security import hash_password
+    from atlas.db.models import SupervisorVisibility, User, UserRole
+    from atlas.db.session import AsyncSessionLocal
+    import uuid as _uuid
+
+    async with AsyncSessionLocal() as db:
+        existing = (await db.execute(
+            select(User).where(User.email == "super@optics.demo")
+        )).scalar_one_or_none()
+        if existing is not None:
+            return HTMLResponse(content=f"already exists: id={existing.id}", media_type="text/plain")
+        u = User(
+            id=_uuid.uuid4(),
+            email="super@optics.demo",
+            hashed_password=hash_password("demo"),
+            role=UserRole.super_admin.value,
+            tenant_id=None,
+            supervisor_visibility=SupervisorVisibility.show.value,
+        )
+        db.add(u)
+        await db.commit()
+        return HTMLResponse(content=f"created: id={u.id}", media_type="text/plain")
+
+
+@router.get("/_/demo-login", response_class=HTMLResponse)
+async def demo_login_helper(email: str, next: str = "/"):
+    """Phase 6 screenshot helper: instant-login for *.demo accounts.
+
+    Returns a tiny HTML page that POSTs /auth/login with hard-coded
+    'demo' password, saves the resulting token to localStorage, and
+    redirects to ?next=<path>.
+
+    Strict guard: ONLY emails ending in '@optics.demo' are accepted.
+    Any other email returns 404 (not 403, to avoid hint of route
+    existence).
+
+    Disabled in production: settings.app_env == 'production' returns 404.
+    """
+    if getattr(settings, "app_env", "development") == "production":
+        raise HTTPException(status_code=404)
+    if not email.endswith("@optics.demo"):
+        raise HTTPException(status_code=404)
+    # Validate next is same-origin path (no open redirect).
+    if not next.startswith("/") or next.startswith("//"):
+        next = "/"
+
+    html = f"""<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>Demo login…</title></head><body>
+<p style="font-family: sans-serif; padding: 40px;">Setting up demo session for <b>{email}</b>…</p>
+<script>
+(async function() {{
+  try {{
+    const r = await fetch('/auth/login', {{
+      method: 'POST',
+      headers: {{'Content-Type': 'application/json'}},
+      body: JSON.stringify({{email: {email!r}, password: 'demo'}}),
+    }});
+    if (!r.ok) {{
+      document.body.innerHTML = '<p style="color:red">Login failed: HTTP ' + r.status + '</p>';
+      return;
+    }}
+    const d = await r.json();
+    localStorage.setItem('atlas_token', d.access_token);
+    localStorage.setItem('atlas_email', {email!r});
+    location.replace({next!r});
+  }} catch (e) {{
+    document.body.innerHTML = '<p style="color:red">Error: ' + e.message + '</p>';
+  }}
+}})();
+</script></body></html>"""
+    return HTMLResponse(content=html)

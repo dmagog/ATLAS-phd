@@ -373,7 +373,10 @@ function renderResults(data, topic) {
   breakdown.innerHTML = '';
   qrs.forEach((r, i) => {
     const isMC = r.type === 'multiple_choice';
-    const statusColor = scoreColor(r.score);
+    // MC binary 0/1, open 0-5 — different color scales.
+    const statusColor = isMC
+      ? (r.score > 0 ? 'var(--c-success)' : 'var(--c-danger)')
+      : scoreColor(r.score);
     const statusLabel = { correct: 'Верно', partial: 'Частично', incorrect: 'Неверно' }[r.status] || r.status;
 
     const div = document.createElement('div');

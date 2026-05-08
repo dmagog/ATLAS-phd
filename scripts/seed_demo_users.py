@@ -52,6 +52,7 @@ PASSWORD = os.getenv("DEMO_PASSWORD", "demo")
 TENANT_SLUG = "optics-kafedra"
 
 ROSTER: list[DemoUser] = [
+    DemoUser("super@optics.demo",     "Демо super-admin", UserRole.super_admin.value,  SupervisorVisibility.show.value),
     DemoUser("admin@optics.demo",     "Андреев Д. С.",    UserRole.tenant_admin.value, SupervisorVisibility.show.value),
     DemoUser("vasiliev@optics.demo",  "Васильев Н. К.",   UserRole.supervisor.value,   SupervisorVisibility.show.value),
 
@@ -115,7 +116,8 @@ async def seed() -> None:
                 email=u.email,
                 hashed_password=hash_password(PASSWORD),
                 role=u.role,
-                tenant_id=tenant.id,
+                # super-admin is cross-tenant (tenant_id=NULL); others bind to pilot.
+                tenant_id=None if u.role == UserRole.super_admin.value else tenant.id,
                 supervisor_visibility=u.visibility,
             )
             db.add(user)

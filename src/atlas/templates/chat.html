@@ -70,6 +70,22 @@
 function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
+
+// KaTeX delimiters mirror _app.html bootstrap config; per-bubble math
+// re-render needs them passed explicitly (default delimiters are \(...\),
+// not $...$).
+const KATEX_OPTS = {
+  delimiters: [
+    { left: '$$', right: '$$', display: true },
+    { left: '$',  right: '$',  display: false },
+  ],
+  throwOnError: false,
+};
+
+function renderMath(el) {
+  if (window.renderMathInElement) renderMathInElement(el, KATEX_OPTS);
+}
+
 function mdToHtml(text) {
   return escHtml(text)
     .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
@@ -77,6 +93,21 @@ function mdToHtml(text) {
     .replace(/`([^`]+)`/g, '<code style="background:var(--c-surface-2);padding:1px 5px;border-radius:3px">$1</code>')
     .replace(/\n\n/g, '</p><p>')
     .replace(/\n/g, '<br>');
+}
+
+// Replace `[Doc: <title>, p.<page>]` strings (LLM emits them inline) with
+// numbered citation pills mapped to source-panel indices. Title may contain
+// underscores, dashes, dots — anything except a comma.
+// Also handles HTML-escaped variants — escHtml runs first, so we operate on
+// the post-escape string.
+function citationsToPills(html) {
+  const re = /\[Doc:\s*([^,\]]+?),\s*p\.(\d+)\]/g;
+  return html.replace(re, (match, title, page) => {
+    const key = title.trim() + '|' + page;
+    const src = seenSources.get(key);
+    if (!src) return match;  // unknown — leave verbatim
+    return `<a href="#" class="cite" data-src-idx="${src.idx}">${src.idx}</a>`;
+  });
 }
 
 // ── Step badges shown during typing ───────────────────────────────────────────
@@ -99,7 +130,7 @@ function appendBubble(role, label, html, opts = {}) {
   if (opts.id) wrap.id = opts.id;
   document.getElementById('messages').appendChild(wrap);
   scrollToBottom();
-  if (window.renderMathInElement) renderMathInElement(wrap);
+  renderMath(wrap);
   return wrap;
 }
 
@@ -224,9 +255,11 @@ function renderQA(data, questionText) {
     ? indices.map(i => `<a href="#" class="cite" data-src-idx="${i}">${i}</a>`).join(' ')
     : '';
 
-  const answerHtml = '<p>' + mdToHtml(data.answer_markdown || '') + '</p>';
+  // Convert raw `[Doc: title, p.N]` markers in answer markdown to pills.
+  // citationsToPills runs AFTER mdToHtml so it operates on escaped HTML.
+  const answerHtml = '<p>' + citationsToPills(mdToHtml(data.answer_markdown || '')) + '</p>';
   const sourcesLine = citePills
-    ? `<div class="mt-3 t-xs t-muted">Источники: ${citePills}</div>`
+    ? `<div class="mt-3 t-xs t-muted">Все источники: ${citePills}</div>`
     : '';
 
   const badgesHtml = `<div class="mt-3 flex gap-2 items-center flex-wrap">
@@ -488,6 +521,12 @@ document.getElementById('clear-btn').addEventListener('click', () => {
 // onAuthReady is defined in _app.html bootstrap; nothing more to do here
 window.onAuthReady = function () {
   document.getElementById('chat-input').focus();
+  // Phase 6 screenshot helper: ?ask=<query> auto-fires sendMessage on load.
+  const ask = new URLSearchParams(location.search).get('ask');
+  if (ask) {
+    document.getElementById('chat-input').value = ask;
+    setTimeout(() => sendMessage(), 200);
+  }
 };
 </script>
 {% endblock %}

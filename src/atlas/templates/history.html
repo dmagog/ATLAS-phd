@@ -183,11 +183,18 @@ async function openDetail(attemptId) {
     html += `<div class="t-uppercase mb-2">Вопросы</div><div class="flex-col gap-2">`;
     (d.question_results || []).forEach((r, i) => {
       const isMC = r.type === 'multiple_choice';
-      const sColor = scoreColor(r.score);
+      // MC scores are binary 0/1; open-ended are 0-5. Map them through different
+      // color scales so MC=1.0 doesn't get red treatment.
+      const sColor = isMC
+        ? (r.score > 0 ? 'var(--c-success)' : 'var(--c-danger)')
+        : scoreColor(r.score);
+      const sBg = isMC
+        ? (r.score > 0 ? 'var(--c-success-bg)' : 'var(--c-danger-bg)')
+        : scoreBg(r.score);
       const scoreDisplay = isMC
-        ? `<i class="bi bi-${r.score > 0 ? 'check-circle-fill' : 'x-circle-fill'}" style="color: ${sColor}" aria-hidden="true"></i>`
+        ? `<i class="bi bi-${r.score > 0 ? 'check-circle-fill' : 'x-circle-fill'}" style="color: ${sColor}; font-size: 1.2rem" aria-hidden="true"></i>`
         : `<span style="color: ${sColor}; font-weight: 600;">${r.score.toFixed(1)} <span class="t-xs t-muted" style="font-weight: 400">/5</span></span>`;
-      html += `<div style="padding: var(--sp-3); border-radius: var(--r-md); background: ${scoreBg(r.score)}; border: 1px solid var(--c-border);">
+      html += `<div style="padding: var(--sp-3); border-radius: var(--r-md); background: ${sBg}; border: 1px solid var(--c-border);">
         <div class="flex items-start justify-between gap-3">
           <div class="t-sm" style="flex: 1;">${i + 1}. ${escHtml(r.prompt)}</div>
           <div style="flex-shrink: 0;">${scoreDisplay}</div>
@@ -214,6 +221,11 @@ document.getElementById('detail-overlay').addEventListener('click', e => {
   }
 });
 
-window.onAuthReady = function () { loadHistory(); };
+window.onAuthReady = async function () {
+  await loadHistory();
+  // Phase 6 screenshot helper: ?open=<attempt_id> auto-opens detail modal.
+  const open = new URLSearchParams(location.search).get('open');
+  if (open) setTimeout(() => openDetail(open), 300);
+};
 </script>
 {% endblock %}
