@@ -29,6 +29,8 @@
 
 **Экран:** `/login`, потом `/` (главная сразу после входа).
 
+![login](screenshots/after/01-login.png)
+
 **Что должно быть видно:**
 - Бренд-логотип ATLAS (`shield-no-ring-calm-blue` из [`branding/`](../branding/)) на login-экране.
 - Header после входа: tenant-context («Кафедра оптики ИТМО»), роль-badge («Студент»), email.
@@ -48,6 +50,12 @@
 
 **Сценарий:** ввести один из заранее подготовленных вопросов из demo-seed (Фаза 6). Пример: «Сформулируй принцип Ферма».
 
+![chat-citations](screenshots/after/02-chat-citations.png)
+
+После клика на любой numeric pill открывается модалка с **полным фрагментом** учебника, на который опёрся ответ:
+
+![source-modal](screenshots/after/03-source-modal.png)
+
 **Что должно быть видно:**
 - Typing indicator с rotating steps (этот компонент уже есть, оставить).
 - Ответ с inline numeric citations `[1] [2]` (новый паттерн вместо tail-list).
@@ -66,7 +74,9 @@
 
 **Экран:** `/` Чат → Refusal-экран как first-class state.
 
-**Сценарий:** ввести один из demo-seed off-topic вопросов. Пример: «Что такое теория струн?» (нет в корпусе оптики).
+**Сценарий:** ввести один из demo-seed off-topic вопросов. Пример: «Какова численность населения Москвы?» (явно не оптика).
+
+![refusal-screen](screenshots/after/04-refusal-screen.png)
 
 **Что должно быть видно:**
 - Шаги retrieval (`Ищу...`).
@@ -88,6 +98,8 @@
 
 **Экран:** `/eval` (новый).
 
+![eval-dashboard](screenshots/after/08-eval-dashboard.png)
+
 **Что должно быть видно (3 hero-cards в верхнем ряду):**
 1. **`refusal_tnr 1.000`** vs `baseline 0.000` — большая цифра, мини-bar, подпись «true negative rate на off-topic вопросах».
 2. **`κ_binarized 1.000`** vs `baseline ~0.5` — подпись «agreement self-check rubric с экспертом».
@@ -105,9 +117,11 @@
 
 ### Шаг 4 — Self-check с рубрикой
 
-**Экран:** `/self-check` → результаты.
+**Экран:** `/self-check` → результаты, ИЛИ `/self-check/history?open=<id>` для готовой попытки.
 
-**Сценарий:** запустить self-check по теме (например, «Дисперсия света»). Ответить на 3 вопроса (один MC верно, один MC неверно, один open partial). Показать результаты.
+**Сценарий:** запустить self-check по теме (например, «Дисперсия света») ИЛИ открыть готовую showcase-попытку (ivanov, «Интерференция света», score 4.7).
+
+![selfcheck-rubric](screenshots/after/05-selfcheck-rubric.png)
 
 **Что должно быть видно:**
 - **Hero**: большой score (`3.5 / 5`), verdict («Хорошо»), sparkline последних 3 попыток по этой теме.
@@ -124,9 +138,11 @@
 
 ### Шаг 5 — Supervisor heatmap
 
-**Экран:** Supervisor dashboard (новый).
+**Экран:** Supervisor dashboard (новый, `/supervisor`).
 
-**Сценарий:** logout → login как supervisor (по plan'у demo-seed). Открывается dashboard.
+**Сценарий:** logout → login как supervisor (`vasiliev@optics.demo`). Открывается dashboard.
+
+![supervisor-heatmap](screenshots/after/06-supervisor-heatmap.png)
 
 **Что должно быть видно:**
 - **Sidebar**: Студенты / Программа / Материалы / Аудит.
@@ -142,9 +158,19 @@
 
 ### Шаг 6 — Tenant-admin: программа + материалы
 
-**Экран:** Tenant-admin dashboard (новый).
+**Экран:** Tenant-admin dashboard (новый, `/tenant-admin`).
 
-**Сценарий:** logout → login как tenant-admin. Краткий showcase:
+**Сценарий:** logout → login как tenant-admin (`admin@optics.demo`).
+
+![tenant-admin](screenshots/after/07-tenant-admin.png)
+
+Дополнительно для слайда «как добавить вторую кафедру» — `/_/tenants` под super-admin'ом, с onboarding-hint card:
+
+![tenants-list](screenshots/after/09-tenants-list.png)
+
+И dedicated `/_/invites` для управления приглашениями:
+
+![invites-page](screenshots/after/10-invites-page.png)
 
 **Что должно быть видно:**
 - **Программа**: список топиков (6 из `M4.5`), для каждого — % покрытия корпусом (из `/{slug}/coverage`).
@@ -159,9 +185,13 @@
 
 ### Шаг 7 — Заключение (повторно eval)
 
-**Экран:** `/eval`.
+**Экран:** `/eval` (см. скриншот в Шаге 3).
 
 Ничего нового, повтор для якорения. Произносится: «Когда мы расширим корпус или добавим вторую кафедру, эти цифры — наш контроль качества. Любая регрессия видна».
+
+---
+
+> 💡 **Полная аннотированная галерея скриншотов** (с тезисами и demo-сценарием для каждого) — в [`screenshots/after/README.md`](screenshots/after/README.md). Используется как «учебник» защиты для финальной сборки слайдов.
 
 ---
 

@@ -9,6 +9,11 @@
 
 **ATLAS (Assistant for Technical Learning & Attestation Support)** — агентный ассистент для подготовки к кандидатскому минимуму по технической специальности.
 
+![Eval dashboard — главные цифры диссертации](docs/design/screenshots/after/08-eval-dashboard.png)
+
+> Cross-tenant eval dashboard под super-admin: `refusal_tnr = 1.000` (vs baseline 0.000), `κ_binarized = 1.000` на self-check рубрике, hard-gate latency p95 = 21.8s. Per-topic breakdown по 6 топикам программы.
+> Полная аннотированная галерея экранов — в [`docs/design/screenshots/after/`](docs/design/screenshots/after/README.md).
+
 ## Проблема
 
 Подготовка к кандидатскому минимуму требует работы с большим объёмом разрозненных материалов (учебники, статьи, конспекты), а также регулярной самопроверки.
