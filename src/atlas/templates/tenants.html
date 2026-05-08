@@ -1,0 +1,197 @@
+{% extends "_app.html" %}
+{% from "_partials.html" import sidebar_super_admin, topbar %}
+{% block title %}Кафедры{% endblock %}
+{% block content_mode %}app__content--dashboard{% endblock %}
+{% block sidebar %}{{ sidebar_super_admin(active='tenants') }}{% endblock %}
+{% block topbar %}{{ topbar() }}{% endblock %}
+
+{% block content %}
+<div class="flex items-baseline justify-between mb-5">
+  <div>
+    <h1 class="t-2xl t-bold">Кафедры платформы</h1>
+    <div class="t-sm t-muted" id="tenants-info">—</div>
+  </div>
+  <button class="btn btn--secondary btn--sm" id="create-tenant-btn">
+    <i class="bi bi-plus-lg" aria-hidden="true"></i>Добавить кафедру
+  </button>
+</div>
+
+<div id="tenants-loading" class="card">
+  <div class="empty">
+    <div class="empty__icon"><span class="spinner spinner--lg"></span></div>
+    <div class="empty__title">Загружаю список кафедр…</div>
+  </div>
+</div>
+
+<div id="tenants-forbidden" class="card hidden">
+  <div class="empty">
+    <div class="empty__icon"><i class="bi bi-shield-exclamation" style="font-size: 48px;"></i></div>
+    <div class="empty__title">Доступ только для super-admin</div>
+    <div class="empty__subtitle">Эта страница показывает кросс-тенантную картину платформы.</div>
+  </div>
+</div>
+
+<div id="tenants-content" class="hidden">
+  <!-- Hero metrics -->
+  <div class="grid grid-cols-3 mb-5" id="tenants-hero"></div>
+
+  <!-- Tenants table -->
+  <div class="card">
+    <h2 class="card__title">Активные кафедры</h2>
+    <div class="card__subtitle">Тестовые тенанты (slug LIKE 'test-%') скрыты от просмотра.</div>
+    <table style="width:100%; border-collapse:collapse; font-size: var(--fs-sm); margin-top: var(--sp-3);">
+      <thead>
+        <tr style="border-bottom: 2px solid var(--c-border);">
+          <th style="text-align:left;  padding: 8px 6px; color: var(--c-text-2); font-weight: 500; font-size: var(--fs-xs);">Кафедра</th>
+          <th style="text-align:left;  padding: 8px 6px; color: var(--c-text-2); font-weight: 500; font-size: var(--fs-xs);">Slug</th>
+          <th style="text-align:left;  padding: 8px 6px; color: var(--c-text-2); font-weight: 500; font-size: var(--fs-xs);">Статус</th>
+          <th style="text-align:right; padding: 8px 6px; color: var(--c-text-2); font-weight: 500; font-size: var(--fs-xs);">Создана</th>
+        </tr>
+      </thead>
+      <tbody id="tenants-tbody"></tbody>
+    </table>
+  </div>
+
+  <!-- Onboarding hint -->
+  <div class="card mt-5" style="background: var(--c-surface-2); border: 1px solid var(--c-border);">
+    <div class="flex items-start gap-3">
+      <i class="bi bi-info-circle" style="font-size: 24px; color: var(--c-primary); flex-shrink: 0;" aria-hidden="true"></i>
+      <div>
+        <div class="t-md t-bold mb-1">Как добавить новую кафедру</div>
+        <p class="t-sm t-muted mb-2">
+          Платформа спроектирована multi-tenant by design (M4.A). Чтобы запустить
+          вторую/третью кафедру, нужно:
+        </p>
+        <ol class="t-sm t-muted" style="padding-left: 20px; line-height: 1.7;">
+          <li>Создать тенант: <code class="t-mono">POST /tenants</code> (slug + display_name)</li>
+          <li>Загрузить программу: <code class="t-mono">POST /tenants/{slug}/program</code> (yaml/markdown)</li>
+          <li>Загрузить материалы: через UI <code class="t-mono">/admin</code> tenant-admin'ом</li>
+          <li>Раздать инвайты: <code class="t-mono">POST /invites</code> с role=supervisor/student</li>
+        </ol>
+        <p class="t-xs t-faint mt-3">
+          Domain-specific промпты, концептные словари, частные эвристики живут
+          в per-tenant конфиге <code class="t-mono">tenants.config</code> — core-код не меняется.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Create-tenant modal (placeholder — full flow для CLI/API) -->
+<div class="overlay" id="create-tenant-modal">
+  <div class="modal">
+    <div class="modal__title">Создать новую кафедру</div>
+    <p class="t-sm t-muted mb-4">
+      Operations-flow: создание тенанта в production делается через CLI или
+      прямой API. UI-flow для добавления кафедр в этом цикле не реализован
+      (out-of-scope для одной-кафедральной защиты).
+    </p>
+    <div class="card card--flat" style="background: var(--c-surface-2); font-family: var(--font-mono); font-size: var(--fs-xs);">
+curl -X POST http://&lt;host&gt;/tenants \<br>
+&nbsp;&nbsp;-H "Authorization: Bearer &lt;super-admin-token&gt;" \<br>
+&nbsp;&nbsp;-H "Content-Type: application/json" \<br>
+&nbsp;&nbsp;-d '{"slug": "math-kafedra", "display_name": "Кафедра математики"}'
+    </div>
+    <div class="flex gap-3 justify-end mt-4">
+      <button class="btn btn--primary" data-close-create-tenant>Понятно</button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function escHtml(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function show(id) { document.getElementById(id).classList.remove('hidden'); }
+function hide(id) { document.getElementById(id).classList.add('hidden'); }
+
+function fmtDate(iso) {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
+  } catch { return iso; }
+}
+
+function statusBadge(s) {
+  const map = {
+    active: ['active', 'badge--success'],
+    'read-only': ['read-only', 'badge--warning'],
+    archived: ['archived', ''],
+  };
+  const [label, cls] = map[s] || [s, ''];
+  return `<span class="badge ${cls}">${escHtml(label)}</span>`;
+}
+
+function heroCard(label, value, valueMod, footnote) {
+  const valClass = 'hero-card__value' + (valueMod ? ' hero-card__value--' + valueMod : '');
+  return `<div class="hero-card">
+    <div class="hero-card__label">${label}</div>
+    <div class="${valClass}">${value}</div>
+    ${footnote ? `<div class="hero-card__compare"><span>${footnote}</span></div>` : ''}
+  </div>`;
+}
+
+window.onAuthReady = async function (me) {
+  if (me.role !== 'super-admin') {
+    hide('tenants-loading');
+    show('tenants-forbidden');
+    return;
+  }
+
+  try {
+    const res = await authFetch('/tenants');
+    if (!res.ok) throw new Error('Failed to load tenants');
+    const all = await res.json();
+    const real = all.filter(t => !t.slug.startsWith('test-'));
+
+    hide('tenants-loading');
+    show('tenants-content');
+
+    document.getElementById('tenants-info').textContent =
+      `${real.length} реальных кафедр · ${all.length - real.length} тестовых тенантов скрыто`;
+
+    // Hero
+    const active = real.filter(t => t.status === 'active').length;
+    const archived = real.filter(t => t.status === 'archived').length;
+    document.getElementById('tenants-hero').innerHTML = [
+      heroCard('Всего кафедр', real.length, null, 'на платформе'),
+      heroCard('Активных', active, active > 0 ? 'success' : null, 'status = active'),
+      heroCard('В архиве', archived, null, 'status = archived'),
+    ].join('');
+
+    // Table
+    const tbody = document.getElementById('tenants-tbody');
+    if (!real.length) {
+      tbody.innerHTML = `<tr><td colspan="4" class="text-center t-muted" style="padding: var(--sp-5)">Реальных кафедр пока нет.</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = real.map(t => `
+      <tr style="border-bottom: 1px solid var(--c-border);">
+        <td style="padding: 12px 6px;">
+          <div class="t-md t-bold">${escHtml(t.display_name)}</div>
+        </td>
+        <td style="padding: 12px 6px;"><code class="t-mono t-xs t-muted">${escHtml(t.slug)}</code></td>
+        <td style="padding: 12px 6px;">${statusBadge(t.status)}</td>
+        <td style="padding: 12px 6px; text-align: right; color: var(--c-text-3); font-size: var(--fs-xs);">${fmtDate(t.created_at)}</td>
+      </tr>`).join('');
+  } catch (err) {
+    if (err.message !== 'unauthorized') {
+      hide('tenants-loading');
+      show('tenants-forbidden');
+    }
+  }
+};
+
+// Create-tenant modal
+const ctModal = document.getElementById('create-tenant-modal');
+document.getElementById('create-tenant-btn').addEventListener('click', () => ctModal.classList.add('overlay--open'));
+document.addEventListener('click', e => {
+  if (e.target.matches('[data-close-create-tenant]') || e.target.id === 'create-tenant-modal') {
+    ctModal.classList.remove('overlay--open');
+  }
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') ctModal.classList.remove('overlay--open'); });
+</script>
+{% endblock %}

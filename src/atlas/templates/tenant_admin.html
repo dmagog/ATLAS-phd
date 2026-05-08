@@ -272,7 +272,7 @@ function renderUsers(students) {
       </div>
       <span class="badge ${s.visible ? 'badge--success' : ''}" style="font-size: 10px;">${s.visible ? 'visible' : 'anon'}</span>
     </div>`;
-  }).join('') + (students.students.length > 8 ? `<a href="#" class="t-xs mt-2">Все пользователи (${students.students.length}) →</a>` : '');
+  }).join('') + (students.students.length > 8 ? `<div class="t-xs t-faint mt-2">…ещё ${students.students.length - 8} пользователей</div>` : '');
 }
 
 // ── Copy invite code ─────────────────────────────────────────────────────────

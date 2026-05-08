@@ -424,6 +424,13 @@ img, svg { display: block; max-width: 100%; }
   flex-direction: column;
   gap: var(--sp-1);
   flex-shrink: 0;
+  /* Sticky → user-info footer всегда внизу viewport, sidebar не уплывает
+     под общий вертикальный скролл. */
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  height: 100vh;
+  overflow-y: auto;
 }
 .sidebar__brand {
   display: flex; align-items: center; gap: var(--sp-2);

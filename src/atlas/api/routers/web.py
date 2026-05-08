@@ -57,6 +57,13 @@ async def tenant_admin_page(request: Request):
     return templates.TemplateResponse(request=request, name="tenant_admin.html")
 
 
+@router.get("/tenants", response_class=HTMLResponse)
+async def tenants_page(request: Request):
+    """Cross-tenant list (super-admin only). Shell renders for everyone;
+    GET /tenants API call gates by role."""
+    return templates.TemplateResponse(request=request, name="tenants.html")
+
+
 @router.get("/_/styleguide", response_class=HTMLResponse)
 async def styleguide_page(request: Request):
     """Internal design-system showcase. No auth gate — page is harmless,
