@@ -62,6 +62,18 @@
     </div>
   </aside>
 </div>
+
+<!-- Source-fragment modal: opens on cite-pill or source-card click -->
+<div class="overlay" id="source-modal">
+  <div class="modal" style="max-width: 720px; max-height: 88vh; overflow-y: auto; position: relative;">
+    <button class="btn btn--ghost btn--icon btn--sm" data-close-source-modal
+            aria-label="Закрыть"
+            style="position: absolute; top: var(--sp-3); right: var(--sp-3);">
+      <i class="bi bi-x-lg" aria-hidden="true"></i>
+    </button>
+    <div id="source-modal-body"></div>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -84,6 +96,14 @@ const KATEX_OPTS = {
 
 function renderMath(el) {
   if (window.renderMathInElement) renderMathInElement(el, KATEX_OPTS);
+}
+
+// Russian plural agreement: pluralize(1, 'студент','студента','студентов') → 'студент'
+function pluralize(n, one, few, many) {
+  const m10 = n % 10, m100 = n % 100;
+  if (m10 === 1 && m100 !== 11) return one;
+  if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 > 20)) return few;
+  return many;
 }
 
 function mdToHtml(text) {
@@ -223,20 +243,61 @@ function highlightSource(idx) {
   if (target) target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
-// Click on cite-pill → highlight
+function openSourceModal(idx) {
+  const sources = Array.from(seenSources.values());
+  const src = sources.find(s => s.idx === Number(idx));
+  if (!src) return;
+  const overlay = document.getElementById('source-modal');
+  const body = document.getElementById('source-modal-body');
+  const fullSnippet = src.snippet || '<em class="t-muted">Текст фрагмента недоступен.</em>';
+  body.innerHTML = `
+    <div class="flex items-baseline gap-2 mb-3">
+      <span class="source-card__index" style="width: 24px; height: 24px;">${src.idx}</span>
+      <div class="flex-1">
+        <div class="t-md t-bold">${escHtml(src.document_title || 'без названия')}</div>
+        ${src.page ? `<div class="t-xs t-muted">страница ${src.page}${src.section ? ' · ' + escHtml(src.section) : ''}</div>` : ''}
+      </div>
+    </div>
+    <div class="t-uppercase mb-2">Фрагмент корпуса</div>
+    <div id="source-modal-snippet" style="background: var(--c-surface-2); padding: var(--sp-4); border-radius: var(--r-md); font-size: var(--fs-sm); line-height: 1.7; max-height: 60vh; overflow-y: auto; white-space: pre-wrap; word-wrap: break-word;">${escHtml(fullSnippet)}</div>
+    <p class="t-xs t-muted mt-3">
+      Это исходный фрагмент, найденный retrieval'ом. Hard-gate проверяет, что
+      ≥ 2 чанков превысили порог релевантности перед обращением к LLM.
+    </p>`;
+  // Render KaTeX in the snippet so formulas are readable.
+  renderMath(document.getElementById('source-modal-snippet'));
+  overlay.classList.add('overlay--open');
+}
+
+function closeSourceModal() {
+  document.getElementById('source-modal').classList.remove('overlay--open');
+}
+
+// Click on cite-pill or source-card → highlight + open modal with full snippet.
 document.addEventListener('click', e => {
+  const closeBtn = e.target.closest('[data-close-source-modal]');
+  if (closeBtn) { closeSourceModal(); return; }
+  const overlay = e.target.closest('#source-modal');
+  if (overlay && e.target.id === 'source-modal') { closeSourceModal(); return; }
+
   const pill = e.target.closest('.cite');
   if (pill) {
     e.preventDefault();
     const idx = pill.dataset.srcIdx;
-    if (idx) highlightSource(idx);
+    if (idx) { highlightSource(idx); openSourceModal(idx); }
     return;
   }
   const card = e.target.closest('.source-card');
   if (card) {
     document.querySelectorAll('.source-card').forEach(el => el.classList.remove('source-card--active'));
     card.classList.add('source-card--active');
+    if (card.dataset.srcIdx) openSourceModal(card.dataset.srcIdx);
   }
+});
+
+// Esc closes the modal
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeSourceModal();
 });
 
 // ── Render Q&A response ───────────────────────────────────────────────────────
@@ -263,8 +324,8 @@ function renderQA(data, questionText) {
     : '';
 
   const badgesHtml = `<div class="mt-3 flex gap-2 items-center flex-wrap">
-    <span class="badge badge--brand"><i class="bi bi-shield-check" aria-hidden="true"></i>Hard-gate verified</span>
-    ${data.citations?.length ? `<span class="badge badge--success">${data.citations.length} источника</span>` : ''}
+    <span class="badge badge--brand" title="Hard-gate retrieval подтвердил, что в корпусе достаточно доказательств для ответа"><i class="bi bi-shield-check" aria-hidden="true"></i>Hard-gate · проверено</span>
+    ${data.citations?.length ? `<span class="badge badge--success">${data.citations.length} ${pluralize(data.citations.length, 'источник', 'источника', 'источников')}</span>` : ''}
     <span style="margin-left:auto" class="flex gap-1">
       <button class="btn btn--ghost btn--sm" data-fb="positive" data-rid="${data.request_id || ''}" title="Полезно" aria-label="Оценить ответ как полезный">
         <i class="bi bi-hand-thumbs-up" aria-hidden="true"></i>
@@ -522,10 +583,26 @@ document.getElementById('clear-btn').addEventListener('click', () => {
 window.onAuthReady = function () {
   document.getElementById('chat-input').focus();
   // Phase 6 screenshot helper: ?ask=<query> auto-fires sendMessage on load.
-  const ask = new URLSearchParams(location.search).get('ask');
+  // Optional ?open-source=<idx> opens the source-modal AFTER the answer
+  // arrives (waits up to 60s polling for source-cards).
+  const params = new URLSearchParams(location.search);
+  const ask = params.get('ask');
+  const openIdx = params.get('open-source');
   if (ask) {
     document.getElementById('chat-input').value = ask;
     setTimeout(() => sendMessage(), 200);
+    if (openIdx) {
+      let tries = 0;
+      const t = setInterval(() => {
+        tries++;
+        if (seenSources.size > 0) {
+          clearInterval(t);
+          setTimeout(() => openSourceModal(openIdx), 400);
+        } else if (tries > 120) {
+          clearInterval(t);
+        }
+      }, 500);
+    }
   }
 };
 </script>
