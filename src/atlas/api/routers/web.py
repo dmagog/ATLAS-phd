@@ -64,6 +64,13 @@ async def tenants_page(request: Request):
     return templates.TemplateResponse(request=request, name="tenants.html")
 
 
+@router.get("/_/invites", response_class=HTMLResponse)
+async def invites_page(request: Request):
+    """Dedicated invites page (tenant-admin / super-admin). URL uses /_/
+    prefix to avoid collision with `/invites` API endpoint."""
+    return templates.TemplateResponse(request=request, name="invites.html")
+
+
 @router.get("/_/styleguide", response_class=HTMLResponse)
 async def styleguide_page(request: Request):
     """Internal design-system showcase. No auth gate — page is harmless,

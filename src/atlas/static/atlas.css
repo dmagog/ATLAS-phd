@@ -482,8 +482,8 @@ img, svg { display: block; max-width: 100%; }
 /* ========================================================== */
 /* 15. App layout                                              */
 /* ========================================================== */
-.app { display: flex; min-height: 100vh; }
-.app__main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.app { display: flex; min-height: 100vh; align-items: flex-start; max-width: 100%; overflow-x: hidden; }
+.app__main { flex: 1; min-width: 0; max-width: 100%; display: flex; flex-direction: column; overflow-x: hidden; }
 .app__topbar {
   display: flex; align-items: center; gap: var(--sp-3);
   padding: var(--sp-3) var(--sp-5);

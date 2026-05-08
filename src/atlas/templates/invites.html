@@ -1,0 +1,267 @@
+{% extends "_app.html" %}
+{% from "_partials.html" import sidebar_tenant_admin, topbar %}
+{% block title %}Инвайты{% endblock %}
+{% block content_mode %}app__content--dashboard{% endblock %}
+{% block sidebar %}{{ sidebar_tenant_admin(active='invites') }}{% endblock %}
+{% block topbar %}{{ topbar() }}{% endblock %}
+
+{% block content %}
+<div class="flex items-baseline justify-between mb-5">
+  <div>
+    <h1 class="t-2xl t-bold">Инвайты</h1>
+    <div class="t-sm t-muted" id="inv-info">—</div>
+  </div>
+  <button class="btn btn--primary" id="inv-create-btn">
+    <i class="bi bi-plus-lg" aria-hidden="true"></i>Создать инвайт
+  </button>
+</div>
+
+<div id="inv-loading" class="card">
+  <div class="empty">
+    <div class="empty__icon"><span class="spinner spinner--lg"></span></div>
+    <div class="empty__title">Загружаю инвайты…</div>
+  </div>
+</div>
+
+<div id="inv-forbidden" class="card hidden">
+  <div class="empty">
+    <div class="empty__icon"><i class="bi bi-shield-exclamation" style="font-size: 48px;"></i></div>
+    <div class="empty__title">Доступ только для tenant-admin / super-admin</div>
+  </div>
+</div>
+
+<div id="inv-content" class="hidden">
+  <!-- Hero counters -->
+  <div class="grid grid-cols-3 mb-5" id="inv-hero"></div>
+
+  <!-- Active invites -->
+  <div class="card mb-5">
+    <h2 class="card__title">Активные инвайты</h2>
+    <div class="card__subtitle">Не использованные и не просроченные. Передавайте код студенту/научруку.</div>
+    <div id="inv-active-list" class="flex-col gap-2 mt-3"></div>
+  </div>
+
+  <!-- Redeemed history -->
+  <div class="card mb-5">
+    <h2 class="card__title">Использованные / просроченные</h2>
+    <div class="card__subtitle">История инвайтов, которые уже активированы или истекли.</div>
+    <div id="inv-history-list" class="flex-col gap-2 mt-3"></div>
+  </div>
+</div>
+
+
+<!-- Create-invite modal -->
+<div class="overlay" id="create-invite-modal">
+  <div class="modal">
+    <div class="modal__title">Создать инвайт-код</div>
+    <p class="t-sm t-muted mb-4">Код можно передать студенту, научруку или администратору другой кафедры для регистрации.</p>
+    <div class="field field--lg">
+      <label class="label" for="inv-role">Роль</label>
+      <select class="select" id="inv-role">
+        <option value="student">student</option>
+        <option value="supervisor">supervisor</option>
+        <option value="tenant-admin">tenant-admin</option>
+      </select>
+    </div>
+    <div class="field field--lg">
+      <label class="label" for="inv-uses">Лимит использований</label>
+      <input class="input" type="number" id="inv-uses" min="1" max="100" value="1">
+    </div>
+    <div class="field field--lg">
+      <label class="label" for="inv-ttl">TTL (часов, опционально)</label>
+      <input class="input" type="number" id="inv-ttl" min="1" placeholder="бессрочно">
+    </div>
+    <div id="inv-create-error" class="hidden mb-3" style="background: var(--c-danger-bg); color: var(--c-danger); padding: var(--sp-2) var(--sp-3); border-radius: var(--r-md); font-size: var(--fs-xs);"></div>
+    <div class="flex gap-3 justify-end">
+      <button class="btn btn--ghost" id="inv-cancel">Отмена</button>
+      <button class="btn btn--primary" id="inv-submit">Создать</button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function escHtml(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function show(id) { document.getElementById(id).classList.remove('hidden'); }
+function hide(id) { document.getElementById(id).classList.add('hidden'); }
+
+function fmtDateTime(iso) {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    return d.toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  } catch { return iso; }
+}
+
+function ttlBadge(expiresAt) {
+  if (!expiresAt) return '<span class="badge">бессрочно</span>';
+  const ms = new Date(expiresAt).getTime() - Date.now();
+  if (ms < 0) return '<span class="badge badge--danger">просрочен</span>';
+  const days = Math.floor(ms / 86400000);
+  const hours = Math.floor((ms % 86400000) / 3600000);
+  if (days > 0) return `<span class="badge badge--info">${days} дн.</span>`;
+  if (hours > 0) return `<span class="badge badge--warning">${hours} ч.</span>`;
+  return '<span class="badge badge--warning">&lt; 1 ч.</span>';
+}
+
+function roleBadge(role) {
+  const map = { 'student': 'badge--success', 'supervisor': 'badge--info', 'tenant-admin': 'badge--warning' };
+  return `<span class="badge ${map[role] || ''}">${escHtml(role)}</span>`;
+}
+
+function heroCard(label, value, valueMod, footnote) {
+  const valClass = 'hero-card__value' + (valueMod ? ' hero-card__value--' + valueMod : '');
+  return `<div class="hero-card">
+    <div class="hero-card__label">${label}</div>
+    <div class="${valClass}">${value}</div>
+    ${footnote ? `<div class="hero-card__compare"><span>${footnote}</span></div>` : ''}
+  </div>`;
+}
+
+let allInvites = [];
+
+function classify(invites) {
+  const now = Date.now();
+  const active = []; const expired = []; const redeemed = [];
+  for (const i of invites) {
+    if (i.redeemed_at) { redeemed.push(i); continue; }
+    if (i.expires_at && new Date(i.expires_at).getTime() < now) {
+      expired.push(i);
+      continue;
+    }
+    active.push(i);
+  }
+  return { active, expired, redeemed };
+}
+
+function renderHero(buckets) {
+  document.getElementById('inv-hero').innerHTML = [
+    heroCard('Активных', buckets.active.length, buckets.active.length > 0 ? 'success' : null, 'не использованы, не просрочены'),
+    heroCard('Использованных', buckets.redeemed.length, null, 'студент/научрук активировал'),
+    heroCard('Просроченных', buckets.expired.length, buckets.expired.length > 0 ? 'primary' : null, 'TTL истёк'),
+  ].join('');
+}
+
+function renderActive(invites) {
+  const list = document.getElementById('inv-active-list');
+  if (!invites.length) {
+    list.innerHTML = '<div class="empty"><div class="empty__title">Активных инвайтов нет</div><div class="empty__subtitle">Создайте новый кодом «+ Создать инвайт».</div></div>';
+    return;
+  }
+  list.innerHTML = invites.map(i => `
+    <div class="card card--flat" style="background: var(--c-surface-2); padding: var(--sp-3) var(--sp-4);">
+      <div class="flex items-center gap-3">
+        <code class="t-mono" style="color: var(--c-primary); font-size: var(--fs-sm); flex: 1; word-break: break-all;">${escHtml(i.code)}</code>
+        ${roleBadge(i.role)}
+        ${ttlBadge(i.expires_at)}
+        <button class="btn btn--ghost btn--icon btn--sm" data-copy-code="${escHtml(i.code)}" title="Скопировать код" aria-label="Скопировать инвайт-код">
+          <i class="bi bi-clipboard" aria-hidden="true"></i>
+        </button>
+      </div>
+      <div class="t-xs t-faint mt-2">создан ${fmtDateTime(i.created_at || i.expires_at)}</div>
+    </div>
+  `).join('');
+}
+
+function renderHistory(buckets) {
+  const list = document.getElementById('inv-history-list');
+  const items = [...buckets.redeemed.map(i => ({...i, _kind: 'redeemed'})),
+                 ...buckets.expired.map(i => ({...i, _kind: 'expired'}))]
+                .sort((a, b) => new Date(b.redeemed_at || b.expires_at || 0) - new Date(a.redeemed_at || a.expires_at || 0));
+  if (!items.length) {
+    list.innerHTML = '<div class="t-sm t-muted">Истории нет: ни одного инвайта ещё не активировали и не истекло.</div>';
+    return;
+  }
+  list.innerHTML = items.slice(0, 20).map(i => `
+    <div class="flex items-center gap-3" style="padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--c-border);">
+      <code class="t-mono t-xs t-muted" style="flex: 1; word-break: break-all;">${escHtml(i.code)}</code>
+      ${roleBadge(i.role)}
+      ${i._kind === 'redeemed'
+        ? `<span class="badge badge--success">активирован ${fmtDateTime(i.redeemed_at)}</span>`
+        : '<span class="badge badge--danger">просрочен</span>'}
+    </div>
+  `).join('');
+}
+
+async function refreshAll() {
+  try {
+    const res = await authFetch('/invites');
+    if (!res.ok) {
+      hide('inv-loading');
+      show('inv-forbidden');
+      return;
+    }
+    allInvites = await res.json();
+    const buckets = classify(allInvites);
+    hide('inv-loading');
+    show('inv-content');
+    document.getElementById('inv-info').textContent =
+      `${allInvites.length} всего · ${buckets.active.length} активных, ${buckets.redeemed.length} использованных, ${buckets.expired.length} просроченных`;
+    renderHero(buckets);
+    renderActive(buckets.active);
+    renderHistory(buckets);
+  } catch (e) {
+    if (e.message !== 'unauthorized') {
+      hide('inv-loading');
+      show('inv-forbidden');
+    }
+  }
+}
+
+window.onAuthReady = function (me) {
+  if (!['tenant-admin', 'super-admin'].includes(me.role)) {
+    hide('inv-loading');
+    show('inv-forbidden');
+    return;
+  }
+  refreshAll();
+};
+
+// Copy invite code
+document.addEventListener('click', async e => {
+  const btn = e.target.closest('[data-copy-code]');
+  if (!btn) return;
+  try {
+    await navigator.clipboard.writeText(btn.dataset.copyCode);
+    btn.innerHTML = '<i class="bi bi-check-lg" aria-hidden="true"></i>';
+    setTimeout(() => { btn.innerHTML = '<i class="bi bi-clipboard" aria-hidden="true"></i>'; }, 1500);
+  } catch (_) {}
+});
+
+// Create-invite modal
+const ciModal = document.getElementById('create-invite-modal');
+document.getElementById('inv-create-btn').addEventListener('click', () => ciModal.classList.add('overlay--open'));
+document.getElementById('inv-cancel').addEventListener('click', () => ciModal.classList.remove('overlay--open'));
+ciModal.addEventListener('click', e => { if (e.target === ciModal) ciModal.classList.remove('overlay--open'); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') ciModal.classList.remove('overlay--open'); });
+
+document.getElementById('inv-submit').addEventListener('click', async () => {
+  const role = document.getElementById('inv-role').value;
+  const uses = parseInt(document.getElementById('inv-uses').value, 10) || 1;
+  const ttlH = parseInt(document.getElementById('inv-ttl').value, 10);
+  const errEl = document.getElementById('inv-create-error');
+  errEl.classList.add('hidden');
+  const body = { role, max_uses: uses };
+  if (ttlH > 0) body.ttl_hours = ttlH;
+  try {
+    const res = await authFetch('/invites', { method: 'POST', body: JSON.stringify(body) });
+    if (!res.ok) {
+      let msg = 'Не удалось создать инвайт.';
+      try { const e = await res.json(); if (e.detail) msg = e.detail; } catch(_){}
+      errEl.textContent = msg;
+      errEl.classList.remove('hidden');
+      return;
+    }
+    ciModal.classList.remove('overlay--open');
+    refreshAll();
+  } catch (err) {
+    if (err.message !== 'unauthorized') {
+      errEl.textContent = 'Ошибка соединения.';
+      errEl.classList.remove('hidden');
+    }
+  }
+});
+</script>
+{% endblock %}
