@@ -222,7 +222,7 @@ function renderTopics(program, coverage) {
     const conceptsHtml = (t.key_concepts || []).slice(0, 4).map(c => `<span class="badge">${escHtml(c)}</span>`).join('');
     return `<div class="card card--flat" style="background: var(--c-surface-2); border: 1px solid var(--c-border);">
       <div class="flex items-baseline justify-between mb-2">
-        <div class="t-md t-bold"><span class="t-mono t-faint">${t.external_id}</span> ${escHtml(t.title)}</div>
+        <div class="t-md t-bold"><span class="t-mono t-faint" style="margin-right: var(--sp-3);">${t.external_id}</span>${escHtml(t.title)}</div>
         <div class="flex items-center gap-2">
           <span class="badge badge--${bucket === 'green' ? 'success' : (bucket === 'yellow' ? 'warning' : 'danger')}">${t.coverage_chunks} чанков</span>
         </div>
