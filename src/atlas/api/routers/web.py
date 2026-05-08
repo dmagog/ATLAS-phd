@@ -110,6 +110,23 @@ async def demo_seed_superadmin_helper():
         return HTMLResponse(content=f"created: id={u.id}", media_type="text/plain")
 
 
+@router.get("/_/logout", response_class=HTMLResponse)
+async def demo_logout_helper(next: str = "/login"):
+    """Phase 6 screenshot helper: clears localStorage atlas_token and
+    redirects to ?next= (default /login). Used to capture anonymous
+    login screen without manual cache clearing."""
+    if not next.startswith("/") or next.startswith("//"):
+        next = "/login"
+    html = f"""<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>Logout…</title></head>
+<body><script>
+localStorage.removeItem('atlas_token');
+localStorage.removeItem('atlas_email');
+location.replace({next!r});
+</script></body></html>"""
+    return HTMLResponse(content=html)
+
+
 @router.get("/_/demo-login", response_class=HTMLResponse)
 async def demo_login_helper(email: str, next: str = "/"):
     """Phase 6 screenshot helper: instant-login for *.demo accounts.
