@@ -307,7 +307,7 @@ for f in sorted(os.listdir('docs/design/screenshots/after')):
 - [ ] `./scripts/verify_demo_questions.py --quick` → 2/2 PASS.
 - [ ] Все 10 PNG в этой папке актуальны (даты совпадают с последним прогоном).
 - [ ] Открыты в Quick Look — выглядят чётко, текст читаем.
-- [ ] (Optional) 3 GIF screencast'a сняты по [demo-recording-protocol.md](../demo-recording-protocol.md).
+- [ ] (Optional) 3 GIF screencast'a сняты по [demo-recording-protocol.md](../../demo-recording-protocol.md).
 - [ ] Запасной план: если LLM лагает в эфире — переключиться на GIF.
 
 ---

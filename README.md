@@ -197,6 +197,7 @@ docker compose up -d
 ## 📜 История и метрики
 
 - **CHANGELOG:** [`CHANGELOG.md`](CHANGELOG.md)
-- **Release notes v0.7.0:** [`RELEASE_NOTES_v0.7.0.md`](RELEASE_NOTES_v0.7.0.md)
+- **Release notes v0.8.0** (production UI + demo packaging): [`RELEASE_NOTES_v0.8.0.md`](RELEASE_NOTES_v0.8.0.md)
+- **Release notes v0.7.0** (pilot-ready, M3.A–C + M4.5.E + M6.A): [`RELEASE_NOTES_v0.7.0.md`](RELEASE_NOTES_v0.7.0.md)
 - **M3 отчёт** (refusal_tnr, faithfulness, repro): [`eval/results/M3-report.md`](eval/results/M3-report.md)
 - **Eval results JSON:** [`eval/results/`](eval/results/) — все прогоны treatment / baseline / reproducibility
