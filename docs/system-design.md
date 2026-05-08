@@ -8,6 +8,10 @@
 
 ## 2. Контекст и границы PoC
 
+> **Обзор архитектуры:** [C4 Context](diagrams/c4-context.md) ([SVG](diagrams/c4-context.svg)) → [C4 Container](diagrams/c4-container.md) ([SVG](diagrams/c4-container.svg)) → [C4 Component](diagrams/c4-component.md) ([SVG](diagrams/c4-component.svg)). [Data flow](diagrams/data-flow.md) и [Workflow graph](diagrams/workflow-graph.md) — для процессов.
+
+![C4 Context](diagrams/c4-context.svg)
+
 ATLAS phd решает задачу подготовки к кандидатскому минимуму по технической специальности. Система должна:
 - отвечать на вопросы по учебному корпусу с опорой на источники;
 - честно отказывать при недостатке evidence;
@@ -42,6 +46,9 @@ ATLAS phd решает задачу подготовки к кандидатск
 
 ## 4. Логическая архитектура
 
+![C4 Container](diagrams/c4-container.svg)
+
+
 ### 4.1 Основные модули
 
 | Модуль | Роль |
@@ -73,6 +80,8 @@ ATLAS phd решает задачу подготовки к кандидатск
 - `Data Flow` описывает движение данных, хранение и логирование.
 
 ## 5. Основной процесс выполнения
+
+![Workflow graph](diagrams/workflow-graph.svg)
 
 ### 5.1 Поток `Q&A`
 

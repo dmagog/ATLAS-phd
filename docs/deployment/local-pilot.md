@@ -38,6 +38,10 @@ curl -fsS http://127.0.0.1:8731/health
 # → {"status":"ok"}
 ```
 
+После этого открой в браузере `http://127.0.0.1:8731/login` — должна появиться страница входа:
+
+![login](../design/screenshots/after/01-login.png)
+
 ## Step 2 — Bootstrap пилотного тенанта
 
 `optics-kafedra` уже создан миграцией 0007. Программу `program.md` тоже
