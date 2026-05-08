@@ -2,7 +2,7 @@
 
 # ATLAS phd
 
-[![Status](https://img.shields.io/badge/Status-pilot--ready%20v0.7.0-22c55e?style=flat-square)](CHANGELOG.md)
+[![Status](https://img.shields.io/badge/Status-pilot--ready%20v0.8.0-22c55e?style=flat-square)](CHANGELOG.md)
 [![refusal_tnr](https://img.shields.io/badge/refusal__tnr-1.000-22c55e?style=flat-square)](docs/design/screenshots/after/README.md#шаг-6--eval-dashboard-eval)
 [![κ_binarized](https://img.shields.io/badge/κ__binarized-1.000-1D4ED8?style=flat-square)](docs/design/screenshots/after/README.md#шаг-3--self-check-рубрика-self-checkhistoryopenattempt_id)
 [![hard-gate p95](https://img.shields.io/badge/hard--gate%20p95-%3C%202s-1D4ED8?style=flat-square)](docs/design/screenshots/after/README.md#шаг-2--refusal-экран-off-topic-askкакова-численность-населения-москвы)

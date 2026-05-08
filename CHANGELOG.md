@@ -6,6 +6,75 @@
 
 ---
 
+## [0.8.0] — 2026-05-09 — Design phases 1–6 + production UI redesign
+
+Полная переработка UI/UX от ux-audit до полированной production-системы
+со снятыми скриншотами для защиты. 6 фаз по [`docs/design-roadmap.md`](docs/design-roadmap.md).
+
+### Добавлено — Production UI (Phase 5)
+
+- **`_app.html` + `_partials.html`** — production base layout (sidebar + topbar) с auth-bootstrap JS, replaces legacy `base.html` с in-app login modal.
+- **`/login`** — отдельная страница с brand-side + form-side + invite-code flow. Защита от open-redirect в `?next=`.
+- **`/eval`** — новый dashboard для super-admin: 3 hero-cards (refusal_tnr / κ / latency p95) + per-topic table + reproducibility + history. Читает реальные результаты из `eval/results/*` через новый `eval.py` router.
+- **Чат `/`** — переписан с inline citation pills `[N]` (вместо tail-list `[Doc:..., p.N]`), source-panel с дедупликацией, hard-gate verified badge, refusal-state как first-class экран.
+- **Source-modal** — клик по `[N]` или source-card открывает full snippet с KaTeX-рендером формул.
+- **Self-check `/self-check`** — hero score + rubric grid с явными весами 40/30/20/10 + per-question breakdown с подсветкой правильных/неверных.
+- **Supervisor `/supervisor`** — per-topic aggregates + students с privacy mask M5 (opted-in vs «Аспирант #N»).
+- **Tenant-admin `/tenant-admin`** — программа кафедры с bar-fill покрытия, инвайты, пользователи.
+- **`/_/tenants`** — кросс-тенантный list для super-admin + onboarding hint.
+- **`/_/invites`** — dedicated invites view для tenant-admin: hero-cards + active/redeemed/expired buckets.
+- **`/me` extended** — добавлены поля `tenant_slug` и `tenant_display_name` (JOIN с tenants).
+
+### Добавлено — Дизайн-система (Phase 2)
+
+- **`src/atlas/static/atlas.css`** (~600 строк) — токен-набор (light + dark темы) + 18 BEM компонентов (btn / input / card / badge / cite / hero-card / bar-cmp / rubric / refusal / sidebar / source-panel / heatmap / spinner / step-badge / overlay / modal / toast / bubble / empty / tenant-ctx role-badges) + ~30 utility-классов.
+- **Brand-цвета** извлечены из SVG `atlas-icon-v5-shield-no-ring-calm-blue`: `#1D4ED8` (calm-blue), `#1E293B` (slate).
+- **`/_/styleguide`** — live-демо всех компонентов, theme-toggle.
+- Phase 4 polish: motion (stagger entrance, refusal scale-in, pulse-ring badge), focus-state на dark, bar-cmp responsive, heatmap data-tip, light-mode shadows, sticky topbar/sidebar.
+
+### Добавлено — Demo packaging (Phase 6)
+
+- **`scripts/seed_demo_users.py`** — 14 demo-пользователей в optics-kafedra (1 super + 1 tenant-admin + 1 supervisor + 12 студентов с русскими именами + privacy mask 7 visible / 5 anonymous).
+- **`scripts/seed_demo_attempts.py`** — ~40 hand-crafted self-check attempts с реалистичным распределением scores (skill × topic difficulty).
+- **`scripts/seed_demo_real_attempts.py`** — 12 real LLM self-check сессий (по одной на студента) для drill-down comissia-proof данных.
+- **`scripts/seed_demo_showcase.py`** — 3 «звёздные» attempts (4.5+) для ivanov как best-student kasus.
+- **`scripts/seed_demo.sh`** — orchestrator one-command: docker up → seed users → seed attempts → smoke verify.
+- **`scripts/demo_questions.json` + `verify_demo_questions.py`** — курированный список Q&A + refusal questions с pre-defense smoke test.
+- **`/_/demo-login` + `/_/logout`** helper routes — instant-login для @optics.demo accounts (404 в production).
+- **`?ask=` + `?open-source=` + `?open=` URL params** на chat/history для воспроизводимых screenshot-flow.
+
+### Добавлено — Документация и иллюстрации
+
+- **`docs/README.md`** — TOC + reading paths для 5 аудиторий (аспирант, научрук, tenant-admin, разработчик, защита).
+- **`docs/design/screenshots/after/`** — 10 PNG скриншотов (login → chat → source-modal → refusal → selfcheck → supervisor → tenant-admin → eval → tenants → invites) с walkthrough README.
+- **`docs/design/demo-script.md`** обновлён — 9 inline screenshots по шагам.
+- **`docs/welcome/{student,supervisor,tenant-admin}.md`** проиллюстрированы.
+- **`docs/system-design.md`** — embed C4 SVG диаграмм (context / container / workflow).
+- **`docs/deployment/local-pilot.md`** — success-state screenshot после health-check.
+- **`docs/design/{ux-audit,competitive-scan,wireframes,design-system,rationale,demo-script,demo-recording-protocol}.md`** — полный дизайн-track Phase 1–6.
+- Топ-уровневый **`README.md`** переработан: hero metrics в badges, 3-image showcase grid, quick-start через `seed_demo.sh`, demo-аккаунты таблицей.
+
+### Исправлено
+
+- **MC color bug в self-check** — score=1.0 (binary correct) красился `scoreColor()` как red. Fix: для MC отдельная binary-цветовая шкала (`>0` → success, иначе danger).
+- **JSON parsing fragility** в self-check generator — для топиков с LaTeX-формулами LLM эмитит backslashes, ломающие JSON. Workaround: real-attempts seed использует только топики 1.x; honest finding зафиксирован в `rationale.md` §3.3.
+- **`scalar_one_or_none()` crash** в `seed_admin` после добавления второго super-admin (super@optics.demo). Заменено на `.first()`.
+- **Routing conflict** `/tenants` (web) vs `/tenants` API. Web-route переименован в `/_/tenants` (того же класса что `/_/styleguide`).
+- **Sticky-sidebar overflow** — добавлены `overflow-x: hidden` на `.app` и `.app__main` (sidebar мог уезжать за левый край viewport при горизонтальном overflow content'a).
+- **Citation pills** — добавлена `citationsToPills()` regex post-процессинг markdown'a → numeric pills mapped к source-panel indices.
+- **KaTeX delimiters** — `appendBubble` теперь передаёт `KATEX_OPTS` с `$..$` delimiters в `renderMathInElement` (раньше использовались дефолтные `\(...\)`).
+- **`SelfCheckAttempt.topic_id`** — добавлена в ORM-класс (БД-колонка существовала с миграции M4.5/M5, но ORM её не видел → нельзя было создать attempts через ORM с topic_id).
+- **History modal status mapping** — `evaluated` → `completed` (актуальное значение из SelfCheckStatus enum).
+
+### Удалено (Phase 5.7)
+
+- `templates/base.html` — legacy с in-app login modal.
+- `templates/index.html` — legacy `/qa` view (дублировал чат).
+- `templates/wf/*` — 9 wireframe-файлов (Phase 3 артефакты), сделали свою работу как visual reference, всё перенесено в production templates.
+- Web route `GET /qa`.
+
+---
+
 ## [0.7.0] — 2026-05-07 — M4.5.E + M3.C reproducibility
 
 ### Добавлено (M4.5.E)
