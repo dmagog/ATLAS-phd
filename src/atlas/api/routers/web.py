@@ -57,10 +57,10 @@ async def tenant_admin_page(request: Request):
     return templates.TemplateResponse(request=request, name="tenant_admin.html")
 
 
-@router.get("/tenants", response_class=HTMLResponse)
+@router.get("/_/tenants", response_class=HTMLResponse)
 async def tenants_page(request: Request):
-    """Cross-tenant list (super-admin only). Shell renders for everyone;
-    GET /tenants API call gates by role."""
+    """Super-admin tenant list page. URL uses /_/ prefix to avoid
+    collision with `GET /tenants` API endpoint (returns JSON list)."""
     return templates.TemplateResponse(request=request, name="tenants.html")
 
 

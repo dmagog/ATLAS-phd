@@ -18,10 +18,12 @@ async def seed_admin(db: AsyncSession) -> None:
     """
     # Look for any existing super-admin (not just by email — covers the
     # case where someone changes ADMIN_EMAIL on re-deploy).
+    # Use first() rather than scalar_one_or_none() — Phase 6 demo seed adds
+    # a second super-admin (super@optics.demo), and that's a valid state.
     result = await db.execute(
-        select(User).where(User.role == UserRole.super_admin.value)
+        select(User).where(User.role == UserRole.super_admin.value).limit(1)
     )
-    existing_super_admin = result.scalar_one_or_none()
+    existing_super_admin = result.scalars().first()
     if existing_super_admin is not None:
         logger.info(
             "admin_seed_skipped",
