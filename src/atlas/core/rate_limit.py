@@ -87,3 +87,43 @@ def reset_login_attempts(request, identifier: str) -> None:
     key = (ip, identifier.strip().lower())
     with _lock:
         _per_ip_email.pop(key, None)
+
+
+# ── LLM-квоты на пользователя ────────────────────────────────────────────────
+# Каждый /qa/message, /chat/message, /self-check/* запрос дёргает OpenRouter.
+# Без лимита один залогиненный студент может в цикле выжать бюджет ключа.
+# Лимит по умолчанию: 60 запросов в час на пользователя — ограничивает злодея
+# и комфортно для легитимной работы. super-admin исключён (тестовые скрипты).
+_LLM_WINDOW_SEC = 3600
+_LLM_MAX_PER_USER = 60
+
+_llm_per_user: dict[str, deque[float]] = defaultdict(deque)
+
+
+def check_llm_quota(user_id: str) -> None:
+    """Проверить и зафиксировать квоту LLM-вызовов для пользователя.
+
+    Вызывать в FastAPI Dependency для всех эндпоинтов, которые в цепочке
+    делают вызов LLM (qa, chat, self-check). При превышении лимита
+    поднимается HTTPException(429, Retry-After).
+
+    Если в будущем хочется per-tenant квоту вдобавок — добавить второй
+    счётчик (по аналогии с login).
+    """
+    now = time.monotonic()
+    cutoff = now - _LLM_WINDOW_SEC
+    with _lock:
+        bucket = _llm_per_user[user_id]
+        retry_after = _trim_and_check(bucket, now, cutoff, _LLM_MAX_PER_USER)
+        if retry_after is not None:
+            # Здесь окно час — отдаём оставшееся время, не _WINDOW_SEC
+            real_retry = int(_LLM_WINDOW_SEC - (now - bucket[0])) + 1
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=(
+                    f"Превышена квота LLM-запросов "
+                    f"({_LLM_MAX_PER_USER}/час). Попробуйте позже."
+                ),
+                headers={"Retry-After": str(max(real_retry, 1))},
+            )
+        bucket.append(now)

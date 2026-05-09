@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from atlas.core.deps import get_current_user
+from atlas.core.deps import get_current_user, require_llm_quota
 from atlas.db.models import SelfCheckAttempt, User
 from atlas.db.session import get_db
 from atlas.orchestrator.selfcheck_flow import start_selfcheck, submit_selfcheck
@@ -40,6 +40,7 @@ async def selfcheck_start(
     request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _quota: User = Depends(require_llm_quota),
 ) -> SelfCheckStartResponse:
     request_id = str(uuid.uuid4())
     try:
@@ -124,6 +125,7 @@ async def selfcheck_submit(
     request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _quota: User = Depends(require_llm_quota),
 ) -> SelfCheckSubmitResponse:
     request_id = str(uuid.uuid4())
     from atlas.db.tenant_helpers import assert_tenant_writable, resolve_tenant_id_for_user

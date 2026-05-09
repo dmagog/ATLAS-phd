@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from atlas.core.deps import get_current_user
+from atlas.core.deps import get_current_user, require_llm_quota
 from atlas.core.logging import logger
 from atlas.db.models import QAFeedback, User
 from atlas.db.session import get_db
@@ -47,6 +47,7 @@ async def qa_message(
     request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _quota: User = Depends(require_llm_quota),
 ) -> QAResponse:
     request_id = str(uuid.uuid4())
     history = [{"role": m.role, "content": m.content} for m in body.conversation_history]

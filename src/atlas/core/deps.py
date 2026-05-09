@@ -90,3 +90,17 @@ async def require_tenant_admin(user: User = Depends(get_current_user)) -> User:
             detail="Tenant-admin access required",
         )
     return user
+
+
+async def require_llm_quota(user: User = Depends(get_current_user)) -> User:
+    """Применить квоту LLM-запросов к пользователю.
+
+    Вешаем на /qa, /chat, /self-check — все эти endpoint'ы в итоге дёргают
+    OpenRouter, и без лимита один залогиненный студент может в цикле
+    выжать бюджет ключа. super-admin исключён, потому что тестовые
+    скрипты (eval, seed) ходят под ним и легитимно делают сотни запросов.
+    """
+    from atlas.core.rate_limit import check_llm_quota
+    if user.role != UserRole.super_admin.value:
+        check_llm_quota(str(user.id))
+    return user
