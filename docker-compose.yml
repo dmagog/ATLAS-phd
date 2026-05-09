@@ -4,11 +4,14 @@ services:
     environment:
       POSTGRES_DB: atlas
       POSTGRES_USER: atlas
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-atlas_dev}
+      # Без default-значения — compose упадёт, если POSTGRES_PASSWORD не
+      # задан. Это намеренно: dev-default 'atlas_dev' раньше попадал в прод.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required, see .env.example}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
+    # Порт наружу не публикуем — Postgres доступен только по внутренней
+    # docker-сети для сервисов app/embeddings. В dev для прямого доступа
+    # с хоста смотри docker-compose.override.yml (биндинг на 127.0.0.1).
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U atlas"]
       interval: 5s
@@ -22,10 +25,11 @@ services:
     environment:
       MODEL_NAME: paraphrase-multilingual-MiniLM-L12-v2
       PORT: 8001
-    ports:
-      - "8001:8001"
+    # Внутренний сервис — публичный порт не нужен. В dev для отладки
+    # смотри docker-compose.override.yml.
     volumes:
-      - embeddings_cache:/root/.cache/huggingface
+      # HOME=/home/emb для non-root user'а emb (см. docker/embeddings.Dockerfile).
+      - embeddings_cache:/home/emb/.cache/huggingface
 
   app:
     # In dev: docker compose up --build → собирает stage `dev` (hot-reload,
@@ -39,7 +43,7 @@ services:
       dockerfile: docker/app.Dockerfile
       target: ${APP_BUILD_TARGET:-dev}
     environment:
-      DATABASE_URL: postgresql+asyncpg://atlas:${POSTGRES_PASSWORD:-atlas_dev}@postgres:5432/atlas
+      DATABASE_URL: postgresql+asyncpg://atlas:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required, see .env.example}@postgres:5432/atlas
       EMBEDDINGS_URL: http://embeddings:8001
       LLM_API_KEY: ${LLM_API_KEY}
       LLM_MODEL_ID: ${LLM_MODEL_ID:-qwen/qwen3-8b:free}
@@ -53,6 +57,9 @@ services:
       # M4.5 pilot tenant slug — what super-admin without X-Atlas-Tenant
       # header operates against. Default optics-kafedra after migration 0007.
       PILOT_TENANT_SLUG: ${PILOT_TENANT_SLUG:-optics-kafedra}
+    # ВНИМАНИЕ (security): публичный bind 0.0.0.0:8731 = HTTP без TLS наружу.
+    # В production ставь reverse-proxy (Caddy/nginx) с HTTPS перед app
+    # и меняй на "127.0.0.1:8731:8731", чтобы трафик ходил только через proxy.
     ports:
       - "8731:8731"
     depends_on:

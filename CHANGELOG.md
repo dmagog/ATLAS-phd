@@ -6,6 +6,101 @@
 
 ---
 
+## [0.8.2] — 2026-05-09 — Security hardening (audit)
+
+Полный security-аудит по 11 итерациям (recon → secrets → auth → tenant
+isolation → SQL → headers → upload → LLM → deps → docker → logs → quotas).
+Обзор всех защитных механизмов: [`docs/security.md`](docs/security.md).
+
+### Исправлено
+
+- **CRITICAL: IDOR в `POST /self-check/{attempt_id}/submit`.** Раньше
+  fetch попытки шёл только по UUID, без `tenant_id`/`user_id` фильтра.
+  Атака: студент tenant'а A угадывает UUID попытки tenant'а B и шлёт
+  за него ответы. Найдено в Итерации 3 audit'а; фетч теперь фильтруется
+  по обоим полям и в orchestrator, и в роутере.
+- **Path traversal в `/admin/ingestion-jobs`.** `raw.filename` склеивался
+  с `corpus_dir` без санитизации — `corpus_dir / '../../etc/passwd'`
+  резолвился ВНЕ `corpus_dir`. Фикс: `safe_filename()` + `resolve()`-проверка.
+- **Memory-DoS через гигантский upload.** `await upload.read()` грузил
+  файл целиком в RAM без лимита. Один 5GB-файл = OOM. Лимиты: 50MB/файл,
+  200MB/job, 50 файлов/job → `413 Payload Too Large`.
+- **System-role injection.** `HistoryMessage.role: str` — клиент мог
+  присылать `{role: 'system', content: '...'}` и переписывать
+  `ANSWER_SYSTEM_PROMPT`. Теперь `Literal["user", "assistant"]`.
+- **embeddings-сервис под root.** Добавлен `emb:10002` non-root user
+  в `docker/embeddings.Dockerfile` + healthcheck.
+
+### Добавлено — security middleware
+
+- **Security headers** на каждый ответ: CSP (mild — `'unsafe-inline'`
+  для script/style оставлен из-за inline блоков в Jinja2-шаблонах),
+  `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`,
+  `Referrer-Policy: strict-origin-when-cross-origin`,
+  `Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=()`,
+  `Strict-Transport-Security` только при `APP_ENV=production`.
+- **TrustedHostMiddleware** подключается, если `TRUSTED_HOSTS != '*'`.
+- **CORSMiddleware** подключается опционально через `CORS_ALLOWED_ORIGINS`.
+
+### Добавлено — rate-limit
+
+- **`POST /auth/login`**: 5 попыток/email + 50/IP за 5 мин (`429 + Retry-After`).
+  Constant-time-проверка через `burn_dummy_verify` для несуществующих/
+  soft-deleted пользователей — user-enumeration по таймингу недоступен
+  (timing-ratio 1.04× в smoke-тесте).
+- **LLM-квота**: 60 запросов/час per-user на `/qa/message`, `/chat/message`,
+  `/self-check/start`, `/self-check/{id}/submit`. Super-admin исключён.
+
+### Добавлено — фундамент
+
+- **fail-fast валидация секретов** в `Settings`: placeholder-значения из
+  `.env.example` отвергаются всегда, в `APP_ENV=production` дополнительно
+  проверяется длина (`JWT_SECRET ≥ 32`, `ADMIN_PASSWORD ≥ 12`).
+- **Prompt injection defense**: chunks в LLM-промпте обёрнуты в
+  `<<<DOCUMENT idx=N title="..." page="...">>>...<<<END_DOCUMENT>>>`
+  маркеры; system prompt инструктирует воспринимать содержимое как
+  данные. `<<<` / `>>>` внутри текста sanitize'ятся в `‹‹‹` / `›››`,
+  чтобы атакующий не мог досрочно «закрыть» wrapper.
+- **Log masking**: `structlog`-процессор `_redact` маскирует email
+  (`a****@domain.com`) и `password`/`token`/`jwt`/`api_key`/`cookie`/
+  `authorization` (`***REDACTED***`).
+- **CI**: новая job `security-audit-deps` (pip-audit `--strict`) +
+  `.github/dependabot.yml` (weekly pip / github-actions / docker).
+
+### Изменено
+
+- **`docker-compose.yml`**: Postgres-порт 5432 не публикуется наружу
+  (только внутренняя docker-сеть); embeddings:8001 тоже скрыт; для
+  dev-доступа `docker-compose.override.yml` биндит на `127.0.0.1`.
+  `POSTGRES_PASSWORD` обязателен в `.env` (без default'а `atlas_dev`).
+  embeddings volume сменил путь: `/root/.cache/huggingface` →
+  `/home/emb/.cache/huggingface` (соответствие новому non-root HOME).
+- **`.env.example`**: переписан полностью. Слабые placeholders заменены
+  на `REPLACE_WITH_*` с инструкциями по генерации. Добавлены `APP_ENV`,
+  `TRUSTED_HOSTS`, `CORS_ALLOWED_ORIGINS`, `UPLOAD_MAX_FILE_SIZE_MB`,
+  `UPLOAD_MAX_TOTAL_SIZE_MB`, `UPLOAD_MAX_FILES_PER_JOB`.
+
+### Не сделано (намеренно — отдельные PR)
+
+- **localStorage → httpOnly cookie + CSRF**: ломает 30+ мест в шаблонах,
+  отдельная задача.
+- **ZIP-bomb защита для DOCX/PDF**: требует monkey-patch `zipfile`.
+- **Per-tenant LLM-квота**: страховка от множества студентов одного tenant'а.
+- **Жёсткий CSP без `'unsafe-inline'`**: требует переработки Jinja2-шаблонов с nonce'ами.
+
+### BREAKING для существующих deploy'ов
+
+- В `.env` обязателен `POSTGRES_PASSWORD` (без default'а `atlas_dev`).
+- Если в `.env` остались placeholder-значения из старого `.env.example`
+  (`change_me_in_production`, `changeme`, `your_openrouter_key_here`),
+  приложение упадёт на старте — это намеренно.
+- При первом старте после pull embeddings перекачает модель с HuggingFace
+  (~150 MB, 1–2 минуты) — старый volume по `/root/.cache` не подхватится.
+- В production обязательно `APP_ENV=production` для активации HSTS и
+  строгих проверок длины секретов.
+
+---
+
 ## [0.8.1] — 2026-05-09 — Multi-tenant demo + admin tenant isolation fix
 
 ### Добавлено

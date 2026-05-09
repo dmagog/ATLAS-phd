@@ -1,0 +1,29 @@
+# Dependabot — автоматические PR на обновление зависимостей с known CVE.
+# Раз в неделю, чтобы не спамить. Security-апдейты идут вне расписания —
+# Dependabot открывает их сразу при появлении advisory в GHSA.
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "security"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "ci"
+
+  - package-ecosystem: "docker"
+    directory: "/docker"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "docker"

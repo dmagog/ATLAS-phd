@@ -67,6 +67,25 @@ class RawFile:
     mime_type: str
 
 
+def safe_filename(filename: str) -> str:
+    """Очистить имя файла от любых path-traversal-конструкций.
+
+    Атакующий-tenant-admin может попытаться загрузить файл с именем
+    '../../etc/passwd' или '/absolute/path' — Path().name возвращает
+    только последний сегмент, что отрезает все слэши и '..'. Затем
+    выкидываем нулевые байты и control-chars, которые в противном
+    случае могли бы сломать логирование или создать нестандартные
+    имена в файловой системе.
+    """
+    name = Path(filename).name
+    # Запретим скрытые точки в начале (например '.bashrc') и пустые имена.
+    name = name.lstrip(".") or "untitled"
+    # Удалим control characters и null-bytes.
+    name = "".join(ch for ch in name if ch.isprintable() and ch != "\x00")
+    # Ограничим длину — некоторые ФС не любят длинные имена.
+    return name[:255] or "untitled"
+
+
 # ── Stage 1: Accept ──────────────────────────────────────────────────────────
 
 def _is_supported(raw: RawFile) -> bool:
@@ -353,9 +372,21 @@ async def process_file(
             await asyncio.sleep(0)
 
         await _set_progress("index", chunks=len(chunks))
-        # Save raw file to corpus (in thread — file I/O)
-        file_path = str(corpus_dir / raw.filename)
-        await asyncio.to_thread((corpus_dir / raw.filename).write_bytes, raw.content)
+        # Save raw file to corpus (in thread — file I/O).
+        # safe_filename отрезает любые path-traversal — '..', абсолютные пути,
+        # control-chars. Дополнительно проверяем, что результирующий путь
+        # действительно лежит внутри corpus_dir после resolve() (defense in
+        # depth — на случай если safe_filename что-то пропустит).
+        clean_name = safe_filename(raw.filename)
+        target = (corpus_dir / clean_name).resolve()
+        corpus_root = corpus_dir.resolve()
+        if not str(target).startswith(str(corpus_root) + "/") and target != corpus_root:
+            logger.error("ingestion_path_traversal_blocked",
+                         filename=raw.filename, resolved=str(target))
+            return FileResult(filename=raw.filename, status="rejected",
+                              reason="INVALID_FILENAME")
+        file_path = str(target)
+        await asyncio.to_thread(target.write_bytes, raw.content)
 
         # Stage 6: Index — propagate tenant_id from the job context.
         if job is None:

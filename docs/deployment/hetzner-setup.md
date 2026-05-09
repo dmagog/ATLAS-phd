@@ -57,14 +57,22 @@ chmod 600 .env
 Отредактировать `.env`:
 
 ```env
+APP_ENV=production
+
 LLM_API_KEY=sk-or-v1-<your-real-key>
 LLM_MODEL_ID=meta-llama/llama-3.3-70b-instruct:free  # или платная модель
 
 POSTGRES_PASSWORD=<generate-strong-random>
 
+# Минимум 32 символа в production — Settings валидирует на старте.
+# Сгенерировать: python3 -c 'import secrets; print(secrets.token_urlsafe(48))'
 JWT_SECRET=<generate-strong-random-32+chars>
 ADMIN_EMAIL=<your-real-email>
-ADMIN_PASSWORD=<generate-strong-random>
+ADMIN_PASSWORD=<generate-strong-random-12+chars>
+
+# Security middleware (см. docs/security.md §5).
+TRUSTED_HOSTS=atlas.<your-domain>
+# CORS_ALLOWED_ORIGINS=  # пусто, если фронтенд same-origin
 
 LOG_LEVEL=INFO
 PILOT_TENANT_SLUG=optics-kafedra
@@ -72,6 +80,8 @@ VERIFIER_ENABLED=true
 ```
 
 **Важно:** записать `JWT_SECRET`, `POSTGRES_PASSWORD`, `ADMIN_PASSWORD` в безопасное место (1Password / Bitwarden) — без них восстановление невозможно.
+
+`APP_ENV=production` обязателен — он включает HSTS-заголовок и строгие проверки длины секретов на старте. Слабые placeholder-значения (`change_me_in_production`, `changeme`, и т.п. из `.env.example`) приложение отвергнет — это намеренно.
 
 ## Step 3 — Reverse proxy + HTTPS
 
@@ -99,6 +109,24 @@ DNS: A-запись `atlas` → `<vps-ip>` в DNS-провайдере.
 sudo systemctl reload caddy
 # Caddy автоматически получит TLS-сертификат через ACME.
 ```
+
+**После старта Caddy — закрыть прямой доступ к `8731` извне.** В
+`docker-compose.yml` секция `app.ports` сейчас стоит как `0.0.0.0:8731`
+(публичный). Чтобы трафик ходил ТОЛЬКО через Caddy с TLS, отредактируй:
+
+```yaml
+# docker-compose.yml, секция app:
+ports:
+  - "127.0.0.1:8731:8731"   # было: "8731:8731"
+```
+
+И перезапусти `docker compose up -d app`. После этого `curl http://<vps-ip>:8731`
+снаружи не отвечает, а Caddy (на том же хосте) продолжает успешно
+проксировать на `localhost:8731`. Это закрывает window, в котором
+HTTP-приложение торчит наружу без TLS.
+
+Альтернатива — UFW-правило `sudo ufw deny 8731`, но bind на 127.0.0.1
+проще и не зависит от состояния firewall.
 
 ## Step 4 — Запуск ATLAS
 

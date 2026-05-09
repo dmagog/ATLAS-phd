@@ -64,11 +64,43 @@ UI должен уметь отрисовывать:
 - `refusal` с понятной причиной
 - `self-check` результаты с общей и покритериальной оценкой
 
+## Rate-limits и 429-ответы
+
+| Endpoint | Лимит | Поведение при превышении |
+|----------|-------|--------------------------|
+| `POST /auth/login` | 5 попыток на (IP, email) + 50 на IP за 5 мин | `429 Too Many Requests`, заголовок `Retry-After: <секунды>`, тело: «Слишком много попыток входа» |
+| `POST /qa/message`, `POST /chat/message`, `POST /self-check/start`, `POST /self-check/{id}/submit` | 60 запросов/час per-user | `429 Too Many Requests`, `Retry-After: 3600`, тело: «Превышена квота LLM-запросов» |
+| `POST /admin/ingestion-jobs` | 50 файлов/job, 50 MB/файл, 200 MB/job | `413 Payload Too Large` с указанием конкретного лимита |
+
+Super-admin исключён из LLM-квоты (для eval/seed-скриптов). Login-лимиты
+действуют для всех. Frontend должен показывать пользователю осмысленное
+сообщение и делать backoff по `Retry-After`.
+
+См. [docs/security.md §2](../security.md) для архитектуры лимитера и
+известных ограничений (in-memory per-process — для multi-worker нужен
+Redis-based замена).
+
+## Security headers
+
+Все ответы (включая 4xx/5xx) содержат:
+- `Content-Security-Policy`
+- `X-Frame-Options: DENY`
+- `X-Content-Type-Options: nosniff`
+- `Referrer-Policy: strict-origin-when-cross-origin`
+- `Permissions-Policy`
+
+В `APP_ENV=production` дополнительно:
+- `Strict-Transport-Security: max-age=31536000; includeSubDomains`
+
+Frontend ничего специального делать не нужен — заголовки прозрачны.
+
 ## Обработка ошибок
 
 Frontend должен различать:
 - `refused`
 - `error`
 - `validation_error`
+- `rate_limited` (HTTP 429 — почитать `Retry-After`)
+- `payload_too_large` (HTTP 413 — показать лимиты пользователю)
 
 и обрабатывать их разными UX-сценариями.

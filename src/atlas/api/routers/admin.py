@@ -66,9 +66,26 @@ async def create_ingestion_job(
     current_user: User = Depends(require_admin),
 ) -> IngestionJobStartResponse:
     """Start an ingestion job. Returns immediately with job_id; processing runs in background."""
+    from atlas.core.config import settings
     from atlas.db.tenant_helpers import assert_tenant_writable, resolve_tenant_id_for_user
+
     tenant_id = await resolve_tenant_id_for_user(current_user, db, request)
     await assert_tenant_writable(tenant_id, db, current_user)
+
+    # Лимиты на размер/количество — защита от memory-DoS. UploadFile.read()
+    # держит файл целиком в RAM, поэтому без лимита один 5GB-файл уроняет
+    # процесс. Лимиты конфигурируются через UPLOAD_MAX_*-env vars.
+    max_file_bytes = settings.upload_max_file_size_mb * 1024 * 1024
+    max_total_bytes = settings.upload_max_total_size_mb * 1024 * 1024
+    if len(files) > settings.upload_max_files_per_job:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                f"Слишком много файлов в одной задаче "
+                f"(макс {settings.upload_max_files_per_job})."
+            ),
+        )
+
     job = IngestionJob(
         id=uuid.uuid4(),
         tenant_id=tenant_id,
@@ -79,8 +96,26 @@ async def create_ingestion_job(
     await db.commit()
 
     raw_files: list[RawFile] = []
+    total_bytes = 0
     for upload in files:
         content = await upload.read()
+        if len(content) > max_file_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail=(
+                    f"Файл '{upload.filename}' превышает лимит "
+                    f"{settings.upload_max_file_size_mb} MB."
+                ),
+            )
+        total_bytes += len(content)
+        if total_bytes > max_total_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail=(
+                    f"Суммарный размер файлов превышает лимит "
+                    f"{settings.upload_max_total_size_mb} MB."
+                ),
+            )
         mime = upload.content_type or "application/octet-stream"
         raw_files.append(RawFile(filename=upload.filename or "unknown", content=content, mime_type=mime))
 

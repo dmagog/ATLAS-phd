@@ -10,8 +10,27 @@
 - `docx`
 - `txt`
 - `md`
+- `jsonl` (page-aware формат)
 
 Неподдерживаемые форматы отклоняются до запуска тяжелой обработки.
+
+## Лимиты на загрузку
+
+`POST /admin/ingestion-jobs` enforce'ит лимиты до сохранения в RAM,
+чтобы исключить memory-DoS:
+
+| Лимит | Default | env var |
+|-------|---------|---------|
+| Размер одного файла | 50 MB | `UPLOAD_MAX_FILE_SIZE_MB` |
+| Суммарный размер job'а | 200 MB | `UPLOAD_MAX_TOTAL_SIZE_MB` |
+| Количество файлов в job | 50 | `UPLOAD_MAX_FILES_PER_JOB` |
+
+Превышение → `413 Payload Too Large` с понятным сообщением.
+
+`raw.filename` проходит через `safe_filename()` — отрезаются `..`,
+абсолютные пути, control-chars и null-bytes; финальный путь дополнительно
+проверяется через `Path.resolve()`, чтобы он лежал внутри `corpus_dir`.
+См. [docs/security.md §4](../security.md).
 
 ## Этапы pipeline
 

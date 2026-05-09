@@ -8,11 +8,12 @@ POST /chat/message
   → clarify    : returns a follow-up question from the planner
 """
 import uuid
+from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from atlas.core.deps import get_current_user
+from atlas.core.deps import get_current_user, require_llm_quota
 from atlas.db.models import User
 from atlas.db.session import get_db
 from atlas.orchestrator.qa_flow import run_qa_flow
@@ -25,7 +26,10 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 # ── Request ────────────────────────────────────────────────────────────────────
 
 class HistoryMessage(BaseModel):
-    role: str  # "user" | "assistant"
+    # Только user/assistant — иначе клиент мог бы инжектировать
+    # 'system'-сообщение и переписать instructions поверх legit'ного
+    # system prompt в build_answer_prompt.
+    role: Literal["user", "assistant"]
     content: str
 
 
@@ -82,6 +86,7 @@ async def chat_message(
     request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _quota: User = Depends(require_llm_quota),
 ) -> ChatResponse:
     request_id = str(uuid.uuid4())
 

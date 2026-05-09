@@ -5,6 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from atlas.core.logging import configure_logging
 from atlas.db.session import AsyncSessionLocal
 from atlas.api.startup import seed_admin, reset_stale_jobs
+from atlas.api.middleware import register_security_middleware
 from atlas.api.routers import auth, admin, qa, selfcheck, web, chat, invites, tenants, me, supervisor
 from atlas.api.routers import eval as eval_router
 from atlas.llm.client import llm_client
@@ -23,6 +24,11 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="ATLAS phd", version="0.1.0", lifespan=lifespan)
+
+# Security middleware: TrustedHost, CORS (опционально), security headers.
+# Регистрируется до mount'а static и include_router — Starlette wrap'ит
+# в обратном порядке, поэтому security-заголовки попадут в каждый ответ.
+register_security_middleware(app)
 
 app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
 

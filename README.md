@@ -105,6 +105,23 @@ cp .env.example .env
 | Ingestion | JSONL (page-aware) / PDF / DOCX / TXT / MD |
 | Eval-harness | M3 golden_set v1.1 (120 entries × 6 program topics) |
 | Деплой | Docker Compose; multi-stage Dockerfile (dev/production); GHCR image build via GitHub Actions |
+| Security | Argon2 + JWT versioning · rate-limit на login (5+50 за 5 мин) и LLM-API (60/час) · CSP/HSTS/X-Frame-Options · log-masking PII/secrets · pip-audit в CI · non-root containers |
+
+---
+
+## 🔒 Безопасность
+
+Полный обзор защитных механизмов: [`docs/security.md`](docs/security.md). Production-чеклист перед деплоем — там же.
+
+Кратко:
+- **Auth**: Argon2-пароли · JWT с `jv` claim для отзыва · constant-time login (нет user-enumeration по таймингу) · rate-limit 5/email + 50/IP за 5 мин.
+- **Multi-tenancy**: tenant-резолвер с reject cross-tenant header'а · `assert_tenant_writable` для read-only/archived · audit_log на critical actions.
+- **Web hardening**: CSP, HSTS (production), X-Frame-Options=DENY, X-Content-Type-Options=nosniff, Referrer-Policy, Permissions-Policy. TrustedHost + CORS опционально.
+- **Upload**: лимиты 50 MB/файл, 200 MB/job, 50 файлов/job (`413` при превышении). Path traversal закрыт через `safe_filename` + `resolve()`-проверку.
+- **LLM**: per-user квота 60 запросов/час (super-admin исключён). Prompt injection defense — chunks обёрнуты в `<<<DOCUMENT>>>` маркеры.
+- **Логи**: автомаскирование `email`, `password`, `jwt`, `api_key`, `cookie` через structlog-процессор.
+- **Контейнеры**: app и embeddings под non-root юзерами; postgres:5432 не публикуется наружу.
+- **Зависимости**: `pip-audit` в CI (`--strict`) + dependabot weekly.
 
 ---
 
