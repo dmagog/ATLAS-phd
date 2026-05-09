@@ -6,6 +6,40 @@
 
 ---
 
+## [0.8.1] — 2026-05-09 — Multi-tenant demo + admin tenant isolation fix
+
+### Добавлено
+
+- **Вторая пилотная кафедра** `semiconductors-kafedra` (специальность 01.04.10 «Физика полупроводников»). Создана для демонстрации multi-tenancy на защите: independent program (6 топиков), independent corpus (4 PDF: ЛКО_книга, Lect_opt, Lections_combined, Mikhnenko-exciton), independent users (1 admin + 1 supervisor + 5 студентов с миксованной visibility).
+- **`scripts/seed_semicon_demo.sh`** — idempotent bootstrap новой кафедры через HTTP API (POST /tenants → POST /program → POST /invites + redeem → POST /admin/ingestion-jobs).
+- **`corpus/semiconductors-kafedra/program.md`** — 6 топиков пилотной программы (зонная структура, межзонные переходы, экситоны Ванье–Мотта/Френкеля, люминесценция, спектроскопия наноструктур).
+- **`DELETE /admin/documents/{id}`** — удаление документа из RAG. Раньше способа удалить не было; нужен для очистки случайно загруженного материала. Tenant-scoped: 404 при попытке удалить чужой документ.
+
+### Исправлено — Tenant isolation в /admin (M4.A regression)
+
+При проверке `semiconductors-kafedra` обнаружилось, что:
+- **`GET /admin/documents`** возвращал ВСЕ документы платформы вне зависимости от tenant context. Tenant-admin одной кафедры видел документы другой; super-admin без `X-Atlas-Tenant` тоже видел всё.
+- **`GET /admin/ingestion-jobs/{id}`** не проверял tenant_id — tenant-admin мог опросить статус job из другого тенанта.
+
+Это **утечка существования документов** (не контента — retrieval всегда был отфильтрован правильно по `tenant_id`), но всё равно нарушает M4.A baseline.
+
+Фикс: оба эндпоинта теперь резолвят tenant context через `resolve_tenant_id_for_user(current_user, db, request)` (как уже делал `/qa/message` и `tenants.py`) и фильтруют SELECT по `tenant_id`.
+
+### Тесты
+
+- **`tests/test_admin_tenant_isolation.py`** — 3 новых теста (3/3 PASS):
+  - `test_admin_documents_isolated_per_tenant` — disjoint sets между optics и semicon
+  - `test_admin_ingestion_job_404_for_other_tenant` — 404 на чужой job_id
+  - `test_admin_delete_404_for_other_tenant` — 404 на чужой DELETE, документ не удаляется
+
+### Cleanup
+
+- **`Кандидатский экзамен/`** (3.5 GB после 3 фаз cleanup'а) добавлена в `.gitignore` — papka содержит copyrighted материалы коллег и не подлежит version control. Подробности в `Кандидатский экзамен/CLEANUP_MANIFEST.md`.
+- `corpus/*.pdf`, `corpus/*.docx` исключены из git (pipeline копирует туда оригиналы side-effect'ом).
+- Удалён `optics-rusakov-M1.pdf` из `optics-kafedra` (был ошибочно загружен как тест pipeline'а; это студ. конспект, не авторитетный источник).
+
+---
+
 ## [0.8.0] — 2026-05-09 — Design phases 1–6 + production UI redesign
 
 Полная переработка UI/UX от ux-audit до полированной production-системы
