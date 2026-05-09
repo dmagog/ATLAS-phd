@@ -3,6 +3,18 @@
 # Do NOT commit secrets or use in production.
 
 services:
+  # Dev-доступ к Postgres с хоста (psql, DBeaver, миграции вручную).
+  # Биндинг на 127.0.0.1, чтобы не светить порт во внешнюю сеть даже на
+  # dev-машине разработчика. В production этого override не должно быть —
+  # `docker compose -f docker-compose.yml up` без override его не подхватит.
+  postgres:
+    ports:
+      - "127.0.0.1:5432:5432"
+
+  embeddings:
+    ports:
+      - "127.0.0.1:8001:8001"
+
   app:
     volumes:
       - ./src:/app/src
