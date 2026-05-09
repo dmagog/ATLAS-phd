@@ -85,12 +85,30 @@ async def submit_selfcheck(
     answers: list[dict],
     db: AsyncSession,
     request_id: str | None = None,
+    tenant_id=None,
+    user_id=None,
 ) -> EvaluationPayload:
+    """Применить ответы к существующей попытке self-check.
+
+    tenant_id/user_id обязательны для bound-пользователей (защита от IDOR:
+    студент tenant'а A не должен иметь возможность отправить ответы
+    в попытку из tenant'а B, угадав UUID). Если переданы — фильтруем
+    SelfCheckAttempt по обоим полям, и 'не нашли' возвращаем как
+    ATTEMPT_NOT_FOUND (а не FORBIDDEN), чтобы не подтверждать факт
+    существования чужой попытки.
+
+    Если параметры опущены (legacy-вызовы из тестов / админских скриптов),
+    фильтр по id остаётся прежним. Все боевые точки входа из API теперь
+    обязаны передавать tenant_id+user_id.
+    """
     request_id = request_id or str(uuid.uuid4())
 
-    result = await db.execute(
-        select(SelfCheckAttempt).where(SelfCheckAttempt.id == attempt_id)
-    )
+    stmt = select(SelfCheckAttempt).where(SelfCheckAttempt.id == attempt_id)
+    if tenant_id is not None:
+        stmt = stmt.where(SelfCheckAttempt.tenant_id == tenant_id)
+    if user_id is not None:
+        stmt = stmt.where(SelfCheckAttempt.user_id == user_id)
+    result = await db.execute(stmt)
     attempt = result.scalar_one_or_none()
     if not attempt:
         raise ValueError("ATTEMPT_NOT_FOUND")

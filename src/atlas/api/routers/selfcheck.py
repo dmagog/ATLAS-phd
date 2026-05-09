@@ -129,12 +129,21 @@ async def selfcheck_submit(
     from atlas.db.tenant_helpers import assert_tenant_writable, resolve_tenant_id_for_user
     tenant_id = await resolve_tenant_id_for_user(current_user, db, request)
     await assert_tenant_writable(tenant_id, db, current_user)
+    # Защита от IDOR: super-admin может работать в любом tenant'е через
+    # X-Atlas-Tenant header, но обычные пользователи (student/supervisor/
+    # tenant-admin) обязаны быть владельцем попытки. tenant_id/user_id
+    # пробрасываются в orchestrator и в финальный fetch ниже.
+    from atlas.db.models import UserRole
+    is_super = current_user.role == UserRole.super_admin.value
+    scope_user_id = None if is_super else current_user.id
     try:
         payload = await submit_selfcheck(
             attempt_id=attempt_id,
             answers=[{"question_id": a.question_id, "answer_text": a.answer_text} for a in answers],
             db=db,
             request_id=request_id,
+            tenant_id=tenant_id,
+            user_id=scope_user_id,
         )
     except ValueError as exc:
         code = str(exc)
@@ -142,10 +151,15 @@ async def selfcheck_submit(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attempt not found")
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Evaluation failed")
 
-    # Fetch stored attempt to get question details (with correct_option) and user answers
-    result_db = await db.execute(
-        select(SelfCheckAttempt).where(SelfCheckAttempt.id == attempt_id)
+    # Fetch stored attempt to get question details (with correct_option) and user answers.
+    # Те же фильтры по tenant/user, что и при submit'е — иначе 404 на стадии fetch.
+    fetch_stmt = select(SelfCheckAttempt).where(
+        SelfCheckAttempt.id == attempt_id,
+        SelfCheckAttempt.tenant_id == tenant_id,
     )
+    if scope_user_id is not None:
+        fetch_stmt = fetch_stmt.where(SelfCheckAttempt.user_id == scope_user_id)
+    result_db = await db.execute(fetch_stmt)
     attempt = result_db.scalar_one_or_none()
     question_map = {q["question_id"]: q for q in (attempt.question_set or [])} if attempt else {}
     answer_map = {a["question_id"]: a["answer_text"] for a in (attempt.answers or [])} if attempt else {}
