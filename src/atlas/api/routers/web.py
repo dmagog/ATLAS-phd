@@ -135,15 +135,16 @@ async def demo_login_helper(email: str, next: str = "/"):
     'demo' password, saves the resulting token to localStorage, and
     redirects to ?next=<path>.
 
-    Strict guard: ONLY emails ending in '@optics.demo' are accepted.
-    Any other email returns 404 (not 403, to avoid hint of route
-    existence).
+    Strict guard: ONLY emails on demo tenants are accepted (currently
+    `@optics.demo` and `@semicon.demo`). Any other email returns 404
+    (not 403, to avoid hint of route existence).
 
     Disabled in production: settings.app_env == 'production' returns 404.
     """
     if getattr(settings, "app_env", "development") == "production":
         raise HTTPException(status_code=404)
-    if not email.endswith("@optics.demo"):
+    DEMO_DOMAINS = ("@optics.demo", "@semicon.demo")
+    if not any(email.endswith(d) for d in DEMO_DOMAINS):
         raise HTTPException(status_code=404)
     # Validate next is same-origin path (no open redirect).
     if not next.startswith("/") or next.startswith("//"):

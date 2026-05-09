@@ -174,19 +174,35 @@
 
 Под super-admin. Кросс-тенантный view.
 
-**3 hero:** всего кафедр **1** / активных **1** / в архиве **0**. (Подзаголовок: «1 реальных кафедр · 113 тестовых тенантов скрыто».)
+**3 hero:** всего кафедр **2** / активных **2** / в архиве **0**. (Подзаголовок: «2 реальных кафедр · 140 тестовых тенантов скрыто».)
 
-**Таблица:** одна строка — Кафедра оптики (slug `optics-kafedra`, status `active`, создана 3 мая 2026).
+**Таблица — две строки:**
+- Кафедра оптики (slug `optics-kafedra`, активна, создана 3 мая 2026)
+- Кафедра физики полупроводников (slug `semiconductors-kafedra`, активна, создана 9 мая 2026)
 
-**Onboarding-hint card** с пошаговой инструкцией добавления второй кафедры:
+**Onboarding-hint card** с пошаговой инструкцией добавления N+1 кафедры:
 1. POST /tenants (slug + display_name)
 2. POST /tenants/{slug}/program (yaml/markdown)
 3. UI /admin tenant-admin'ом
 4. POST /invites с role
 
-**Тезис:** платформенность M4.A — пилот это одна кафедра, но архитектурно поддерживается N. Domain-specific промпты живут в per-tenant конфиге `tenants.config` — core-код не меняется.
+**Тезис:** платформенность M4.A — multi-tenant by design. Вторая кафедра загружена на 9 мая 2026 (пилот → multi-tenant proof в течение одной недели разработки): отдельная программа 01.04.10 «Физика полупроводников», отдельный корпус (4 PDF), отдельные пользователи, изолированный retrieval. Domain-specific промпты живут в per-tenant конфиге — core-код не меняется.
 
-**Демо-сценарий:** «Сейчас на платформе одна кафедра — оптики ИТМО. Архитектурно — multi-tenant by design. Добавить вторую (физмат, химию, биологию) — это API-flow по 4 командам, не переписывание системы».
+**Демо-сценарий:** «На платформе две реальные кафедры. Они полностью изолированы — корпус, программа, пользователи. На retrieval-уровне студент одной кафедры физически не видит документов другой. Добавление третьей — API-flow по 4 командам».
+
+---
+
+## Шаг 7а — Multi-tenancy: вторая кафедра в работе
+
+![tenant-admin-semicon](11-tenant-admin-semicon.png)
+
+**`/tenant-admin` под `admin@semicon.demo`:** Кузнецов И. А. видит свою кафедру — программу 01.04.10 «Физика полупроводников», все 6 топиков с заполненным coverage (зелёные bar-fills 100%), 2996 chunks из 4 учебных PDF (Lect_opt, Lections_combined, ЛКО_книга, Mikhnenko-exciton), 5 студентов в активной кафедре.
+
+![chat-semicon-isolation](12-chat-semicon-isolation.png)
+
+**`/` под `orlov@semicon.demo`:** студент Орлов задаёт вопрос «Опишите взаимодействие электрона с электромагнитным полем в полупроводнике». Получает ответ с inline-цитатами `[1]` `[2]`. Source-panel показывает источники: `Lect_opt` и `Lections_combined` — **только из semicon-корпуса**, ни одного chunk'а из Born/Wolf/Matveev/Yariv (которые лежат в `optics-kafedra`).
+
+**Тезис изоляции (M4.A):** на этом же запросе студент кафедры оптики получит ответ из Born/Wolf/Matveev — semicon-материалы недоступны. retrieval-pipeline жёстко фильтрует `WHERE chunks.tenant_id = current_user.tenant_id` через partial HNSW индексы per-tenant. **Это и есть proof multi-tenancy** — не «слайд про возможности», а живой ответ системы.
 
 ---
 
@@ -215,13 +231,14 @@
 
 ## Скриншоты как набор для слайдов
 
-Все 10 PNG лежат в этой папке. Имена нумерованные → можно добавить в Keynote/PowerPoint в правильном порядке drag-and-drop.
+Все 12 PNG лежат в этой папке. Имена нумерованные → можно добавить в Keynote/PowerPoint в правильном порядке drag-and-drop.
 
 При размещении на слайдах рекомендую:
 1. **Шаг 2 (refusal)** — самая важная иллюстрация: ставить на отдельный слайд с увеличением
 2. **Шаг 6 (eval)** — крупно: hero-cards 1.000/1.000/<2s — это центральные цифры диссертации
 3. **Шаг 4 (supervisor)** — на слайд про «privacy by design» в M5
 4. **Шаги 1+1а (chat + source-modal)** — пара иллюстраций для описания verifiability
+5. **Шаг 7а (multi-tenancy proof)** — `11` + `12` парой: tenant-admin семикона + чат Орлова с цитатами только из semicon-корпуса. Это **живой proof multi-tenancy**, а не «слайд про возможности»
 
 ---
 
@@ -230,7 +247,8 @@
 ### Что нужно перед съёмкой
 
 ```bash
-./scripts/seed_demo.sh                                # users + hand-crafted attempts
+./scripts/seed_demo.sh                                # 1-я кафедра: users + hand-crafted attempts
+./scripts/seed_semicon_demo.sh                        # 2-я кафедра: tenant + program + 4 PDF + 7 users
 docker compose exec -T app python3 /app/scripts/seed_demo_real_attempts.py  # real LLM
 docker compose exec -T app python3 /app/scripts/seed_demo_showcase.py       # ivanov 4.5+ scores
 ```
@@ -255,6 +273,10 @@ http://127.0.0.1:8731/_/demo-login?email=admin@optics.demo&next=/_/invites
 # Под super-admin
 http://127.0.0.1:8731/_/demo-login?email=super@optics.demo&next=/eval
 http://127.0.0.1:8731/_/demo-login?email=super@optics.demo&next=/_/tenants
+
+# Под semicon-кафедрой (для шага 7а — multi-tenancy proof)
+http://127.0.0.1:8731/_/demo-login?email=admin@semicon.demo&next=/tenant-admin
+http://127.0.0.1:8731/_/demo-login?email=orlov@semicon.demo&next=/?ask=Опишите%20взаимодействие%20электрона%20с%20электромагнитным%20полем%20в%20полупроводнике.
 ```
 
 Получить актуальный best-attempt-id для шага 3 (selfcheck-rubric):

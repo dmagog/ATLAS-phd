@@ -24,18 +24,20 @@
 
 <table>
   <tr>
-    <td width="33%"><a href="docs/design/screenshots/after/README.md#шаг-1--чат-с-цитатами-ask"><img src="docs/design/screenshots/after/02-chat-citations.png" alt="Q&A with inline citations" /></a></td>
-    <td width="33%"><a href="docs/design/screenshots/after/README.md#шаг-2--refusal-экран-off-topic-askкакова-численность-населения-москвы"><img src="docs/design/screenshots/after/04-refusal-screen.png" alt="Hard-gate refusal screen" /></a></td>
-    <td width="33%"><a href="docs/design/screenshots/after/README.md#шаг-4--supervisor-heatmap-supervisor"><img src="docs/design/screenshots/after/06-supervisor-heatmap.png" alt="Supervisor heatmap" /></a></td>
+    <td width="25%"><a href="docs/design/screenshots/after/README.md#шаг-1--чат-с-цитатами-ask"><img src="docs/design/screenshots/after/02-chat-citations.png" alt="Q&A with inline citations" /></a></td>
+    <td width="25%"><a href="docs/design/screenshots/after/README.md#шаг-2--refusal-экран-off-topic-askкакова-численность-населения-москвы"><img src="docs/design/screenshots/after/04-refusal-screen.png" alt="Hard-gate refusal screen" /></a></td>
+    <td width="25%"><a href="docs/design/screenshots/after/README.md#шаг-4--supervisor-heatmap-supervisor"><img src="docs/design/screenshots/after/06-supervisor-heatmap.png" alt="Supervisor heatmap" /></a></td>
+    <td width="25%"><a href="docs/design/screenshots/after/README.md#шаг-7а--multi-tenancy-вторая-кафедра-в-работе"><img src="docs/design/screenshots/after/12-chat-semicon-isolation.png" alt="Multi-tenant isolation in chat" /></a></td>
   </tr>
   <tr>
     <td><b>Q&A с inline-цитатами</b><br/>Ответы строго по корпусу, кликабельные `[N]` pills открывают точный фрагмент учебника.</td>
     <td><b>Hard-gate первого класса</b><br/>На off-topic вопрос система <b>детерминированно отказывает</b> до обращения к LLM, за &lt;2 сек.</td>
     <td><b>Кафедральный режим</b><br/>Heatmap по 6 топикам, privacy mask: 5 из 12 студентов anonymized как «Аспирант #N».</td>
+    <td><b>Multi-tenancy</b><br/>Две кафедры (оптика + физика п/п) с изолированным retrieval. Студент semicon видит только semicon-источники.</td>
   </tr>
 </table>
 
-[**→ Полная аннотированная gallery 10 экранов**](docs/design/screenshots/after/README.md)
+[**→ Полная аннотированная gallery 12 экранов**](docs/design/screenshots/after/README.md)
 
 ---
 
