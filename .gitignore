@@ -13,3 +13,6 @@ eval/results/*
 !eval/results/.gitkeep
 !eval/results/*.md
 !eval/results/*.json
+
+# Materials from colleagues — not version-controlled (binary, large, copyrighted)
+Кандидатский экзамен/
