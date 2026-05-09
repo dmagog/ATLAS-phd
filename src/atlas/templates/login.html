@@ -25,9 +25,38 @@
       flex-direction: column;
       justify-content: space-between;
     }
-    .login-page__brand-mark { width: 88px; height: 88px; margin-bottom: var(--sp-5); filter: brightness(1.1); }
-    .login-page__tagline { font-size: var(--fs-2xl); font-weight: 600; line-height: 1.25; margin-bottom: var(--sp-4); letter-spacing: -0.01em; }
-    .login-page__sub { color: rgba(255,255,255,0.65); font-size: var(--fs-base); line-height: 1.6; max-width: 420px; }
+    .login-page__brand-header {
+      display: flex;
+      align-items: center;
+      gap: var(--sp-6);
+      margin-bottom: var(--sp-2);
+    }
+    .login-page__brand-mark {
+      width: 140px;
+      height: 140px;
+      flex-shrink: 0;
+      filter: brightness(1.1) drop-shadow(0 6px 24px rgba(96, 165, 250, 0.18));
+    }
+    .login-page__brand-text { display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; }
+    .login-page__tagline {
+      font-size: 2.4rem;
+      font-weight: 600;
+      line-height: 1.1;
+      letter-spacing: -0.015em;
+      margin: 0;
+    }
+    .login-page__sub {
+      color: rgba(255,255,255,0.65);
+      font-size: var(--fs-base);
+      line-height: 1.55;
+      max-width: 420px;
+      margin: 0;
+    }
+    @media (max-width: 1100px) {
+      .login-page__brand-header { gap: var(--sp-4); }
+      .login-page__brand-mark { width: 110px; height: 110px; }
+      .login-page__tagline { font-size: var(--fs-2xl); }
+    }
     .login-page__bullet { display: flex; gap: var(--sp-3); align-items: flex-start; margin-bottom: var(--sp-3); }
     .login-page__bullet i { color: #60A5FA; font-size: 1.1rem; margin-top: 2px; }
     .login-page__bullet-title { font-weight: 500; color: #fff; }
@@ -53,10 +82,14 @@
 
   <aside class="login-page__brand">
     <div>
-      <img src="/static/icons/atlas-shield-inverted.svg" class="login-page__brand-mark" alt="ATLAS phd">
-      <h1 class="login-page__tagline">ATLAS phd</h1>
-      <div class="login-page__sub">
-        Подготовка к кандидатскому минимуму с заземлением в учебных материалах кафедры. Защита от галлюцинаций — детерминированная, на уровне retrieval.
+      <div class="login-page__brand-header">
+        <img src="/static/icons/atlas-shield-inverted.svg" class="login-page__brand-mark" alt="ATLAS phd">
+        <div class="login-page__brand-text">
+          <h1 class="login-page__tagline">ATLAS phd</h1>
+          <div class="login-page__sub">
+            Подготовка к кандидатскому минимуму с заземлением в учебных материалах кафедры. Защита от галлюцинаций — детерминированная, на уровне retrieval.
+          </div>
+        </div>
       </div>
     </div>
 
