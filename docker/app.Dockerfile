@@ -7,7 +7,7 @@
 #         Используется в .github/workflows/build-image.yml (target=production).
 
 # ─── Stage 1: общая база ──────────────────────────────────────────────────
-FROM python:3.11-slim AS base
+FROM python:3.14-slim AS base
 
 WORKDIR /app
 
