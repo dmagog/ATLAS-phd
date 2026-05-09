@@ -40,6 +40,10 @@ Models that **404** on OpenRouter (do not use): `qwen/qwen3-8b:free`, `qwen/qwen
 
 Before any real LLM run: `curl -H "Authorization: Bearer $LLM_API_KEY" https://openrouter.ai/api/v1/models | jq '.data[] | select(.id | endswith(":free"))'` to confirm current list.
 
-## Known gaps to address before M3 first end-to-end
+## Known gaps — статус
 
-- **M2 verifier hard-gate** does NOT block flow when `enough_evidence=False` — it goes to LLM-call anyway and returns `api_status="error"` (`TECHNICAL_ERROR`) on failure, not `REFUSAL_SENT` (BDD 1.3). This is recorded in `docs/roadmap.md` M3 risks. Fix in M3.A.0 before first end-to-end run, otherwise `refusal_correctness` (BDD 6.1) is unmeasurable.
+- ~~**M2 verifier hard-gate**~~ — закрыто в M3.A.0: `qa_flow.py` блокирует ответ при `enough_evidence=False` ДО LLM-вызова и возвращает `REFUSAL_SENT`. См. `src/atlas/orchestrator/qa_flow.py` (treatment-режим, default).
+- ~~**IDOR в `/self-check/{attempt_id}/submit`**~~ — закрыто в security-audit (2026-05-09): фетч попытки фильтруется по `tenant_id + user_id`, см. `src/atlas/api/routers/selfcheck.py` и `src/atlas/orchestrator/selfcheck_flow.py`.
+- **localStorage → httpOnly cookie + CSRF**: JWT всё ещё хранится в `localStorage` (`atlas_token`). XSS = угнан токен на 8 часов. Отложено на отдельный PR (затрагивает 30+ мест в шаблонах + CSRF-токены на каждый POST).
+
+Полный обзор security-механизмов: [`docs/security.md`](docs/security.md).
