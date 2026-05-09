@@ -58,6 +58,34 @@ class Settings(BaseSettings):
     # for staging or future direction switches.
     pilot_tenant_slug: str = "optics-kafedra"
 
+    # ── Security middleware (Итерация 5) ─────────────────────────────────
+    # Белый список Host header'ов (TrustedHostMiddleware). В production
+    # обязательно задать явный список: 'atlas.example.com,www.atlas.example.com'.
+    # '*' допустим только в dev — иначе атакующий может подменять Host для
+    # cache-poisoning или смены ссылок в email-уведомлениях.
+    trusted_hosts: str = "*"
+
+    # Белый список origin'ов для CORS. Пустая строка = CORSMiddleware не
+    # подключается (same-origin only, безопасно по умолчанию для Jinja2 UI).
+    # В production задать: 'https://atlas.example.com'.
+    cors_allowed_origins: str = ""
+
+    # HSTS: max-age и subdomain-флаг отдаются заголовком
+    # Strict-Transport-Security. Включаем только в production, потому что
+    # за HTTP в dev браузер всё равно проигнорирует, а на проде он pin'ит
+    # домен на HTTPS. Если хостимся за HTTPS-proxy (Caddy/nginx) — это
+    # обязательно. 31536000 = 1 год (рекомендация OWASP).
+    hsts_max_age: int = 31536000
+
+    @property
+    def trusted_hosts_list(self) -> list[str]:
+        items = [h.strip() for h in self.trusted_hosts.split(",") if h.strip()]
+        return items or ["*"]
+
+    @property
+    def cors_allowed_origins_list(self) -> list[str]:
+        return [o.strip() for o in self.cors_allowed_origins.split(",") if o.strip()]
+
     @field_validator("jwt_secret")
     @classmethod
     def _check_jwt_secret(cls, v: str) -> str:
