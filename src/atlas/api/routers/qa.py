@@ -1,4 +1,5 @@
 import uuid
+from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,7 +14,10 @@ router = APIRouter(prefix="/qa", tags=["qa"])
 
 
 class HistoryMessage(BaseModel):
-    role: str  # "user" | "assistant"
+    # Только user/assistant — ни в коем случае не 'system'. Иначе клиент
+    # мог бы инжектировать свой system-prompt поверх ANSWER_SYSTEM_PROMPT
+    # и обойти rules (citation, refusal, no-fabrication).
+    role: Literal["user", "assistant"]
     content: str
 
 

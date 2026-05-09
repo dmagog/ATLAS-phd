@@ -8,6 +8,7 @@ POST /chat/message
   → clarify    : returns a follow-up question from the planner
 """
 import uuid
+from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,7 +26,10 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 # ── Request ────────────────────────────────────────────────────────────────────
 
 class HistoryMessage(BaseModel):
-    role: str  # "user" | "assistant"
+    # Только user/assistant — иначе клиент мог бы инжектировать
+    # 'system'-сообщение и переписать instructions поверх legit'ного
+    # system prompt в build_answer_prompt.
+    role: Literal["user", "assistant"]
     content: str
 
 
