@@ -37,7 +37,7 @@
   </tr>
 </table>
 
-[**→ Полная аннотированная gallery 12 экранов**](docs/design/screenshots/after/README.md)
+[**→ Полная аннотированная gallery 14 экранов**](docs/design/screenshots/after/README.md)
 
 ---
 
@@ -130,7 +130,7 @@ cp .env.example .env
 📖 **Главная навигация:** [`docs/README.md`](docs/README.md) — структурированный TOC с reading paths по ролям.
 
 Топ-3 starting points:
-- 🎯 **[design/screenshots/after/README.md](docs/design/screenshots/after/README.md)** — аннотированная gallery 10 экранов с тезисами
+- 🎯 **[design/screenshots/after/README.md](docs/design/screenshots/after/README.md)** — аннотированная gallery 14 экранов с тезисами
 - 🎬 **[design/demo-script.md](docs/design/demo-script.md)** — пошаговый сценарий защиты на 6 минут с inline-скриншотами
 - 🏗 **[system-design.md](docs/system-design.md)** — обзор PoC-архитектуры с C4 диаграммами
 

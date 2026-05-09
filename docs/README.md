@@ -100,7 +100,7 @@
 | [`design/screenshot-gallery.md`](design/screenshot-gallery.md) | 1 | Deprecated → редирект на `screenshots/after/README.md` |
 
 Папки внутри `design/`:
-- [`design/screenshots/after/`](design/screenshots/after/) — 10 PNG актуальных скриншотов
+- [`design/screenshots/after/`](design/screenshots/after/) — 14 PNG актуальных скриншотов (login → chat → source-modal → refusal → selfcheck старт/зачёт/не-зачёт → supervisor → tenant-admin → eval → tenants → invites → semicon proof)
 - [`design/screencasts/`](design/screencasts/) — пустая, для GIF'ов после съёмки
 
 ### `welcome/` — onboarding-материалы для разных ролей

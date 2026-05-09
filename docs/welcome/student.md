@@ -46,7 +46,17 @@ https://atlas.ваша-кафедра/invites/<code>
 
 После сдачи — детальный feedback и общий балл от 0 до 5.
 
+**Старт:** введите тему — система сгенерирует 6 вопросов из учебников кафедры.
+
+![selfcheck-start](../design/screenshots/after/05a-selfcheck-start.png)
+
+**Зачёт (≥ 4):** verdict «Отлично», все критерии в зелёном.
+
 ![selfcheck-rubric](../design/screenshots/after/05-selfcheck-rubric.png)
+
+**Не зачёт (< 2):** verdict «Нужно повторить», error-теги показывают конкретные термины, в которых студент путается. Ниже — пример «Поляризация света → 1.0/5» с тегами «брюстер», «двулучепреломление»:
+
+![selfcheck-failed](../design/screenshots/after/05b-selfcheck-failed.png)
 
 ### 3. Дашборд прогресса
 Видите по программе:
