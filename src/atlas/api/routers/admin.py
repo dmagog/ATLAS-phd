@@ -97,11 +97,24 @@ async def create_ingestion_job(
 @router.get("/ingestion-jobs/{job_id}", response_model=IngestionJobStatusResponse)
 async def get_ingestion_job(
     job_id: str,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin),
 ) -> IngestionJobStatusResponse:
-    """Poll ingestion job status."""
-    result = await db.execute(select(IngestionJob).where(IngestionJob.id == job_id))
+    """Poll ingestion job status. M4.A: scoped to caller's tenant context.
+
+    A bound tenant-admin can only see jobs of their tenant. A super-admin
+    sees jobs of the tenant currently selected via `X-Atlas-Tenant`
+    (default tenant if header missing).
+    """
+    from atlas.db.tenant_helpers import resolve_tenant_id_for_user
+    tenant_id = await resolve_tenant_id_for_user(current_user, db, request)
+    result = await db.execute(
+        select(IngestionJob).where(
+            IngestionJob.id == job_id,
+            IngestionJob.tenant_id == tenant_id,
+        )
+    )
     job = result.scalar_one_or_none()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -116,10 +129,18 @@ async def get_ingestion_job(
 
 @router.get("/documents", response_model=list[DocumentInfo])
 async def list_documents(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin),
 ) -> list[DocumentInfo]:
-    """List all ingested documents with chunk counts."""
+    """List ingested documents in the caller's tenant (M4.A).
+
+    Bound tenant-admin sees only documents of their tenant. Super-admin
+    sees documents of the tenant currently selected via `X-Atlas-Tenant`
+    header (default tenant if header is missing).
+    """
+    from atlas.db.tenant_helpers import resolve_tenant_id_for_user
+    tenant_id = await resolve_tenant_id_for_user(current_user, db, request)
     rows = await db.execute(
         select(
             Document.id,
@@ -129,6 +150,7 @@ async def list_documents(
             func.count(Chunk.id).label("chunk_count"),
         )
         .outerjoin(Chunk, Chunk.document_id == Document.id)
+        .where(Document.tenant_id == tenant_id)
         .group_by(Document.id)
         .order_by(Document.created_at.desc())
     )
@@ -142,3 +164,60 @@ async def list_documents(
         )
         for r in rows
     ]
+
+
+@router.delete("/documents/{document_id}", status_code=204)
+async def delete_document(
+    document_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+) -> None:
+    """Delete a document and its chunks.
+
+    M4.A: only documents of the caller's tenant context can be deleted.
+    Bound tenant-admin → own tenant. Super-admin → tenant of `X-Atlas-Tenant`
+    (default tenant if header missing). 404 if not found in scope.
+
+    Audit log entry is written for traceability.
+    """
+    from atlas.db.tenant_helpers import assert_tenant_writable, resolve_tenant_id_for_user
+    from atlas.db.audit import write_audit
+    from sqlalchemy import delete as sql_delete
+
+    tenant_id = await resolve_tenant_id_for_user(current_user, db, request)
+    await assert_tenant_writable(tenant_id, db, current_user)
+
+    try:
+        doc_uuid = uuid.UUID(document_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    result = await db.execute(
+        select(Document).where(
+            Document.id == doc_uuid,
+            Document.tenant_id == tenant_id,
+        )
+    )
+    doc = result.scalar_one_or_none()
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    title = doc.title
+    filename = doc.filename
+    await db.execute(sql_delete(Chunk).where(Chunk.document_id == doc.id))
+    await db.delete(doc)
+    await write_audit(
+        db,
+        action="document.delete",
+        actor_id=current_user.id,
+        actor_role=current_user.role,
+        tenant_id=tenant_id,
+        target_type="document",
+        target_id=str(doc.id),
+        details={"title": title, "filename": filename},
+    )
+    await db.commit()
+    logger.info("document_deleted",
+                document_id=str(doc.id), title=title,
+                tenant_id=str(tenant_id), actor_id=str(current_user.id))

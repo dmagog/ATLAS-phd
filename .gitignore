@@ -16,3 +16,10 @@ eval/results/*
 
 # Materials from colleagues — not version-controlled (binary, large, copyrighted)
 Кандидатский экзамен/
+
+# Corpus side-effect: ingested PDFs/DOCX are saved to corpus/ by pipeline.
+# We keep JSONL + program.md tracked, but exclude binary uploads (large,
+# copyrighted, retrievable from original source folder).
+corpus/*.pdf
+corpus/*.docx
+corpus/atlas_test.txt
