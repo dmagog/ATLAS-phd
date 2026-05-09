@@ -28,7 +28,8 @@ services:
     # Внутренний сервис — публичный порт не нужен. В dev для отладки
     # смотри docker-compose.override.yml.
     volumes:
-      - embeddings_cache:/root/.cache/huggingface
+      # HOME=/home/emb для non-root user'а emb (см. docker/embeddings.Dockerfile).
+      - embeddings_cache:/home/emb/.cache/huggingface
 
   app:
     # In dev: docker compose up --build → собирает stage `dev` (hot-reload,
