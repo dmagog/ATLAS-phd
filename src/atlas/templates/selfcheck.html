@@ -182,6 +182,23 @@ const _KATEX_OPTS = { delimiters: [{left:'$$',right:'$$',display:true}, {left:'$
 function renderMath(el) { if (typeof renderMathInElement === 'function') renderMathInElement(el, _KATEX_OPTS); }
 
 
+// ───────── Auto-start via ?topic= query (screenshot helper) ─────────
+// Если в URL есть ?topic=... — заполнить input и сразу нажать Начать.
+// Используется для воспроизводимых демо-флоу (см. screenshots/after/README).
+(function () {
+  const p = new URLSearchParams(location.search);
+  const topic = p.get('topic');
+  if (topic) {
+    const el = document.getElementById('topic-input');
+    if (el) el.value = topic;
+    if (p.get('autostart') === '1') {
+      // Дождёмся auth-bootstrap и кликнем
+      setTimeout(() => document.getElementById('start-btn')?.click(), 300);
+    }
+  }
+})();
+
+
 // ───────── Start handler ─────────
 document.getElementById('start-btn').addEventListener('click', async () => {
   const topic = document.getElementById('topic-input').value.trim();
