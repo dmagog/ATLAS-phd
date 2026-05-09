@@ -77,6 +77,13 @@ class Settings(BaseSettings):
     # обязательно. 31536000 = 1 год (рекомендация OWASP).
     hsts_max_age: int = 31536000
 
+    # Лимиты на загрузку файлов через /admin/ingestion-jobs. UploadFile.read()
+    # читает весь файл в RAM — без лимита это лёгкий memory-DoS для админа.
+    # Дефолты подобраны под типичный кандидатский корпус (PDF до 50MB).
+    upload_max_file_size_mb: int = 50
+    upload_max_total_size_mb: int = 200
+    upload_max_files_per_job: int = 50
+
     @property
     def trusted_hosts_list(self) -> list[str]:
         items = [h.strip() for h in self.trusted_hosts.split(",") if h.strip()]
