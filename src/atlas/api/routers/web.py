@@ -8,6 +8,23 @@ from atlas.core.config import settings
 templates = Jinja2Templates(directory=str(Path(__file__).parent.parent.parent / "templates"))
 router = APIRouter(tags=["web"])
 
+# Cache-busting для статики: `?v=<mtime>` на ссылках atlas.css. Без этого
+# браузеры возвращающихся пользователей держат старый CSS после деплоя
+# (memory/disk cache игнорирует etag при «свежем» эвристическом кеше).
+# Колбэк, а не константа — чтобы в dev (--reload не следит за static/)
+# версия обновлялась без рестарта приложения.
+_STATIC_DIR = Path(__file__).parent.parent.parent / "static"
+
+
+def _asset_version(filename: str = "atlas.css") -> str:
+    try:
+        return str(int((_STATIC_DIR / filename).stat().st_mtime))
+    except OSError:
+        return "0"
+
+
+templates.env.globals["asset_v"] = _asset_version
+
 
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
