@@ -8,6 +8,10 @@
 
 ## [Unreleased]
 
+---
+
+## [0.12.1] — 2026-10-13
+
 ### Исправлено
 
 - `calibrate_gate.py`: отчёт тонул в строках `retrieval_done` (логи retrieval
