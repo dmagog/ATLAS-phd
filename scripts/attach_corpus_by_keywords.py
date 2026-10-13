@@ -159,10 +159,13 @@ def main(argv=None) -> int:
     plan = []
     for doc in docs:
         doc_id = doc["document_id"]
+        # Короткий документ (конспект на 1–2 чанка) не может набрать больше
+        # hits, чем у него чанков, — порог для него не выше chunk_count.
+        threshold = max(1, min(args.min_hits, doc["chunk_count"]))
         matches = []
         for t in topics:
             hits = count_chunk_hits(doc_id, t["key_concepts"])
-            if hits >= args.min_hits:
+            if hits >= threshold:
                 matches.append({
                     "topic_external_id": t["external_id"],
                     "topic_title": t["title"],

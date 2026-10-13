@@ -8,6 +8,16 @@
 
 ## [Unreleased]
 
+### Добавлено
+
+- **Направление «Сертификация IPMA» (тенант `ipma-pm`).** Программа по ICB 4.0
+  (`corpus/ipma-pm/program.md`, 30 топиков с нумерацией ICB4), bootstrap-скрипт
+  `scripts/seed_ipma.sh`: тенант, программа, `admin@ipma.demo` и `georgy@ipma.demo`,
+  загрузка ICB4 + 8 лекций + конспектов из git-ignored `Сертификация IPMA/`,
+  автопривязка к топикам. `@ipma.demo` добавлен в домены `/_/demo-login`.
+- `attach_corpus_by_keywords.py`: порог hits для документа не выше его
+  `chunk_count` — короткие конспекты (1–2 чанка) раньше не привязывались никогда.
+
 ### Исправлено
 
 - **Уязвимости в JWT-зависимостях.** `python-jose` 3.5.0 (CVE-2026-85394)

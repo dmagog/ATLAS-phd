@@ -153,14 +153,14 @@ async def demo_login_helper(email: str, next: str = "/"):
     redirects to ?next=<path>.
 
     Strict guard: ONLY emails on demo tenants are accepted (currently
-    `@optics.demo` and `@semicon.demo`). Any other email returns 404
+    `@optics.demo`, `@semicon.demo`, `@ipma.demo`). Any other email returns 404
     (not 403, to avoid hint of route existence).
 
     Disabled in production: settings.app_env == 'production' returns 404.
     """
     if getattr(settings, "app_env", "development") == "production":
         raise HTTPException(status_code=404)
-    DEMO_DOMAINS = ("@optics.demo", "@semicon.demo")
+    DEMO_DOMAINS = ("@optics.demo", "@semicon.demo", "@ipma.demo")
     if not any(email.endswith(d) for d in DEMO_DOMAINS):
         raise HTTPException(status_code=404)
     # Validate next is same-origin path (no open redirect).

@@ -23,3 +23,6 @@ eval/results/*
 corpus/*.pdf
 corpus/*.docx
 corpus/atlas_test.txt
+
+# IPMA: материалы курса и ICB4 (копирайт СОВНЕТ / ФУП) — не в git
+Сертификация IPMA/
