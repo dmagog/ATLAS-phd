@@ -1,8 +1,13 @@
-FROM python:3.11-slim
+FROM python:3.11.17-slim
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir fastapi uvicorn sentence-transformers
+# CPU-only torch: в Docker на Mac (и на типичном VPS) GPU нет, а дефолтный
+# torch с PyPI тянет CUDA-библиотеки → образ ~3.4 GB вместо ~1.9 GB.
+# Остальные версии зафиксированы в embeddings.requirements.lock.
+COPY docker/embeddings.requirements.lock .
+RUN pip install --no-cache-dir torch==2.14.1 --index-url https://download.pytorch.org/whl/cpu \
+    && pip install --no-cache-dir -r embeddings.requirements.lock
 
 COPY docker/embeddings_service.py .
 

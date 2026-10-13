@@ -19,7 +19,7 @@ jobs:
       - name: Install minimal test deps
         run: |
           pip install --upgrade pip
-          pip install pytest pytest-asyncio httpx pydantic pydantic-settings sqlalchemy
+          pip install -c requirements.lock pytest pytest-asyncio httpx pydantic pydantic-settings sqlalchemy
       - name: Python syntax check (src + tests)
         run: |
           python -m compileall -q src tests scripts || exit 1
@@ -34,10 +34,9 @@ jobs:
           PYTHONPATH=src python -m pytest --collect-only tests/ || exit 1
 
   security-audit-deps:
-    # pip-audit по объявленным зависимостям. Падает на known CVE с
-    # severity >= medium. Локально воспроизводится одной командой:
-    #   python -m pip_audit -r <(python -c "import tomllib;
-    #     [print(d) for d in tomllib.load(open('pyproject.toml','rb'))['project']['dependencies']]")
+    # pip-audit по зафиксированным версиям (requirements.lock и
+    # docker/embeddings.requirements.lock). Падает на known CVE.
+    # Локально: pip-audit -r requirements.lock --strict
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -46,18 +45,11 @@ jobs:
           python-version: '3.11'
       - name: Install pip-audit
         run: pip install pip-audit
-      - name: Extract deps from pyproject.toml
-        run: |
-          python - <<'PY' > /tmp/reqs.txt
-          import tomllib
-          d = tomllib.load(open('pyproject.toml', 'rb'))
-          for dep in d['project']['dependencies']:
-              print(dep)
-          for dep in d['project'].get('optional-dependencies', {}).get('dev', []):
-              print(dep)
-          PY
       - name: Run pip-audit
-        run: pip-audit -r /tmp/reqs.txt --strict
+        # Аудит точных версий из lock-файлов — именно они попадают в образы.
+        run: |
+          pip-audit -r requirements.lock --strict
+          pip-audit -r docker/embeddings.requirements.lock --strict
 
   integration-test-cross-tenant:
     # Full integration: spins up postgres+pgvector+embeddings+app via
@@ -72,7 +64,7 @@ jobs:
           python-version: '3.11'
       - name: Install test deps
         run: |
-          pip install pytest pytest-asyncio httpx
+          pip install -c requirements.lock pytest pytest-asyncio httpx
       - name: Compose up (with placeholder LLM_API_KEY)
         env:
           LLM_API_KEY: sk-or-CI-PLACEHOLDER

@@ -7,7 +7,8 @@
 #         Используется в .github/workflows/build-image.yml (target=production).
 
 # ─── Stage 1: общая база ──────────────────────────────────────────────────
-FROM python:3.11-slim AS base
+# Тег зафиксирован до патч-версии, чтобы сборка с нуля была воспроизводимой.
+FROM python:3.11.17-slim AS base
 
 WORKDIR /app
 
@@ -18,7 +19,7 @@ RUN apt-get update \
         libffi-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml .
+COPY pyproject.toml requirements.lock ./
 COPY src/ src/
 COPY alembic.ini .
 COPY alembic/ alembic/
@@ -27,7 +28,8 @@ COPY alembic/ alembic/
 FROM base AS dev
 
 # Editable install c [dev] extras для hot-reload и тестов.
-RUN pip install --no-cache-dir -e ".[dev]"
+# -c requirements.lock: точные версии всех зависимостей (см. шапку файла).
+RUN pip install --no-cache-dir -c requirements.lock -e ".[dev]"
 
 # Auto-migrate в CMD удобен для dev (новая миграция → вверх на старте).
 # Для prod — НЕ годится: упавшая миграция не должна блокировать рестарт.
@@ -37,7 +39,7 @@ CMD ["sh", "-c", "alembic upgrade head && uvicorn atlas.api.main:app --host 0.0.
 FROM base AS production
 
 # Non-editable install только runtime-зависимостей (без [dev]).
-RUN pip install --no-cache-dir .
+RUN pip install --no-cache-dir -c requirements.lock .
 
 # Non-root user. UID 10001 — вне диапазона system-users, не конфликтует с
 # host'ом при volume-mount'ах.

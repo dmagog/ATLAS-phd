@@ -6,6 +6,28 @@
 
 ---
 
+## [Unreleased]
+
+### Исправлено
+
+- **Сборка с нуля падала на старте app:** SQLAlchemy 2.1 больше не ставит
+  `greenlet` по умолчанию, `sqlalchemy.ext.asyncio` не импортировался.
+  Зависимость теперь `sqlalchemy[asyncio]`.
+
+### Изменено
+
+- **Версии зависимостей зафиксированы.** `requirements.lock` (app,
+  подключён как `pip install -c` в обеих стадиях Dockerfile) и
+  `docker/embeddings.requirements.lock`. Базовый образ — `python:3.11.17-slim`,
+  Postgres — `pgvector/pgvector:0.8.2-pg16`. Набор проверен чистой сборкой
+  без кеша, 34/34 тестов.
+- **Embeddings на CPU-only torch** (индекс download.pytorch.org/whl/cpu,
+  `torch==2.14.1`): образ 3.4 GB → 1.9 GB, GPU в Docker на Mac всё равно нет.
+- **CI:** тестовые зависимости ставятся с `-c requirements.lock`, pip-audit
+  проверяет lock-файлы (точные версии), а не диапазоны из `pyproject.toml`.
+
+---
+
 ## [0.8.2] — 2026-05-09 — Security hardening (audit)
 
 Полный security-аудит по 11 итерациям (recon → secrets → auth → tenant
