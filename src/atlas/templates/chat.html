@@ -10,8 +10,12 @@
 
   <!-- Chat column -->
   <div class="flex-col flex-1" style="min-width: 0; padding: var(--sp-5); padding-bottom: 0;">
-    <div class="flex items-center gap-3 mb-4">
-      <h1 class="t-xl t-bold">ATLAS</h1>
+    <div class="flex items-center gap-3 mb-3">
+      <button class="btn btn--secondary btn--sm hidden" id="topics-toggle" type="button"
+              aria-expanded="false" aria-controls="topics-panel">
+        <i class="bi bi-journal-bookmark" aria-hidden="true"></i>Темы программы
+        <i class="bi bi-chevron-down" id="topics-chevron" aria-hidden="true"></i>
+      </button>
       <span style="margin-left:auto" class="flex gap-2 items-center">
         <label class="t-xs t-muted">Режим:</label>
         <select class="select" id="profile-select" style="width:auto" aria-label="Режим ответа">
@@ -29,6 +33,9 @@
         </button>
       </span>
     </div>
+
+    <!-- Темы программы: раскрываются из шапки, на пустом чате открыты -->
+    <div id="topics-panel" class="card hidden mb-3" style="max-height: 45vh; overflow-y: auto; flex-shrink: 0;"></div>
 
     <!-- Messages area -->
     <div id="messages" class="flex-col gap-3 mb-4" style="flex:1; overflow-y:auto; padding-right: 4px;"></div>
@@ -504,32 +511,34 @@ const conversationHistory = JSON.parse(sessionStorage.getItem(_SS_HISTORY) || '[
 // ── Send message ──────────────────────────────────────────────────────────────
 let messageCount = 0;
 
-// ───────── Темы программы на пустом экране ─────────
-// Подсказки из GET /me/program: клик подставляет вопрос в поле ввода.
+// ───────── Темы программы (панель под шапкой) ─────────
+// Список из GET /me/program; клик по теме подставляет готовый вопрос
+// (его собирает сервер, _study_prompt). Панель открыта на пустом чате,
+// после вопроса сворачивается — кнопка «Темы программы» в шапке.
 let programTopics = null;
 
-async function renderTopicHints() {
-  const box = document.getElementById('messages');
-  if (box.children.length) return;
-  if (programTopics === null) {
-    try {
-      const res = await authFetch('/me/program');
-      programTopics = res.ok ? ((await res.json()).topics || []).filter(t => t.coverage_chunks > 0) : [];
-    } catch (_) { programTopics = []; }
-  }
-  if (!programTopics.length || box.children.length) return;
+function setTopicsOpen(open) {
+  const panel = document.getElementById('topics-panel');
+  if (!programTopics || !programTopics.length) return;
+  panel.classList.toggle('hidden', !open);
+  document.getElementById('topics-toggle').setAttribute('aria-expanded', String(open));
+  document.getElementById('topics-chevron').className = 'bi ' + (open ? 'bi-chevron-up' : 'bi-chevron-down');
+}
+
+async function initTopics() {
+  try {
+    const res = await authFetch('/me/program');
+    programTopics = res.ok ? ((await res.json()).topics || []).filter(t => t.coverage_chunks > 0) : [];
+  } catch (_) { programTopics = []; }
+  if (!programTopics.length) return;
 
   const sections = new Map();
   programTopics.forEach(t => {
     if (!sections.has(t.section)) sections.set(t.section, []);
     sections.get(t.section).push(t);
   });
-  const hints = document.createElement('div');
-  hints.id = 'topic-hints';
-  hints.className = 'card';
-  hints.style.cssText = 'max-width: 760px; margin: var(--sp-4) auto; width: 100%;';
-  hints.innerHTML = `<div class="t-md t-bold mb-1">Темы программы</div>
-    <div class="t-xs t-muted mb-4">Выберите тему — вопрос подставится в поле ввода. Можно спрашивать и своими словами.</div>`
+  const panel = document.getElementById('topics-panel');
+  panel.innerHTML = `<div class="t-xs t-muted mb-2">Выберите тему — вопрос подставится в поле ввода. Можно спрашивать и своими словами.</div>`
     + [...sections].map(([section, topics]) => `
       <div class="t-uppercase mb-2 mt-3">${escHtml(section)}</div>
       <div class="flex flex-wrap gap-2">${topics.map(t =>
@@ -537,15 +546,18 @@ async function renderTopicHints() {
            data-topic-prompt="${escHtml(t.prompt)}">
            ${escHtml(t.external_id)} ${escHtml(t.title)}</button>`).join('')}
       </div>`).join('');
-  hints.addEventListener('click', e => {
+  panel.addEventListener('click', e => {
     const b = e.target.closest('[data-topic-prompt]');
     if (!b) return;
     const input = document.getElementById('chat-input');
-    // Текст вопроса собирает сервер (GET /me/program, _study_prompt).
     input.value = b.dataset.topicPrompt;
+    setTopicsOpen(false);
     input.focus();
   });
-  box.appendChild(hints);
+  const toggle = document.getElementById('topics-toggle');
+  toggle.classList.remove('hidden');
+  toggle.addEventListener('click', () => setTopicsOpen(panel.classList.contains('hidden')));
+  setTopicsOpen(!document.getElementById('messages').children.length);
 }
 
 async function sendMessage() {
@@ -553,7 +565,7 @@ async function sendMessage() {
   const msg = input.value.trim();
   if (!msg) return;
   input.value = '';
-  document.getElementById('topic-hints')?.remove();
+  setTopicsOpen(false);
 
   const btn = document.getElementById('send-btn');
   btn.disabled = true;
@@ -622,7 +634,7 @@ document.getElementById('clear-btn').addEventListener('click', () => {
   document.getElementById('stat-msgs').textContent = '0';
   document.getElementById('stat-srcs').textContent = '0';
   document.getElementById('stat-refusals').textContent = '0';
-  renderTopicHints();
+  setTopicsOpen(true);
   document.getElementById('source-cards').innerHTML = `
     <div class="empty" style="padding: var(--sp-6) var(--sp-3);">
       <div class="empty__icon"><i class="bi bi-book" style="font-size: 32px;" aria-hidden="true"></i></div>
@@ -633,7 +645,7 @@ document.getElementById('clear-btn').addEventListener('click', () => {
 // onAuthReady is defined in _app.html bootstrap; nothing more to do here
 window.onAuthReady = function () {
   document.getElementById('chat-input').focus();
-  renderTopicHints();
+  initTopics();
   // Phase 6 screenshot helper: ?ask=<query> auto-fires sendMessage on load.
   // Optional ?open-source=<idx> opens the source-modal AFTER the answer
   // arrives (waits up to 60s polling for source-cards).

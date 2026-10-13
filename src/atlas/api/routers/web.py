@@ -6,6 +6,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
 
+from atlas import __version__
 from atlas.core.config import settings
 
 templates = Jinja2Templates(directory=str(Path(__file__).parent.parent.parent / "templates"))
@@ -27,6 +28,7 @@ def _asset_version(filename: str = "atlas.css") -> str:
 
 
 templates.env.globals["asset_v"] = _asset_version
+templates.env.globals["app_version"] = __version__
 
 
 # ── Dev live-reload ─────────────────────────────────────────────────────────

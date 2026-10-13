@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "atlas-phd"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Agentic RAG assistant for PhD exam preparation"
 requires-python = ">=3.11"
 dependencies = [
@@ -37,6 +37,9 @@ dev = [
     "httpx>=0.27.0",
     "ruff>=0.4.0",
 ]
+
+[tool.hatch.version]
+path = "src/atlas/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/atlas"]

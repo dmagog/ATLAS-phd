@@ -11,6 +11,10 @@
   <script defer src="/static/vendor/katex/katex.min.js"></script>
   <script defer src="/static/vendor/katex/auto-render.min.js"
     onload="renderMathInElement(document.body, {delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]})"></script>
+  <script>
+    // До рендера, чтобы свёрнутое меню не мигало развёрнутым.
+    try { if (localStorage.getItem('atlas_sidebar') === 'collapsed') document.documentElement.dataset.sidebar = 'collapsed'; } catch (_) {}
+  </script>
   {% block head_extra %}{% endblock %}
 </head>
 <body>
@@ -117,6 +121,7 @@ async function loadMe() {
   });
   // Populate all data-* placeholders
   document.querySelectorAll('[data-user-email]').forEach(el => el.textContent = me.email);
+  document.querySelectorAll('[data-user-title]').forEach(el => el.title = me.email);
   document.querySelectorAll('[data-user-initials]').forEach(el => el.textContent = initialsFromEmail(me.email));
   document.querySelectorAll('[data-user-role]').forEach(el => {
     el.textContent = me.role;
@@ -143,6 +148,13 @@ document.addEventListener('click', e => {
     if (lbl) lbl.textContent = root.dataset.theme === 'dark' ? 'Dark' : 'Light';
     const ic = btn.querySelector('i');
     if (ic) ic.className = root.dataset.theme === 'dark' ? 'bi bi-moon-stars-fill' : 'bi bi-sun-fill';
+    return;
+  }
+  if (e.target.closest('[data-sidebar-toggle]')) {
+    const root = document.documentElement;
+    const collapsed = root.dataset.sidebar !== 'collapsed';
+    if (collapsed) root.dataset.sidebar = 'collapsed'; else delete root.dataset.sidebar;
+    try { localStorage.setItem('atlas_sidebar', collapsed ? 'collapsed' : 'expanded'); } catch (_) {}
     return;
   }
   const logoutBtn = e.target.closest('[data-logout]');

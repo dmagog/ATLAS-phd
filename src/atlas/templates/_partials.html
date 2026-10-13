@@ -3,10 +3,15 @@
    Counts (history, students, etc.) are populated by per-page JS. #}
 
 {# ============================================================== #}
-{# Topbar — контекст кафедры (у super-admin — переключатель) + тема #}
+{# Topbar — кнопка меню, контекст кафедры (у super-admin —          #}
+{# переключатель), тема оформления                                 #}
 {# ============================================================== #}
 {% macro topbar() %}
 <header class="app__topbar">
+  <button class="btn btn--ghost btn--icon btn--sm" type="button" data-sidebar-toggle
+          title="Свернуть / развернуть меню" aria-label="Свернуть / развернуть меню">
+    <i class="bi bi-layout-sidebar" aria-hidden="true"></i>
+  </button>
   <div class="tenant-ctx">
     <span class="tenant-ctx__name" data-tenant-name>—</span>
     <span class="tenant-ctx__role" data-user-role>—</span>
@@ -24,21 +29,23 @@
 {# Sidebar — одно меню на все роли.                                 #}
 {# Пункты с data-roles скрыты, пока _app.html не узнает роль из /me #}
 {# и не откроет разрешённые. Права проверяет бэкенд; меню — только  #}
-{# навигация.                                                       #}
+{# навигация. Подписи в .sidebar__label: в свёрнутом меню           #}
+{# (html[data-sidebar=collapsed]) остаются иконки + title-подсказки. #}
 {# ============================================================== #}
-{% macro _link(key, active, href, icon, label, count=None) %}
-  <a class="sidebar__link {% if active == key %}sidebar__link--active{% endif %}" href="{{ href }}">
-    <i class="bi {{ icon }} sidebar__icon" aria-hidden="true"></i>{{ label }}
+{% macro _link(key, active, href, icon, label, count=None, target=None) %}
+  <a class="sidebar__link {% if active == key %}sidebar__link--active{% endif %}" href="{{ href }}"
+     title="{{ label }}"{% if target %} target="{{ target }}"{% endif %}>
+    <i class="bi {{ icon }} sidebar__icon" aria-hidden="true"></i><span class="sidebar__label">{{ label }}</span>
     {%- if count %}<span class="sidebar__count" {{ count }}></span>{% endif %}
   </a>
 {% endmacro %}
 
 {% macro sidebar(active='') %}
 <aside class="sidebar">
-  <div class="sidebar__brand">
+  <a class="sidebar__brand" href="/" title="На главную">
     <img src="/static/icons/atlas-shield.svg" class="sidebar__brand-mark" alt="">
-    <span class="sidebar__brand-name">ATLAS phd</span>
-  </div>
+    <span class="sidebar__brand-name sidebar__label">ATLAS phd</span>
+  </a>
 
   {{ _link('chat', active, '/', 'bi-chat-dots-fill', 'Чат') }}
   {{ _link('selfcheck', active, '/self-check', 'bi-card-checklist', 'Самопроверка') }}
@@ -58,19 +65,18 @@
     <div class="sidebar__group-label">Платформа</div>
     {{ _link('tenants', active, '/_/tenants', 'bi-building', 'Кафедры', 'data-count-tenants') }}
     {{ _link('eval', active, '/eval', 'bi-graph-up', 'Eval') }}
-    <a class="sidebar__link" href="/_/styleguide" target="_blank">
-      <i class="bi bi-palette sidebar__icon" aria-hidden="true"></i>Styleguide
-    </a>
+    {{ _link('styleguide', active, '/_/styleguide', 'bi-palette', 'Styleguide', target='_blank') }}
   </div>
 
   <div class="sidebar__footer">
-    <div class="sidebar__user">
+    <div class="sidebar__user" title="" data-user-title>
       <div class="sidebar__user-avatar" data-user-initials>—</div>
-      <span class="sidebar__user-email" data-user-email>—</span>
+      <span class="sidebar__user-email sidebar__label" data-user-email>—</span>
     </div>
-    <button class="sidebar__logout" data-logout type="button">
-      <i class="bi bi-box-arrow-right" aria-hidden="true"></i>Выйти
+    <button class="sidebar__logout" data-logout type="button" title="Выйти">
+      <i class="bi bi-box-arrow-right" aria-hidden="true"></i><span class="sidebar__label">Выйти</span>
     </button>
+    <div class="sidebar__version sidebar__label" title="Версия ATLAS">v{{ app_version }}</div>
   </div>
 </aside>
 {% endmacro %}

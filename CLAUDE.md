@@ -14,6 +14,16 @@ This file is auto-loaded by Claude Code at session start. It defines repository-
 
 4. **Never push `--force` to `main`.** Prefer new commits over rewrites.
 
+## Версионирование
+
+Единственный источник версии — `src/atlas/__init__.py` (`__version__`); её читают pyproject (hatch), FastAPI, `/health` и подпись в футере меню. SemVer:
+
+- **patch** (`0.9.0 → 0.9.1`) — мелкие правки: исправления, тексты, стили, рефакторинг без изменения поведения.
+- **minor** (`0.9.1 → 0.10.0`) — заметные изменения: новая функция или экран, новое направление, смена поведения, миграция БД.
+- **major** — только по явному решению пользователя.
+
+Порядок: изменения описываются в `CHANGELOG.md` → `## [Unreleased]` в том же коммите, что и код. Когда пачка изменений закончена и проверена — `python3 scripts/bump_version.py patch|minor` (переносит Unreleased в `## [X.Y.Z] — дата`), коммит `chore(release): vX.Y.Z`, тег `vX.Y.Z`, `git push origin main vX.Y.Z`. Каждый ответ пользователю с готовой пачкой изменений заканчивается релизом — не копить Unreleased между задачами.
+
 ## Defaults
 
 - **Language:** Russian for prose, code identifiers in English.

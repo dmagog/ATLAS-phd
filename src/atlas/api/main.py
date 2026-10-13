@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+from atlas import __version__
 from atlas.core.logging import configure_logging
 from atlas.db.session import AsyncSessionLocal
 from atlas.api.startup import seed_admin, reset_stale_jobs
@@ -23,7 +24,7 @@ async def lifespan(app: FastAPI):
     await llm_client.close()
 
 
-app = FastAPI(title="ATLAS phd", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="ATLAS phd", version=__version__, lifespan=lifespan)
 
 # Security middleware: TrustedHost, CORS (опционально), security headers.
 # Регистрируется до mount'а static и include_router — Starlette wrap'ит
@@ -47,4 +48,4 @@ app.include_router(web.router)
 
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    return {"status": "ok", "version": __version__}
