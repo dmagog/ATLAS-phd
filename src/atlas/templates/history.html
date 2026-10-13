@@ -132,19 +132,21 @@ function renderFilters() {
 
   // Темы — выбранной кафедры; без выбора — все, сгруппированные по кафедрам.
   const topics = facets.topics.filter(t => !f.tenant || t.tenant_slug === f.tenant);
+  // «Вся программа» и «Свои темы» — без номера билета (ключ без «:»).
+  const SPECIAL = { program: 'Вся программа', custom: 'Свои темы' };
   const opt = t => {
-    const value = t.key === 'custom' ? 'custom' : t.key;
     const label = t.external_id ? `${t.external_id} ${t.title}` : t.title;
-    return `<option value="${escHtml(value)}" ${value === f.topic ? 'selected' : ''}>${escHtml(label)} (${t.count})</option>`;
+    return `<option value="${escHtml(t.key)}" ${t.key === f.topic ? 'selected' : ''}>${escHtml(label)} (${t.count})</option>`;
   };
   let html = '<option value="">Все темы</option>';
   if (multiTenant && !f.tenant) {
+    const special = key => topics.filter(t => t.key === key).reduce((n, t) => n + t.count, 0);
+    if (special('program')) html += opt({ key: 'program', title: SPECIAL.program, count: special('program') });
     facets.tenants.forEach(tn => {
-      const group = topics.filter(t => t.tenant_slug === tn.slug && t.key !== 'custom');
+      const group = topics.filter(t => t.tenant_slug === tn.slug && !(t.key in SPECIAL));
       if (group.length) html += `<optgroup label="${escHtml(tn.name)}">${group.map(opt).join('')}</optgroup>`;
     });
-    const custom = topics.filter(t => t.key === 'custom').reduce((n, t) => n + t.count, 0);
-    if (custom) html += opt({ key: 'custom', title: 'Свои темы', count: custom });
+    if (special('custom')) html += opt({ key: 'custom', title: SPECIAL.custom, count: special('custom') });
   } else {
     html += topics.map(opt).join('');
   }

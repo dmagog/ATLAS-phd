@@ -16,6 +16,11 @@
         <i class="bi bi-journal-bookmark" aria-hidden="true"></i>Темы программы
         <i class="bi bi-chevron-down" id="topics-chevron" aria-hidden="true"></i>
       </button>
+      <button class="btn btn--secondary btn--sm" id="chats-toggle" type="button"
+              aria-expanded="false" aria-controls="chats-panel">
+        <i class="bi bi-chat-left-text" aria-hidden="true"></i>Чаты<span class="t-faint" id="chats-count"></span>
+        <i class="bi bi-chevron-down" id="chats-chevron" aria-hidden="true"></i>
+      </button>
       <span style="margin-left:auto" class="flex gap-2 items-center">
         <label class="t-xs t-muted">Режим:</label>
         <select class="select" id="profile-select" style="width:auto" aria-label="Режим ответа">
@@ -28,11 +33,14 @@
           <option value="ru">RU</option>
           <option value="en">EN</option>
         </select>
-        <button class="btn btn--ghost btn--icon" id="clear-btn" title="Очистить чат" aria-label="Очистить чат">
-          <i class="bi bi-trash" aria-hidden="true"></i>
+        <button class="btn btn--ghost btn--icon" id="new-chat-btn" title="Новый чат" aria-label="Новый чат">
+          <i class="bi bi-plus-lg" aria-hidden="true"></i>
         </button>
       </span>
     </div>
+
+    <!-- Список чатов: раскрывается из шапки -->
+    <div id="chats-panel" class="card hidden mb-3" style="max-height: 45vh; overflow-y: auto; flex-shrink: 0; padding: var(--sp-2);"></div>
 
     <!-- Темы программы: раскрываются из шапки, на пустом чате открыты -->
     <div id="topics-panel" class="card hidden mb-3" style="max-height: 45vh; overflow-y: auto; flex-shrink: 0;"></div>
@@ -129,11 +137,13 @@ function mdToHtml(text) {
 
 // Replace `[Doc: <title>, p.<page>]` strings (LLM emits them inline) with
 // numbered citation pills mapped to source-panel indices. Title may contain
-// underscores, dashes, dots — anything except a comma.
+// underscores, dashes, dots, commas.
 // Also handles HTML-escaped variants — escHtml runs first, so we operate on
 // the post-escape string.
 function citationsToPills(html) {
-  const re = /\[Doc:\s*([^,\]]+?),\s*p\.(\d+)\]/g;
+  // Название может содержать запятые («Лекция 3. Требования и цели, Содержание, Сроки»):
+  // берём всё до последнего «, p.N]», а не до первой запятой.
+  const re = /\[Doc:\s*([^\]]+?),\s*p\.(\d+)\]/g;
   return html.replace(re, (match, title, page) => {
     const key = title.trim() + '|' + page;
     const src = seenSources.get(key);
@@ -503,17 +513,169 @@ document.addEventListener('click', async e => {
   } catch (_) {}
 });
 
-// ── Session memory ────────────────────────────────────────────────────────────
-const _SS_HISTORY = 'atlas_conv_history_v2';
-const MAX_HISTORY = 10;
-const conversationHistory = JSON.parse(sessionStorage.getItem(_SS_HISTORY) || '[]');
+// ── История чатов ─────────────────────────────────────────────────────────────
+// Переписка хранится на сервере (/chat/sessions); открытый чат — в ?chat=<id>,
+// поэтому перезагрузка страницы (и dev live-reload) его не теряет. Контекст
+// для модели сервер берёт из сохранённого чата.
+try { sessionStorage.removeItem('atlas_conv_history_v2'); } catch (_) {}  // прежняя память вкладки
+let currentSessionId = new URLSearchParams(location.search).get('chat');
+let chatSessions = [];
+
+function setChatUrl(id) {
+  const p = new URLSearchParams(location.search);
+  id ? p.set('chat', id) : p.delete('chat');
+  const qs = p.toString();
+  history.replaceState(null, '', location.pathname + (qs ? '?' + qs : ''));
+}
+
+function fmtChatDate(iso) {
+  const d = new Date(iso + (iso.endsWith('Z') ? '' : 'Z'));
+  const today = new Date();
+  return d.toDateString() === today.toDateString()
+    ? d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+    : d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+}
+
+function setChatsOpen(open) {
+  document.getElementById('chats-panel').classList.toggle('hidden', !open);
+  document.getElementById('chats-toggle').setAttribute('aria-expanded', String(open));
+  document.getElementById('chats-chevron').className = 'bi ' + (open ? 'bi-chevron-up' : 'bi-chevron-down');
+  if (open) setTopicsOpen(false);
+}
+
+function renderChatsPanel() {
+  document.getElementById('chats-count').textContent = chatSessions.length ? ` · ${chatSessions.length}` : '';
+  const panel = document.getElementById('chats-panel');
+  if (!chatSessions.length) {
+    panel.innerHTML = '<div class="t-sm t-muted" style="padding: var(--sp-2);">Сохранённых чатов пока нет.</div>';
+    return;
+  }
+  panel.innerHTML = chatSessions.map(c => `
+    <div class="flex items-center gap-2" style="padding: 2px;">
+      <button type="button" class="btn btn--ghost btn--sm flex-1" data-open-chat="${c.session_id}"
+              style="justify-content: flex-start; text-align: left; min-width: 0; ${c.session_id === currentSessionId ? 'background: var(--c-primary-bg);' : ''}">
+        <span class="flex-1" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escHtml(c.title)}</span>
+        <span class="t-xs t-faint" style="flex-shrink: 0;">${Math.ceil(c.message_count / 2)} · ${fmtChatDate(c.updated_at)}</span>
+      </button>
+      <button type="button" class="btn btn--ghost btn--icon btn--sm" data-delete-chat="${c.session_id}"
+              title="Удалить чат" aria-label="Удалить чат"><i class="bi bi-trash" aria-hidden="true"></i></button>
+    </div>`).join('');
+}
+
+function renderResumeHint() {
+  document.getElementById('resume-hint')?.remove();
+  const last = chatSessions[0];
+  if (currentSessionId || !last || document.querySelector('#messages .bubble')) return;
+  const hint = document.createElement('div');
+  hint.id = 'resume-hint';
+  hint.className = 'flex items-center gap-2 t-sm mb-3';
+  hint.innerHTML = `<i class="bi bi-arrow-counterclockwise t-faint" aria-hidden="true"></i>
+    <span class="t-muted">Последний чат:</span>
+    <a href="#" data-open-chat="${last.session_id}" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escHtml(last.title)}</a>
+    <span class="t-xs t-faint" style="flex-shrink: 0;">${fmtChatDate(last.updated_at)}</span>`;
+  document.getElementById('topics-panel').before(hint);
+}
+
+async function loadChats() {
+  try {
+    const res = await authFetch('/chat/sessions');
+    chatSessions = res.ok ? await res.json() : [];
+  } catch (_) { chatSessions = []; }
+  renderChatsPanel();
+  renderResumeHint();
+}
+
+function resetChatView() {
+  document.getElementById('messages').innerHTML = '';
+  seenSources.clear();
+  nextSourceIdx = 1;
+  messageCount = 0;
+  document.getElementById('stat-msgs').textContent = '0';
+  document.getElementById('stat-srcs').textContent = '0';
+  document.getElementById('stat-refusals').textContent = '0';
+  document.getElementById('source-cards').innerHTML = `
+    <div class="empty" style="padding: var(--sp-6) var(--sp-3);">
+      <div class="empty__icon"><i class="bi bi-book" style="font-size: 32px;" aria-hidden="true"></i></div>
+      <div class="t-xs t-muted">Источники будут показаны здесь после ответа.</div>
+    </div>`;
+}
+
+function renderSavedMessage(m, prevUser) {
+  if (m.role === 'user') {
+    appendBubble('user', 'Вы', '<p>' + mdToHtml(m.content) + '</p>');
+    messageCount++;
+  } else if (m.route === 'qa') {
+    renderQA({
+      ...m,
+      answer_markdown: m.status === 'answered' ? m.content : null,
+      refusal_message: m.status === 'answered' ? null : m.content,
+    }, prevUser);
+  } else if (m.route === 'self_check') {
+    appendBubble('atlas', 'ATLAS', `<div class="t-md t-bold mb-1">Самопроверка · <span class="t-muted">${escHtml(m.topic || '')}</span></div>
+      <div class="t-sm t-muted">${(m.questions || []).length} вопросов. Результат — в
+        <a href="/self-check/history">истории самопроверок</a>.</div>`);
+  } else {
+    appendBubble('atlas', 'ATLAS', mdToHtml(m.content || ''));
+  }
+}
+
+async function openChat(id) {
+  const res = await authFetch(`/chat/sessions/${encodeURIComponent(id)}`);
+  if (!res.ok) {
+    // чат удалён или из другой кафедры — начинаем новый
+    currentSessionId = null; setChatUrl(null); loadChats();
+    return;
+  }
+  const chat = await res.json();
+  resetChatView();
+  currentSessionId = chat.session_id;
+  setChatUrl(currentSessionId);
+  document.getElementById('profile-select').value = chat.response_profile || 'detailed';
+  let prevUser = '';
+  chat.messages.forEach(m => { renderSavedMessage(m, prevUser); if (m.role === 'user') prevUser = m.content; });
+  document.getElementById('stat-msgs').textContent = messageCount;
+  setChatsOpen(false);
+  setTopicsOpen(false);
+  document.getElementById('resume-hint')?.remove();
+  renderChatsPanel();
+  scrollToBottom();
+}
+
+function startNewChat() {
+  resetChatView();
+  currentSessionId = null;
+  setChatUrl(null);
+  setChatsOpen(false);
+  setTopicsOpen(true);
+  renderChatsPanel();
+  renderResumeHint();
+  document.getElementById('chat-input').focus();
+}
+
+document.addEventListener('click', async e => {
+  const open = e.target.closest('[data-open-chat]');
+  if (open) { e.preventDefault(); openChat(open.dataset.openChat); return; }
+  const del = e.target.closest('[data-delete-chat]');
+  if (del) {
+    if (!confirm('Удалить этот чат? Восстановить его будет нельзя.')) return;
+    const id = del.dataset.deleteChat;
+    const res = await authFetch(`/chat/sessions/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    if (res.ok || res.status === 204) {
+      if (id === currentSessionId) startNewChat();
+      loadChats();
+    }
+  }
+});
+document.getElementById('chats-toggle').addEventListener('click', () =>
+  setChatsOpen(document.getElementById('chats-panel').classList.contains('hidden')));
+document.getElementById('new-chat-btn').addEventListener('click', startNewChat);
 
 // ── Send message ──────────────────────────────────────────────────────────────
 let messageCount = 0;
 
 // ───────── Темы программы (панель под шапкой) ─────────
 // Список из GET /me/program; клик по теме подставляет готовый вопрос
-// (его собирает сервер, _study_prompt). Панель открыта на пустом чате,
+// (его собирает сервер, atlas.programs.study). Панель открыта на пустом чате,
 // после вопроса сворачивается — кнопка «Темы программы» в шапке.
 let programTopics = null;
 
@@ -566,6 +728,8 @@ async function sendMessage() {
   if (!msg) return;
   input.value = '';
   setTopicsOpen(false);
+  setChatsOpen(false);
+  document.getElementById('resume-hint')?.remove();
 
   const btn = document.getElementById('send-btn');
   btn.disabled = true;
@@ -583,7 +747,7 @@ async function sendMessage() {
         message_text: msg,
         response_profile: document.getElementById('profile-select').value,
         language: document.getElementById('lang-select').value,
-        conversation_history: conversationHistory.slice(-MAX_HISTORY),
+        session_id: currentSessionId,
       }),
     });
     removeTyping();
@@ -593,18 +757,17 @@ async function sendMessage() {
       return;
     }
     const data = await res.json();
+    if (data.session_id && data.session_id !== currentSessionId) {
+      currentSessionId = data.session_id;
+      setChatUrl(currentSessionId);
+    }
+    loadChats();
 
     if (data.route === 'clarify') {
       appendBubble('atlas', 'ATLAS', mdToHtml(data.clarify_message || 'Уточните запрос.'));
     } else if (data.route === 'self_check') {
       renderQuiz(data);
     } else {
-      // qa
-      if (data.status === 'answered' && data.answer_markdown) {
-        conversationHistory.push({ role: 'user', content: msg });
-        conversationHistory.push({ role: 'assistant', content: data.answer_markdown });
-        sessionStorage.setItem(_SS_HISTORY, JSON.stringify(conversationHistory.slice(-MAX_HISTORY)));
-      }
       renderQA(data, msg);
     }
   } catch (err) {
@@ -623,29 +786,13 @@ document.getElementById('chat-input').addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
 });
 
-document.getElementById('clear-btn').addEventListener('click', () => {
-  if (!confirm('Очистить чат? История сессии будет удалена.')) return;
-  sessionStorage.removeItem(_SS_HISTORY);
-  conversationHistory.length = 0;
-  document.getElementById('messages').innerHTML = '';
-  seenSources.clear();
-  nextSourceIdx = 1;
-  messageCount = 0;
-  document.getElementById('stat-msgs').textContent = '0';
-  document.getElementById('stat-srcs').textContent = '0';
-  document.getElementById('stat-refusals').textContent = '0';
-  setTopicsOpen(true);
-  document.getElementById('source-cards').innerHTML = `
-    <div class="empty" style="padding: var(--sp-6) var(--sp-3);">
-      <div class="empty__icon"><i class="bi bi-book" style="font-size: 32px;" aria-hidden="true"></i></div>
-      <div class="t-xs t-muted">Источники будут показаны здесь после ответа.</div>
-    </div>`;
-});
 
 // onAuthReady is defined in _app.html bootstrap; nothing more to do here
-window.onAuthReady = function () {
+window.onAuthReady = async function () {
   document.getElementById('chat-input').focus();
+  if (currentSessionId) await openChat(currentSessionId);
   initTopics();
+  loadChats();
   // Phase 6 screenshot helper: ?ask=<query> auto-fires sendMessage on load.
   // Optional ?open-source=<idx> opens the source-modal AFTER the answer
   // arrives (waits up to 60s polling for source-cards).

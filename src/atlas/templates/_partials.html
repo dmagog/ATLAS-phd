@@ -96,7 +96,8 @@
   let current = null;
 
   function hasUnsavedWork() {
-    if (document.querySelector('.bubble')) return true;
+    // Чат с ?chat=<id> сохранён на сервере и восстановится после перезагрузки.
+    if (document.querySelector('.bubble') && !new URLSearchParams(location.search).get('chat')) return true;
     const qc = document.getElementById('questions-card');
     if (qc && !qc.classList.contains('hidden')) return true;
     return [...document.querySelectorAll('textarea, input[type="text"], input:not([type])')]

@@ -1,4 +1,5 @@
 """Answer node: generates a grounded answer from retrieved chunks."""
+import re
 from dataclasses import dataclass, field
 from atlas.llm.client import llm_client
 from atlas.qa.prompts import build_answer_prompt
@@ -20,6 +21,17 @@ class AnswerDraft:
     answer_markdown: str
     citations: list[Citation]
     chunks_used: int
+
+
+# GigaChat иногда оформляет цитату как формулу: `$[Doc: \text{Лекция 3}, p.41]$`.
+# Приводим к `[Doc: Лекция 3, p.41]` — этот формат ждут verifier и UI (pills).
+_LATEX_CITE_RE = re.compile(
+    r"(?:\$+\s*)?\[Doc:\s*(?:\\text\{([^}]*)\}|([^\]$]*?))\s*,\s*p\.\s*(\d+)\s*\](?:\s*\$+)?"
+)
+
+
+def normalize_citations(text: str) -> str:
+    return _LATEX_CITE_RE.sub(lambda m: f"[Doc: {(m.group(1) or m.group(2)).strip()}, p.{m.group(3)}]", text)
 
 
 async def generate_answer(
@@ -49,6 +61,7 @@ async def generate_answer(
         max_tokens=2048,
         request_id=request_id,
     )
+    answer_text = normalize_citations(answer_text)
 
     citations = [
         Citation(

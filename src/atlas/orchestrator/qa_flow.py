@@ -83,6 +83,16 @@ class QAResponse:
     refusal_message: str | None = None
 
 
+_FOLLOWUP_MAX_WORDS = 8
+
+
+def _retrieval_query(question: str, history: list[dict] | None) -> str:
+    if not history or len(question.split()) > _FOLLOWUP_MAX_WORDS:
+        return question
+    prev = next((m["content"] for m in reversed(history) if m.get("role") == "user"), None)
+    return f"{prev} {question}" if prev else question
+
+
 async def run_qa_flow(
     question: str,
     db: AsyncSession,
@@ -97,14 +107,19 @@ async def run_qa_flow(
 
     try:
         # ── Embed ────────────────────────────────────────────────────────────
-        query_embedding = await get_embedding(question, request_id=request_id)
+        # Короткое уточнение в чате («а как его сократить?») само по себе почти
+        # не находит материалов (замер: top1 0.46 против 0.60 у исходного
+        # вопроса) — для поиска добавляем предыдущий вопрос пользователя.
+        # Ответ модель строит по-прежнему на исходном вопросе + истории.
+        search_query = _retrieval_query(question, conversation_history)
+        query_embedding = await get_embedding(search_query, request_id=request_id)
 
         # ── Retrieve (first pass) ─────────────────────────────────────────────
         retrieval: RetrievalResult = await retrieve(
             query_embedding=query_embedding,
             db=db,
             tenant_id=tenant_id,
-            query_text=question,
+            query_text=search_query,
             request_id=request_id,
         )
         logger.info("qa_flow_state", state=RequestState.QA_RETRIEVAL_DONE, request_id=request_id)
@@ -142,7 +157,7 @@ async def run_qa_flow(
                 db=db,
                 tenant_id=tenant_id,
                 top_k=settings.retriever_top_k * _REGEN_TOP_K_MULTIPLIER,
-                query_text=question,
+                query_text=search_query,
                 request_id=request_id,
             )
             if not regen_retrieval.enough_evidence or not regen_retrieval.candidates:

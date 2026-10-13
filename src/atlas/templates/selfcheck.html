@@ -9,10 +9,11 @@
 
 <!-- ───────── Start state ───────── -->
 <div id="start-card" class="card">
-  <h1 class="t-xl t-bold mb-2">Самопроверка по теме</h1>
+  <h1 class="t-xl t-bold mb-2">Самопроверка</h1>
   <p class="t-sm t-muted mb-5">
-    Выберите тему программы — ATLAS сгенерирует вопросы (MC + open-ended) и оценит ответы по рубрике
-    <span class="badge badge--info"><i class="bi bi-shield-check" aria-hidden="true"></i>κ = 1.000 vs expert</span>.
+    Выберите тему программы или прогон по всей программе — ATLAS сгенерирует вопросы (MC + open-ended)
+    и оценит ответы по рубрике
+    <span class="badge badge--info" title="Согласие с экспертной разметкой измерено на коротком тесте"><i class="bi bi-shield-check" aria-hidden="true"></i>κ = 1.000 vs expert</span>.
   </p>
 
   <div class="flex gap-2 items-end" style="flex-wrap: wrap;">
@@ -23,6 +24,14 @@
     <div class="field" id="topic-input-field" style="flex: 1; min-width: 280px; margin-bottom: 0;">
       <label class="label" for="topic-input">Своя тема</label>
       <input class="input" id="topic-input" placeholder="Например: «Метод наименьших квадратов»">
+    </div>
+    <div class="field" style="margin-bottom: 0;">
+      <label class="label" for="length-select">Длина</label>
+      <select class="select" id="length-select" style="width: auto;">
+        <option value="short">Короткий · 5 вопросов</option>
+        <option value="medium">Средний · 10 вопросов</option>
+        <option value="long">Длинный · 20 вопросов</option>
+      </select>
     </div>
     <div class="field" style="margin-bottom: 0;">
       <label class="label" for="lang-select">Язык</label>
@@ -207,6 +216,7 @@ function renderMath(el) { if (typeof renderMathInElement === 'function') renderM
 // Список берётся из GET /me/program. «Своя тема…» оставляет свободный ввод;
 // если программы нет — только он.
 const CUSTOM_TOPIC = '__custom__';
+const FULL_PROGRAM = '__program__';
 
 function topicQuery(t) {
   // Короткие названия («Сроки», «Содержание») слабо ищутся сами по себе —
@@ -225,6 +235,10 @@ async function loadProgramTopics() {
   if (!topics.length) return;
 
   const sel = document.getElementById('topic-select');
+  const full = document.createElement('option');
+  full.value = FULL_PROGRAM;
+  full.textContent = `Вся программа — вопросы по всем ${topics.length} темам`;
+  sel.appendChild(full);
   const groups = new Map();
   topics.forEach(t => {
     if (!groups.has(t.section)) {
@@ -253,20 +267,22 @@ async function loadProgramTopics() {
   syncCustom();
 }
 
-// { topic, externalId }: externalId — номер билета, чтобы попытка привязалась
-// к теме программы (фильтр истории, аналитика научрука); у «своей темы» null.
+// { topic, externalId, fullProgram }: externalId — номер билета, чтобы попытка
+// привязалась к теме программы (фильтр истории, аналитика научрука).
 function selectedTopic() {
   const sel = document.getElementById('topic-select');
   const useSelect = !document.getElementById('topic-select-field').classList.contains('hidden')
     && sel.value !== CUSTOM_TOPIC;
-  if (useSelect) return { topic: sel.value, externalId: sel.selectedOptions[0].dataset.externalId || null };
-  return { topic: document.getElementById('topic-input').value.trim(), externalId: null };
+  if (useSelect && sel.value === FULL_PROGRAM) return { topic: '', externalId: null, fullProgram: true };
+  if (useSelect) return { topic: sel.value, externalId: sel.selectedOptions[0].dataset.externalId || null, fullProgram: false };
+  return { topic: document.getElementById('topic-input').value.trim(), externalId: null, fullProgram: false };
 }
 
 // ───────── Start handler ─────────
 document.getElementById('start-btn').addEventListener('click', async () => {
-  const { topic, externalId } = selectedTopic();
-  if (!topic) return;
+  const { topic, externalId, fullProgram } = selectedTopic();
+  if (!topic && !fullProgram) return;
+  const length = document.getElementById('length-select').value;
   hide('start-error');
   document.getElementById('start-btn').disabled = true;
   show('start-status');
@@ -275,7 +291,10 @@ document.getElementById('start-btn').addEventListener('click', async () => {
   try {
     const res = await authFetch('/self-check/start', {
       method: 'POST',
-      body: JSON.stringify({ topic, topic_external_id: externalId, language: document.getElementById('lang-select').value }),
+      body: JSON.stringify({
+        topic, topic_external_id: externalId, full_program: fullProgram, length,
+        language: document.getElementById('lang-select').value,
+      }),
     });
     stopStepRotation();
     if (!res.ok) {
@@ -291,7 +310,7 @@ document.getElementById('start-btn').addEventListener('click', async () => {
     const data = await res.json();
     currentAttemptId = data.attempt_id;
     currentQuestions = data.questions;
-    renderQuestions(data.questions, topic);
+    renderQuestions(data.questions, data.topic || topic);
     hide('start-card');
     show('questions-card');
   } catch (err) {
@@ -317,7 +336,8 @@ function renderQuestions(questions, topic) {
     const card = document.createElement('div');
     card.className = 'card card--flat';
     card.style.background = 'var(--c-surface-2)';
-    let inner = `<div class="t-md t-bold mb-2">${i + 1}. ${escHtml(q.prompt)}</div>`;
+    let inner = (q.topic ? `<div class="t-xs t-faint mb-1">${escHtml(q.topic)}</div>` : '')
+      + `<div class="t-md t-bold mb-2">${i + 1}. ${escHtml(q.prompt)}</div>`;
     if (q.type === 'multiple_choice') {
       const maxLen = Math.max(...q.options.map(o => o.length));
       const twoCol = maxLen <= 48;
@@ -464,7 +484,8 @@ function renderResults(data, topic) {
     div.className = 'card';
     div.style.borderLeft = `4px solid ${statusColor}`;
 
-    let bodyHtml = `<div class="t-md t-bold mb-3">${i + 1}. ${escHtml(r.prompt)}</div>`;
+    let bodyHtml = (r.topic ? `<div class="t-xs t-faint mb-1">${escHtml(r.topic)}</div>` : '')
+      + `<div class="t-md t-bold mb-3">${i + 1}. ${escHtml(r.prompt)}</div>`;
 
     if (isMC) {
       bodyHtml += (r.options || []).map(opt => {

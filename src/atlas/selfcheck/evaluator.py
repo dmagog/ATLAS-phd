@@ -123,6 +123,23 @@ def _build_eval_prompt(
     ]
 
 
+def _grade_mc_by_key(r: dict, questions: list[Question], answers: list[dict]) -> QuestionResult:
+    """MC с известным ключом оцениваем кодом: 1.0 при совпадении буквы, иначе 0.0.
+    LLM иногда ошибается на очевидном сравнении; открытые вопросы — как оценил LLM."""
+    from atlas.selfcheck.generator import normalize_option_letter
+
+    q = next((q for q in questions if q.question_id == r["question_id"]), None)
+    if q is not None and q.type == "multiple_choice" and q.correct_option:
+        given = next((a["answer_text"] for a in answers if a["question_id"] == q.question_id), "")
+        ok = normalize_option_letter(given) == normalize_option_letter(q.correct_option)
+        return QuestionResult(question_id=q.question_id, type="multiple_choice",
+                              score=1.0 if ok else 0.0, status="correct" if ok else "incorrect")
+    return QuestionResult(
+        question_id=r["question_id"], type=r["type"],
+        score=float(r["score"]), status=r["status"],
+    )
+
+
 def _validate_payload(data: dict) -> bool:
     required = {"overall_score", "criterion_scores", "question_results",
                  "error_tags", "confidence", "evaluator_summary", "policy_flags"}
@@ -172,15 +189,7 @@ async def evaluate_answers(
             logic=float(cs["logic"]),
             terminology=float(cs["terminology"]),
         ),
-        question_results=[
-            QuestionResult(
-                question_id=r["question_id"],
-                type=r["type"],
-                score=float(r["score"]),
-                status=r["status"],
-            )
-            for r in data["question_results"]
-        ],
+        question_results=[_grade_mc_by_key(r, questions, answers) for r in data["question_results"]],
         error_tags=data.get("error_tags", []),
         confidence=float(data.get("confidence", 1.0)),
         evaluator_summary=data.get("evaluator_summary", ""),

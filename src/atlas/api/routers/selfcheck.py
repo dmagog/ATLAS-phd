@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
 from sqlalchemy import select, desc
@@ -8,7 +9,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from atlas.core.deps import get_current_user, require_llm_quota
 from atlas.db.models import Program, ProgramTopic, SelfCheckAttempt, Tenant, User
 from atlas.db.session import get_db
-from atlas.orchestrator.selfcheck_flow import start_selfcheck, submit_selfcheck
+from atlas.orchestrator.selfcheck_flow import (
+    FULL_PROGRAM_TOPIC_PREFIX,
+    start_selfcheck,
+    submit_selfcheck,
+)
 
 router = APIRouter(prefix="/self-check", tags=["self-check"])
 
@@ -16,8 +21,12 @@ router = APIRouter(prefix="/self-check", tags=["self-check"])
 # ── Start ─────────────────────────────────────────────────────────────────────
 
 class SelfCheckStartRequest(BaseModel):
-    topic: str
+    topic: str = ""
     language: str = "ru"
+    # short = 5 вопросов (3 MC + 2 open, валидированный набор), medium = 10, long = 20.
+    length: Literal["short", "medium", "long"] = "short"
+    # Вопросы по всем темам активной программы вместо одной (topic не нужен).
+    full_program: bool = False
     # Номер темы активной программы (external_id, например «4.5.11»), если
     # попытка начата по билету. Без него тема ищется по тексту (title или
     # «title (section)»); «своя тема» остаётся без topic_id.
@@ -50,6 +59,7 @@ class QuestionOut(BaseModel):
     type: str
     prompt: str
     options: list[str] = []
+    topic: str | None = None  # тема программы — для набора «Вся программа»
 
 
 class SelfCheckStartResponse(BaseModel):
@@ -72,7 +82,11 @@ async def selfcheck_start(
         from atlas.db.tenant_helpers import assert_tenant_writable, resolve_tenant_id_for_user
         tenant_id = await resolve_tenant_id_for_user(current_user, db, request)
         await assert_tenant_writable(tenant_id, db, current_user)
-        topic_id = await _resolve_topic_id(db, tenant_id, body.topic_external_id, body.topic)
+        if not body.full_program and not body.topic.strip():
+            raise HTTPException(status_code=422, detail="Укажите тему или выберите «Вся программа».")
+        topic_id = None if body.full_program else await _resolve_topic_id(
+            db, tenant_id, body.topic_external_id, body.topic
+        )
         attempt_id, question_set = await start_selfcheck(
             topic=body.topic,
             user_id=str(current_user.id),
@@ -81,9 +95,18 @@ async def selfcheck_start(
             language=body.language,
             request_id=request_id,
             topic_id=topic_id,
+            length=body.length,
+            full_program=body.full_program,
         )
+    except HTTPException:
+        raise
     except Exception as exc:
         msg = str(exc)
+        if msg in ("NO_ACTIVE_PROGRAM", "NO_COVERED_TOPICS"):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="У кафедры нет программы с материалами — прогон по всей программе недоступен.",
+            )
         if "rate" in msg.lower() or "429" in msg or "503" in msg:
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -96,13 +119,14 @@ async def selfcheck_start(
     return SelfCheckStartResponse(
         request_id=request_id,
         attempt_id=attempt_id,
-        topic=body.topic,
+        topic=question_set.topic if body.full_program else body.topic,
         questions=[
             QuestionOut(
                 question_id=q.question_id,
                 type=q.type,
                 prompt=q.prompt,
                 options=q.options,
+                topic=q.topic,
             )
             for q in question_set.questions
         ],
@@ -132,6 +156,7 @@ class QuestionResultOut(BaseModel):
     user_answer: str
     score: float
     status: str  # correct | partial | incorrect
+    topic: str | None = None  # тема программы — для набора «Вся программа»
 
 
 class SelfCheckSubmitResponse(BaseModel):
@@ -203,6 +228,7 @@ async def selfcheck_submit(
             prompt=q["prompt"],
             options=q.get("options", []),
             correct_answer=q.get("correct_option"),
+            topic=q.get("topic"),
             user_answer=answer_map.get(qid, ""),
             score=r.score if r else 0.0,
             status=r.status if r else "incorrect",
@@ -262,8 +288,9 @@ class HistoryFacets(BaseModel):
     topics: list[HistoryFacetTopic]
 
 
-# Значение фильтра «тема» для попыток без привязки к билету.
+# Значения фильтра «тема» для попыток без привязки к билету.
 CUSTOM_TOPIC_KEY = "custom"
+FULL_PROGRAM_KEY = "program"
 
 
 class AttemptDetail(BaseModel):
@@ -309,7 +336,15 @@ async def selfcheck_history(
     if tenant:
         stmt = stmt.where(Tenant.slug == tenant)
     if topic == CUSTOM_TOPIC_KEY:
-        stmt = stmt.where(SelfCheckAttempt.topic_id.is_(None))
+        stmt = stmt.where(
+            SelfCheckAttempt.topic_id.is_(None),
+            ~SelfCheckAttempt.topic.startswith(FULL_PROGRAM_TOPIC_PREFIX),
+        )
+    elif topic == FULL_PROGRAM_KEY:
+        stmt = stmt.where(
+            SelfCheckAttempt.topic_id.is_(None),
+            SelfCheckAttempt.topic.startswith(FULL_PROGRAM_TOPIC_PREFIX),
+        )
     elif topic and ":" in topic:
         topic_tenant, external_id = topic.split(":", 1)
         stmt = stmt.where(Tenant.slug == topic_tenant, ProgramTopic.external_id == external_id)
@@ -347,13 +382,17 @@ async def selfcheck_history_facets(
     rows = (await db.execute(_history_query(current_user.id))).all()
     tenants: dict[str, HistoryFacetTenant] = {}
     topics: dict[str, HistoryFacetTopic] = {}
-    for _a, t, pt in rows:
+    for a, t, pt in rows:
         tf = tenants.setdefault(t.slug, HistoryFacetTenant(slug=t.slug, name=t.display_name, count=0))
         tf.count += 1
         if pt is not None:
             key = f"{t.slug}:{pt.external_id}"
             fallback = HistoryFacetTopic(key=key, tenant_slug=t.slug, external_id=pt.external_id,
                                          title=pt.title, section=pt.section, count=0)
+        elif a.topic.startswith(FULL_PROGRAM_TOPIC_PREFIX):
+            key = f"{t.slug}:{FULL_PROGRAM_KEY}"
+            fallback = HistoryFacetTopic(key=FULL_PROGRAM_KEY, tenant_slug=t.slug, external_id=None,
+                                         title="Вся программа", section=None, count=0)
         else:
             key = f"{t.slug}:{CUSTOM_TOPIC_KEY}"
             fallback = HistoryFacetTopic(key=CUSTOM_TOPIC_KEY, tenant_slug=t.slug, external_id=None,
@@ -361,9 +400,11 @@ async def selfcheck_history_facets(
         topics.setdefault(key, fallback).count += 1
 
     def _order(f: HistoryFacetTopic):
-        # Билеты по номеру (4.5.10 после 4.5.9), «Свои темы» — в конце.
+        # «Вся программа» — первой, билеты по номеру (4.5.10 после 4.5.9),
+        # «Свои темы» — в конце.
         nums = [int(x) for x in (f.external_id or "").split(".") if x.isdigit()]
-        return (f.tenant_slug, f.external_id is None, nums)
+        rank = 0 if f.key == FULL_PROGRAM_KEY else (2 if f.key == CUSTOM_TOPIC_KEY else 1)
+        return (f.tenant_slug, rank, nums)
 
     return HistoryFacets(
         tenants=sorted(tenants.values(), key=lambda f: f.name),
@@ -410,6 +451,7 @@ async def selfcheck_detail(
             prompt=q["prompt"],
             options=q.get("options", []),
             correct_answer=q.get("correct_option"),
+            topic=q.get("topic"),
             user_answer=answer_map.get(qid, ""),
             score=r.get("score", 0.0),
             status=r.get("status", "incorrect"),

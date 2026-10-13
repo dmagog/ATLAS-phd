@@ -7,6 +7,7 @@ Routes:
   clarify    — intent is ambiguous, ask a follow-up question
 """
 import json
+import re
 from dataclasses import dataclass
 
 from atlas.core.logging import logger
@@ -32,6 +33,9 @@ Rules:
 - For "self_check" extract the topic from the message (string, in the original language).
 - For "clarify" write a short clarifying question in the same language as the user's message.
 - Default to "qa" when uncertain between "qa" and something else.
+- If a previous user message is given, the current message may be a follow-up to it
+  ("а как его сократить?", "подробнее", "а почему?"). A follow-up that makes sense in
+  that context is "qa" — do NOT ask to clarify what is already clear from the previous message.
 
 Return ONLY a JSON object — no markdown, no explanation:
 {"route": "qa"|"self_check"|"clarify", "topic": "<string or null>", "clarify_message": "<string or null>"}
@@ -53,20 +57,49 @@ User: "What is the Huygens–Fresnel principle?"
 → {"route": "qa", "topic": null, "clarify_message": null}"""
 
 
-async def plan(message: str, request_id: str = "") -> PlannerDecision:
+_ROUTE_RE = re.compile(r'"route"\s*:\s*"(qa|self_check|clarify)"')
+_FIELD_RE = r'"{name}"\s*:\s*"([^"}}]*)'
+
+
+def _parse_decision(raw: str) -> dict:
+    """JSON от LLM; если он битый (GigaChat теряет закрывающую кавычку:
+    `"clarify_message": "Что именно?}`) — достаём поля регулярками."""
+    start, end = raw.find("{"), raw.rfind("}") + 1
+    try:
+        return json.loads(raw[start:end])
+    except (ValueError, json.JSONDecodeError):
+        route = _ROUTE_RE.search(raw)
+        if not route:
+            raise
+        data = {"route": route.group(1)}
+        for name in ("topic", "clarify_message"):
+            m = re.search(_FIELD_RE.format(name=name), raw)
+            data[name] = m.group(1).strip() if m else None
+        return data
+
+
+async def plan(
+    message: str, request_id: str = "", previous_message: str | None = None
+) -> PlannerDecision:
+    """previous_message — предыдущий вопрос пользователя в этом чате: без него
+    уточнение («а как его сократить?») уходит в clarify вместо ответа."""
+    user_content = (
+        f"Previous user message: {previous_message}\nCurrent message: {message}"
+        if previous_message else message
+    )
     try:
         raw = await llm_client.chat(
             messages=[
                 {"role": "system", "content": _SYSTEM_PROMPT},
-                {"role": "user", "content": message},
+                {"role": "user", "content": user_content},
             ],
             temperature=0.0,
-            max_tokens=128,
+            # 128 не хватало GigaChat: JSON обрезался → planner_error и лишний
+            # вызов LLM впустую (fallback на qa).
+            max_tokens=256,
             request_id=request_id,
         )
-        start = raw.find("{")
-        end = raw.rfind("}") + 1
-        data = json.loads(raw[start:end])
+        data = _parse_decision(raw)
 
         route = data.get("route", "qa")
         if route not in ("qa", "self_check", "clarify"):
