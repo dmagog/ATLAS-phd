@@ -13,17 +13,131 @@ Evidence gate (Verifier input):
   top1_vscore  — cosine similarity of the best chunk after RRF reranking
   enough_evidence — top1_vscore >= min_top1_score
                     AND chunks_above_threshold >= min_chunks_above_threshold
+
+Пороги — глобальные (settings.retriever_*), кафедра может переопределить их в
+tenants.config.retrieval: {"min_top1_score", "min_score_threshold",
+"min_chunks_above_threshold", "lexical_min_chunks"}.
+
+Лексический путь (только если у кафедры задан lexical_min_chunks): если
+векторный gate не прошёл, но значимые слова вопроса (без вопросительных и
+служебных слов) ВСЕ встречаются хотя бы в lexical_min_chunks чанках —
+evidence достаточно, а эти чанки добавляются в кандидаты. Сравнение — по
+основам русского Snowball-стеммера PostgreSQL ('russian'), не по префиксам:
+префикс «опер*» находил «операция», «фото*» — «фотография». Нужен
+для терминов и аббревиатур (RACI, PDCA, «матрица Менделоу»), которые
+MiniLM-эмбеддинг почти не различает (vscore 0.36–0.46 — ниже off-topic). Калибровка — scripts/calibrate_gate.py на
+размеченном наборе (eval/gate_sets/), значения и замер — в CHANGELOG.
 """
 from dataclasses import dataclass, field
 from typing import Optional
+import re
 import uuid
 
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from atlas.core.config import settings
 from atlas.core.logging import logger
-from atlas.db.models import Chunk, Document
+from atlas.db.models import Chunk, Document, Tenant
+
+
+@dataclass(frozen=True)
+class GateThresholds:
+    min_top1_score: float
+    min_score_threshold: float
+    min_chunks_above_threshold: int
+    lexical_min_chunks: int | None = None  # None — лексический путь выключен
+
+
+# Вопросительные и служебные слова: в «Что такое матрица RACI?» значимы только
+# «матрица» и «RACI» (стоп-лист 'russian' в PostgreSQL не убирает «такое»,
+# «расскажи» и т.п.).
+_STOPWORDS = frozenset("""
+что такое такой такая такие кто как какой какая какие каков какова каковы чем чём
+зачем почему где когда сколько ли это этот эта эти в во на и или а но по для о об от
+до из у с со к ко при про за над под между без же бы не ни нет да его её их ее мне
+мы вы он она они оно себя свой своя свои можно нужно надо есть быть был была было были
+будет являются является расскажи объясни опишите опиши сформулируйте назовите перечислите
+the a an of to in for and or what is are how why who which
+""".split())
+_WORD_RE = re.compile(r"[0-9a-zA-Zа-яА-ЯёЁ]+")
+
+
+def content_terms(query: str) -> list[str]:
+    """Значимые слова запроса (для plainto_tsquery('russian', …): основы и
+    оператор AND строит PostgreSQL)."""
+    return [
+        w for w in _WORD_RE.findall(query.lower())
+        if w not in _STOPWORDS and len(w) >= 3
+    ]
+
+
+async def gate_thresholds(db: AsyncSession, tenant_id: uuid.UUID) -> GateThresholds:
+    """Пороги evidence gate для кафедры: tenants.config.retrieval поверх settings."""
+    config = (await db.execute(
+        select(Tenant.config).where(Tenant.id == tenant_id)
+    )).scalar_one_or_none() or {}
+    cfg = config.get("retrieval") or {}
+    return GateThresholds(
+        min_top1_score=float(cfg.get("min_top1_score", settings.retriever_min_top1_score)),
+        min_score_threshold=float(cfg.get("min_score_threshold", settings.retriever_min_score_threshold)),
+        min_chunks_above_threshold=int(cfg.get(
+            "min_chunks_above_threshold", settings.retriever_min_chunks_above_threshold
+        )),
+        lexical_min_chunks=(
+            int(cfg["lexical_min_chunks"]) if cfg.get("lexical_min_chunks") else None
+        ),
+    )
+
+
+_LEXICAL_SQL = text("""
+SELECT
+    c.id           AS chunk_id,
+    c.document_id,
+    d.title        AS document_title,
+    d.filename,
+    c.chunk_index,
+    c.text,
+    c.section,
+    c.page,
+    1 - (c.embedding <=> CAST(:embedding AS vector)) AS vscore,
+    COUNT(*) OVER () AS total
+FROM chunks c
+JOIN documents d ON d.id = c.document_id
+WHERE c.tenant_id = :tenant_id
+  AND d.status = 'active'
+  AND to_tsvector('russian', c.text) @@ plainto_tsquery('russian', :tsquery)
+ORDER BY ts_rank(to_tsvector('russian', c.text), plainto_tsquery('russian', :tsquery)) DESC
+LIMIT :limit
+""")
+
+# Сколько лексически найденных чанков подмешивать в кандидаты (в промпт идут
+# первые retriever_max_chunks_in_prompt).
+_LEXICAL_CANDIDATES = 3
+
+
+async def _lexical_evidence(
+    db: AsyncSession, tenant_id: uuid.UUID, query_text: str, embedding_str: str
+) -> tuple[int, list["ChunkCandidate"]]:
+    terms = content_terms(query_text)
+    if not terms:
+        return 0, []
+    rows = (await db.execute(_LEXICAL_SQL, {
+        "tenant_id": tenant_id,
+        "tsquery": " ".join(terms),
+        "embedding": embedding_str,
+        "limit": _LEXICAL_CANDIDATES,
+    })).fetchall()
+    total = int(rows[0].total) if rows else 0
+    return total, [
+        ChunkCandidate(
+            chunk_id=str(r.chunk_id), document_id=str(r.document_id),
+            document_title=r.document_title, filename=r.filename,
+            chunk_index=r.chunk_index, text=r.text, section=r.section, page=r.page,
+            score=float(r.vscore), vscore=float(r.vscore),
+        )
+        for r in rows
+    ]
 
 
 @dataclass
@@ -248,18 +362,30 @@ async def retrieve(
 
     # Evidence gate uses vscore (cosine similarity), not RRF score,
     # so thresholds remain calibrated to the embedding model.
+    gate = await gate_thresholds(db, tenant_id)
     top1_vscore = max((c.vscore for c in candidates), default=0.0)
     chunks_above_threshold = sum(
-        1 for c in candidates if c.vscore >= settings.retriever_min_score_threshold
+        1 for c in candidates if c.vscore >= gate.min_score_threshold
     )
     enough_evidence = (
-        top1_vscore >= settings.retriever_min_top1_score
-        and chunks_above_threshold >= settings.retriever_min_chunks_above_threshold
+        top1_vscore >= gate.min_top1_score
+        and chunks_above_threshold >= gate.min_chunks_above_threshold
     )
+    gate_path = "vector" if enough_evidence else None
+    lexical_matches = None
+    if not enough_evidence and gate.lexical_min_chunks and query_text:
+        lexical_matches, lexical = await _lexical_evidence(db, tenant_id, query_text, embedding_str)
+        if lexical_matches >= gate.lexical_min_chunks:
+            enough_evidence = True
+            gate_path = "lexical"
+            seen = {c.chunk_id for c in lexical}
+            candidates = (lexical + [c for c in candidates if c.chunk_id not in seen])[:k]
 
     logger.info(
         "retrieval_done",
         mode=mode,
+        gate_path=gate_path,
+        lexical_matches=lexical_matches,
         tenant_id=str(tenant_id),
         request_id=request_id,
         top1_vscore=round(top1_vscore, 4),

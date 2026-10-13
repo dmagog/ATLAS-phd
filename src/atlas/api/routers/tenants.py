@@ -197,6 +197,59 @@ async def update_tenant_status(
     )
 
 
+# ─── Пороги evidence gate кафедры (tenants.config.retrieval) ─────────────
+
+
+class RetrievalGateConfig(BaseModel):
+    """Переопределения порогов отказа для кафедры. null — вернуть глобальный."""
+    min_top1_score: float | None = Field(default=None, ge=0.3, le=0.95)
+    min_score_threshold: float | None = Field(default=None, ge=0.3, le=0.95)
+    min_chunks_above_threshold: int | None = Field(default=None, ge=1, le=8)
+    # Лексический путь gate: сколько чанков должны содержать все значимые слова
+    # вопроса. null — выключен (по умолчанию).
+    lexical_min_chunks: int | None = Field(default=None, ge=1, le=20)
+
+
+@router.get("/{slug}/config/retrieval", response_model=RetrievalGateConfig)
+async def get_retrieval_config(
+    slug: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_super_admin),
+) -> RetrievalGateConfig:
+    tenant = await _resolve_tenant_by_slug(slug, db)
+    return RetrievalGateConfig(**((tenant.config or {}).get("retrieval") or {}))
+
+
+@router.put("/{slug}/config/retrieval", response_model=RetrievalGateConfig)
+async def set_retrieval_config(
+    slug: str,
+    body: RetrievalGateConfig,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_super_admin),
+) -> RetrievalGateConfig:
+    """Super-admin задаёт пороги hard-gate для кафедры. Значения подбираются
+    scripts/calibrate_gate.py на размеченном наборе — не «на глаз»: снижение
+    порога без замера отключает защиту от ответов не по материалам."""
+    tenant = await _resolve_tenant_by_slug(slug, db)
+    old = (tenant.config or {}).get("retrieval") or {}
+    new_cfg = {k: v for k, v in body.model_dump().items() if v is not None}
+    # JSONB: присваиваем новый dict, иначе SQLAlchemy не увидит изменение.
+    tenant.config = {**(tenant.config or {}), "retrieval": new_cfg}
+    await write_audit(
+        db,
+        action="tenant.config.retrieval.change",
+        actor_id=current_user.id,
+        actor_role=current_user.role,
+        tenant_id=tenant.id,
+        target_type="tenant",
+        target_id=str(tenant.id),
+        details={"from": old, "to": new_cfg},
+        flush_only=True,
+    )
+    await db.commit()
+    return RetrievalGateConfig(**new_cfg)
+
+
 # ─── M4.5.A: program upload ───────────────────────────────────────────────
 
 

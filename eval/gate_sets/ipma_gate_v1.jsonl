@@ -1,0 +1,78 @@
+{"id": "ipma-a-001", "query": "Что такое критический путь?", "expected": "answer", "length": "short", "topic": "4.5.4"}
+{"id": "ipma-a-002", "query": "Что такое СДР?", "expected": "answer", "length": "short", "topic": "4.5.3"}
+{"id": "ipma-a-003", "query": "Что такое портфель проектов?", "expected": "answer", "length": "short", "topic": "0.1"}
+{"id": "ipma-a-004", "query": "Что такое программа проектов?", "expected": "answer", "length": "short", "topic": "0.1"}
+{"id": "ipma-a-005", "query": "Что такое устав проекта?", "expected": "answer", "length": "short", "topic": "4.5.10"}
+{"id": "ipma-a-006", "query": "Что такое реестр рисков?", "expected": "answer", "length": "short", "topic": "4.5.11"}
+{"id": "ipma-a-007", "query": "Что такое матрица RACI?", "expected": "answer", "length": "short", "topic": "4.4.6"}
+{"id": "ipma-a-008", "query": "Что такое бенчмаркинг?", "expected": "answer", "length": "short", "topic": "4.3.1"}
+{"id": "ipma-a-009", "query": "Что такое SWOT-анализ?", "expected": "answer", "length": "short", "topic": "4.3.1"}
+{"id": "ipma-a-010", "query": "Что такое глаз компетентности?", "expected": "answer", "length": "short", "topic": "0.2"}
+{"id": "ipma-a-011", "query": "Что такое IPMA Delta?", "expected": "answer", "length": "short", "topic": "4.3.2"}
+{"id": "ipma-a-012", "query": "Что такое метод освоенного объема?", "expected": "answer", "length": "short", "topic": "4.5.7"}
+{"id": "ipma-a-013", "query": "Что такое делегирование?", "expected": "answer", "length": "short", "topic": "4.4.6"}
+{"id": "ipma-a-014", "query": "Что такое лидерство?", "expected": "answer", "length": "short", "topic": "4.4.5"}
+{"id": "ipma-a-015", "query": "Кто такие заинтересованные стороны проекта?", "expected": "answer", "length": "short", "topic": "4.5.12"}
+{"id": "ipma-a-016", "query": "Что такое верификация и валидация?", "expected": "answer", "length": "short", "topic": "4.5.6"}
+{"id": "ipma-a-017", "query": "Что такое матрица Менделоу?", "expected": "answer", "length": "short", "topic": "4.5.12"}
+{"id": "ipma-a-018", "query": "Что такое метод MoSCoW?", "expected": "answer", "length": "short", "topic": "4.5.2"}
+{"id": "ipma-a-019", "query": "Что такое цикл PDCA?", "expected": "answer", "length": "short", "topic": "4.5.6"}
+{"id": "ipma-a-020", "query": "Что такое проектный офис?", "expected": "answer", "length": "short", "topic": "4.3.2"}
+{"id": "ipma-a-021", "query": "Какие уровни сертификации IPMA существуют?", "expected": "answer", "length": "medium", "topic": "0.2"}
+{"id": "ipma-a-022", "query": "Какие стратегии реагирования на риски существуют?", "expected": "answer", "length": "medium", "topic": "4.5.11"}
+{"id": "ipma-a-023", "query": "Какие стадии развития проектной команды выделяют?", "expected": "answer", "length": "medium", "topic": "4.4.6"}
+{"id": "ipma-a-024", "query": "Чем программа отличается от проекта?", "expected": "answer", "length": "medium", "topic": "0.1"}
+{"id": "ipma-a-025", "query": "Как сформулировать цель проекта по SMART?", "expected": "answer", "length": "medium", "topic": "4.5.2"}
+{"id": "ipma-a-026", "query": "Какие стратегии выхода из конфликта существуют?", "expected": "answer", "length": "medium", "topic": "4.4.7"}
+{"id": "ipma-a-027", "query": "Как подготовиться к переговорам в проекте?", "expected": "answer", "length": "medium", "topic": "4.4.9"}
+{"id": "ipma-a-028", "query": "Что входит в планирование качества проекта?", "expected": "answer", "length": "medium", "topic": "4.5.6"}
+{"id": "ipma-a-029", "query": "Как формируется бюджет проекта?", "expected": "answer", "length": "medium", "topic": "4.5.7"}
+{"id": "ipma-a-030", "query": "Как определить источники ресурсов проекта?", "expected": "answer", "length": "medium", "topic": "4.5.8"}
+{"id": "ipma-a-031", "query": "Как выбирают поставщиков в проекте?", "expected": "answer", "length": "medium", "topic": "4.5.9"}
+{"id": "ipma-a-032", "query": "Как контролировать изменения в проекте?", "expected": "answer", "length": "medium", "topic": "4.5.10"}
+{"id": "ipma-a-033", "query": "Какие организационные структуры проекта бывают?", "expected": "answer", "length": "medium", "topic": "4.5.5"}
+{"id": "ipma-a-034", "query": "Что такое концепция реализации проекта?", "expected": "answer", "length": "medium", "topic": "4.5.1"}
+{"id": "ipma-a-035", "query": "Как учитывать культуру и ценности организации в проекте?", "expected": "answer", "length": "medium", "topic": "4.3.5"}
+{"id": "ipma-a-036", "query": "Как проявляется неформальное влияние в проекте?", "expected": "answer", "length": "medium", "topic": "4.3.4"}
+{"id": "ipma-a-037", "query": "Как руководителю проекта организовать свою работу?", "expected": "answer", "length": "medium", "topic": "4.4.1"}
+{"id": "ipma-a-038", "query": "Какие творческие подходы применяются в проекте?", "expected": "answer", "length": "medium", "topic": "4.4.8"}
+{"id": "ipma-a-039", "query": "Как руководитель проекта обеспечивает соответствие проекта миссии и видению организации и какие критические факторы успеха он анализирует?", "expected": "answer", "length": "long", "topic": "4.3.1"}
+{"id": "ipma-a-040", "query": "Как руководитель проекта должен выстраивать коммуникации с виртуальной командой и как выбирать стили и каналы коммуникации?", "expected": "answer", "length": "long", "topic": "4.4.3"}
+{"id": "ipma-a-041", "query": "Как оценивать вероятность и влияние рисков и возможностей и как выбирать стратегию реагирования на них?", "expected": "answer", "length": "long", "topic": "4.5.11"}
+{"id": "ipma-a-042", "query": "Как определить соответствие проекта применимым законам, стандартам и этическим кодексам?", "expected": "answer", "length": "long", "topic": "4.3.3"}
+{"id": "ipma-a-043", "query": "Как оценить способность организации адаптироваться к изменениям и как внедрять стратегию управления изменениями?", "expected": "answer", "length": "long", "topic": "4.5.13"}
+{"id": "ipma-a-044", "query": "Как руководитель проекта балансирует потребности и доступные средства, чтобы создавать результаты и получать их одобрение?", "expected": "answer", "length": "long", "topic": "4.4.10"}
+{"id": "ipma-a-045", "query": "Как личностная целостность и надежность руководителя проекта влияют на доверие команды и последовательность его решений?", "expected": "answer", "length": "long", "topic": "4.4.2"}
+{"id": "ipma-a-046", "query": "Как руководитель проекта развивает отношения и вовлечение, демонстрирует эмпатию и делится видением с командой?", "expected": "answer", "length": "long", "topic": "4.4.4"}
+{"id": "ipma-a-047", "query": "Как руководитель проекта запускает проект, согласует план и контролирует его исполнение на разных фазах?", "expected": "answer", "length": "long", "topic": "4.5.10"}
+{"id": "ipma-a-048", "query": "Как структурировать содержание проекта, определить пакеты работ и поддерживать конфигурацию содержания?", "expected": "answer", "length": "long", "topic": "4.5.3"}
+{"id": "ipma-r-001", "query": "Какова численность населения Москвы?", "expected": "refuse", "kind": "off"}
+{"id": "ipma-r-002", "query": "Как приготовить борщ?", "expected": "refuse", "kind": "off"}
+{"id": "ipma-r-003", "query": "Кто выиграл чемпионат мира по футболу 2018 года?", "expected": "refuse", "kind": "off"}
+{"id": "ipma-r-004", "query": "Как работает фотосинтез?", "expected": "refuse", "kind": "off"}
+{"id": "ipma-r-005", "query": "Какая столица Австралии?", "expected": "refuse", "kind": "off"}
+{"id": "ipma-r-006", "query": "Как написать цикл for на Python?", "expected": "refuse", "kind": "off"}
+{"id": "ipma-r-007", "query": "В каком году началась Вторая мировая война?", "expected": "refuse", "kind": "off"}
+{"id": "ipma-r-008", "query": "Какие симптомы у гриппа?", "expected": "refuse", "kind": "off"}
+{"id": "ipma-r-009", "query": "Что такое интеграл Римана?", "expected": "refuse", "kind": "off"}
+{"id": "ipma-r-010", "query": "Как вырастить помидоры на даче?", "expected": "refuse", "kind": "off"}
+{"id": "ipma-r-011", "query": "Кто написал роман «Война и мир»?", "expected": "refuse", "kind": "off"}
+{"id": "ipma-r-012", "query": "Как работает двигатель внутреннего сгорания?", "expected": "refuse", "kind": "off"}
+{"id": "ipma-r-013", "query": "Что такое квантовая запутанность?", "expected": "refuse", "kind": "off"}
+{"id": "ipma-r-014", "query": "Какая погода будет завтра в Санкт-Петербурге?", "expected": "refuse", "kind": "off"}
+{"id": "ipma-r-015", "query": "Как выучить английский язык за месяц?", "expected": "refuse", "kind": "off"}
+{"id": "ipma-r-016", "query": "Как устроен блокчейн биткоина?", "expected": "refuse", "kind": "off"}
+{"id": "ipma-r-017", "query": "Какой рецепт у тирамису?", "expected": "refuse", "kind": "off"}
+{"id": "ipma-r-018", "query": "Почему небо голубое?", "expected": "refuse", "kind": "off"}
+{"id": "ipma-r-019", "query": "Как поменять колесо на автомобиле?", "expected": "refuse", "kind": "off"}
+{"id": "ipma-r-020", "query": "Сколько планет в Солнечной системе?", "expected": "refuse", "kind": "off"}
+{"id": "ipma-r-021", "query": "Что такое дифракция света?", "expected": "refuse", "kind": "other_tenant"}
+{"id": "ipma-r-022", "query": "Сформулируйте закон Малюса.", "expected": "refuse", "kind": "other_tenant"}
+{"id": "ipma-r-023", "query": "Что такое экситон Ванье–Мотта?", "expected": "refuse", "kind": "other_tenant"}
+{"id": "ipma-r-024", "query": "Что такое фотоэффект?", "expected": "refuse", "kind": "other_tenant"}
+{"id": "ipma-r-025", "query": "Как устроены квантовые точки в полупроводниках?", "expected": "refuse", "kind": "other_tenant"}
+{"id": "ipma-r-026", "query": "Как оформить ипотеку в банке?", "expected": "refuse", "kind": "hard"}
+{"id": "ipma-r-027", "query": "Какие налоги платит индивидуальный предприниматель?", "expected": "refuse", "kind": "hard"}
+{"id": "ipma-r-028", "query": "Как составить резюме для поиска работы?", "expected": "refuse", "kind": "hard"}
+{"id": "ipma-r-029", "query": "Как настроить Jira для команды разработки?", "expected": "refuse", "kind": "hard"}
+{"id": "ipma-r-030", "query": "Что такое ключевая ставка Центрального банка?", "expected": "refuse", "kind": "hard"}

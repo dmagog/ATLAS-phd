@@ -1,0 +1,40 @@
+{"id": "ipma-ho-a-001", "query": "Что такое веха?", "expected": "answer", "length": "short"}
+{"id": "ipma-ho-a-002", "query": "Что такое диаграмма Ганта?", "expected": "answer", "length": "short"}
+{"id": "ipma-ho-a-003", "query": "Что такое сетевой график?", "expected": "answer", "length": "short"}
+{"id": "ipma-ho-a-004", "query": "Что такое пакет работ?", "expected": "answer", "length": "short"}
+{"id": "ipma-ho-a-005", "query": "Что такое бюджет проекта?", "expected": "answer", "length": "short"}
+{"id": "ipma-ho-a-006", "query": "Кто такой спонсор проекта?", "expected": "answer", "length": "short"}
+{"id": "ipma-ho-a-007", "query": "Что такое коучинг?", "expected": "answer", "length": "short"}
+{"id": "ipma-ho-a-008", "query": "Что такое эмпатия?", "expected": "answer", "length": "short"}
+{"id": "ipma-ho-a-009", "query": "Что такое конфликтоген?", "expected": "answer", "length": "short"}
+{"id": "ipma-ho-a-010", "query": "Что такое мозговой штурм?", "expected": "answer", "length": "short"}
+{"id": "ipma-ho-a-011", "query": "Что такое диаграмма Исикавы?", "expected": "answer", "length": "short"}
+{"id": "ipma-ho-a-012", "query": "Что такое тендер?", "expected": "answer", "length": "short"}
+{"id": "ipma-ho-a-013", "query": "Что такое запрос на изменение?", "expected": "answer", "length": "short"}
+{"id": "ipma-ho-a-014", "query": "Что такое резерв на риски?", "expected": "answer", "length": "short"}
+{"id": "ipma-ho-a-015", "query": "Что такое модель сложности проекта?", "expected": "answer", "length": "short"}
+{"id": "ipma-ho-a-016", "query": "Что такое анализ Парето?", "expected": "answer", "length": "short"}
+{"id": "ipma-ho-a-017", "query": "Что такое стоимость качества?", "expected": "answer", "length": "short"}
+{"id": "ipma-ho-a-018", "query": "Что такое системное мышление?", "expected": "answer", "length": "short"}
+{"id": "ipma-ho-a-019", "query": "Что такое иерархия целей проекта?", "expected": "answer", "length": "short"}
+{"id": "ipma-ho-a-020", "query": "Что такое извлеченные уроки?", "expected": "answer", "length": "short"}
+{"id": "ipma-ho-r-001", "query": "Что такое ипотека?", "expected": "refuse", "kind": "short_off"}
+{"id": "ipma-ho-r-002", "query": "Что такое инфляция?", "expected": "refuse", "kind": "short_off"}
+{"id": "ipma-ho-r-003", "query": "Что такое ДНК?", "expected": "refuse", "kind": "short_off"}
+{"id": "ipma-ho-r-004", "query": "Что такое гравитация?", "expected": "refuse", "kind": "short_off"}
+{"id": "ipma-ho-r-005", "query": "Что такое опера?", "expected": "refuse", "kind": "short_off"}
+{"id": "ipma-ho-r-006", "query": "Что такое вулкан?", "expected": "refuse", "kind": "short_off"}
+{"id": "ipma-ho-r-007", "query": "Что такое HTTP?", "expected": "refuse", "kind": "short_off"}
+{"id": "ipma-ho-r-008", "query": "Что такое SQL?", "expected": "refuse", "kind": "short_off"}
+{"id": "ipma-ho-r-009", "query": "Что такое GPS?", "expected": "refuse", "kind": "short_off"}
+{"id": "ipma-ho-r-010", "query": "Что такое ВВП?", "expected": "refuse", "kind": "short_off"}
+{"id": "ipma-ho-r-011", "query": "Что такое демократия?", "expected": "refuse", "kind": "short_off"}
+{"id": "ipma-ho-r-012", "query": "Что такое хоккей?", "expected": "refuse", "kind": "short_off"}
+{"id": "ipma-ho-r-013", "query": "Что такое суши?", "expected": "refuse", "kind": "short_off"}
+{"id": "ipma-ho-r-014", "query": "Что такое криптовалюта?", "expected": "refuse", "kind": "short_off"}
+{"id": "ipma-ho-r-015", "query": "Что такое фотон?", "expected": "refuse", "kind": "short_off"}
+{"id": "ipma-ho-r-016", "query": "Что такое лазер?", "expected": "refuse", "kind": "short_off"}
+{"id": "ipma-ho-r-017", "query": "Что такое поляризация?", "expected": "refuse", "kind": "short_off"}
+{"id": "ipma-ho-r-018", "query": "Что такое депозит?", "expected": "refuse", "kind": "short_off"}
+{"id": "ipma-ho-r-019", "query": "Что такое вакцина?", "expected": "refuse", "kind": "short_off"}
+{"id": "ipma-ho-r-020", "query": "Что такое Docker?", "expected": "refuse", "kind": "short_off"}
