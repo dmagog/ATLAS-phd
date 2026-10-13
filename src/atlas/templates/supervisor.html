@@ -1,8 +1,8 @@
 {% extends "_app.html" %}
-{% from "_partials.html" import sidebar_supervisor, topbar %}
+{% from "_partials.html" import sidebar, topbar %}
 {% block title %}Supervisor Dashboard{% endblock %}
 {% block content_mode %}app__content--dashboard{% endblock %}
-{% block sidebar %}{{ sidebar_supervisor(active='dashboard') }}{% endblock %}
+{% block sidebar %}{{ sidebar(active='supervisor') }}{% endblock %}
 {% block topbar %}{{ topbar() }}{% endblock %}
 
 {% block content %}

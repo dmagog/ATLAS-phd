@@ -2,6 +2,8 @@
 
 Currently scoped to:
   * GET  /me — basic profile + visibility flag.
+  * GET  /me/program — topics of the active program in the caller's tenant
+    context (any role; super-admin picks the tenant via X-Atlas-Tenant).
   * GET  /me/visibility — current supervisor_visibility setting.
   * POST /me/visibility — student/supervisor/tenant-admin toggles their
     own opt-in for supervisor analytics (BDD 3.4). The change is logged
@@ -13,14 +15,15 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from atlas.core.config import settings
 from atlas.core.deps import get_current_user
 from atlas.db.audit import write_audit
-from atlas.db.models import SupervisorVisibility, Tenant, User
+from atlas.db.models import Program, ProgramTopic, SupervisorVisibility, Tenant, User
 from atlas.db.session import get_db
 
 router = APIRouter(prefix="/me", tags=["me"])
@@ -35,6 +38,53 @@ class MeOut(BaseModel):
     tenant_display_name: str | None
     supervisor_visibility: str
     visibility_changed_at: datetime | None
+    # super-admin: тенант, в котором бэкенд работает без X-Atlas-Tenant.
+    default_tenant_slug: str | None = None
+
+
+class StudyTopicOut(BaseModel):
+    external_id: str
+    section: str
+    title: str
+    coverage_chunks: int
+    # Готовый вопрос для подсказки в чате (см. _study_prompt).
+    prompt: str
+
+
+_PROMPT_CONCEPTS = 4
+
+
+def _study_prompt(title: str, section: str, key_concepts: list[str]) -> str:
+    """Вопрос «по теме» для чата.
+
+    Формулировка выбрана замером retrieval на программе IPMA (28 тем):
+    «Что важно знать по теме «T»: k1, k2, k3, k4» проходит hard-gate на
+    28/28 и приводит к собственному разделу темы в источнике, тогда как
+    «Расскажи о теме: T (раздел)» — 26/28 и чаще цепляет оглавление.
+    Ключевые понятия с тем же началом, что у уже взятых, пропускаются —
+    в программе бывают варианты одного слова для автопривязки материалов.
+    С названием темы не сравниваем: «дифракционная решётка» в теме
+    «Дифракция…» нужна retrieval'у (без неё тема оптики не проходит gate).
+    """
+    picked: list[str] = []
+    seen: set[str] = set()
+    for kc in key_concepts:
+        head = kc.lower()[:5]
+        if head in seen:
+            continue
+        seen.add(head)
+        picked.append(kc)
+        if len(picked) == _PROMPT_CONCEPTS:
+            break
+    if not picked:
+        return f"Расскажи о теме: {title} ({section})"
+    return f"Что важно знать по теме «{title}»: {', '.join(picked)}"
+
+
+class StudyProgramOut(BaseModel):
+    tenant_slug: str
+    version: str | None
+    topics: list[StudyTopicOut]
 
 
 class VisibilityOut(BaseModel):
@@ -69,6 +119,55 @@ async def me(
         tenant_display_name=tenant_display_name,
         supervisor_visibility=current_user.supervisor_visibility,
         visibility_changed_at=current_user.visibility_changed_at,
+        default_tenant_slug=(
+            settings.pilot_tenant_slug if current_user.tenant_id is None else None
+        ),
+    )
+
+
+@router.get("/program", response_model=StudyProgramOut)
+async def my_program(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StudyProgramOut:
+    """Темы активной программы — для выбора темы в чате и самопроверке.
+
+    Read-only и без key_concepts: студенту нужен только список билетов.
+    Полная программа (с key_concepts) — GET /tenants/{slug}/program,
+    только для tenant-admin.
+    """
+    from atlas.db.tenant_helpers import resolve_tenant_id_for_user
+
+    tenant_id = await resolve_tenant_id_for_user(current_user, db, request)
+    tenant = (await db.execute(select(Tenant).where(Tenant.id == tenant_id))).scalar_one()
+    program = (
+        await db.execute(
+            select(Program).where(Program.tenant_id == tenant_id, Program.status == "active")
+        )
+    ).scalar_one_or_none()
+    if program is None:
+        return StudyProgramOut(tenant_slug=tenant.slug, version=None, topics=[])
+    topics = (
+        await db.execute(
+            select(ProgramTopic)
+            .where(ProgramTopic.program_id == program.id)
+            .order_by(ProgramTopic.ordinal)
+        )
+    ).scalars().all()
+    return StudyProgramOut(
+        tenant_slug=tenant.slug,
+        version=program.version,
+        topics=[
+            StudyTopicOut(
+                external_id=t.external_id,
+                section=t.section,
+                title=t.title,
+                coverage_chunks=t.coverage_chunks,
+                prompt=_study_prompt(t.title, t.section, t.key_concepts or []),
+            )
+            for t in topics
+        ],
     )
 
 

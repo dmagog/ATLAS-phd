@@ -1,8 +1,8 @@
 {% extends "_app.html" %}
-{% from "_partials.html" import sidebar_super_admin, topbar %}
+{% from "_partials.html" import sidebar, topbar %}
 {% block title %}Кафедры{% endblock %}
 {% block content_mode %}app__content--dashboard{% endblock %}
-{% block sidebar %}{{ sidebar_super_admin(active='tenants') }}{% endblock %}
+{% block sidebar %}{{ sidebar(active='tenants') }}{% endblock %}
 {% block topbar %}{{ topbar() }}{% endblock %}
 
 {% block content %}

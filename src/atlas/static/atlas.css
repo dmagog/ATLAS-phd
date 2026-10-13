@@ -512,6 +512,7 @@ img, svg { display: block; max-width: 100%; }
 /* ========================================================== */
 .tenant-ctx { display: flex; align-items: center; gap: var(--sp-3); }
 .tenant-ctx__name { font-weight: 600; font-size: var(--fs-sm); }
+.tenant-ctx__switcher { width: auto; min-width: 260px; font-weight: 600; font-size: var(--fs-sm); }
 .tenant-ctx__role {
   font-size: var(--fs-xs);
   padding: 2px 8px;

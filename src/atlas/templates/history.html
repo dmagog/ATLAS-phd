@@ -1,8 +1,8 @@
 {% extends "_app.html" %}
-{% from "_partials.html" import sidebar_student, topbar %}
+{% from "_partials.html" import sidebar, topbar %}
 {% block title %}История самопроверок{% endblock %}
 {% block content_mode %}app__content--chat{% endblock %}
-{% block sidebar %}{{ sidebar_student(active='history') }}{% endblock %}
+{% block sidebar %}{{ sidebar(active='history') }}{% endblock %}
 {% block topbar %}{{ topbar() }}{% endblock %}
 
 {% block content %}

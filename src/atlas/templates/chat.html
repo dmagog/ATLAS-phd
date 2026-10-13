@@ -1,8 +1,8 @@
 {% extends "_app.html" %}
-{% from "_partials.html" import sidebar_student, topbar %}
+{% from "_partials.html" import sidebar, topbar %}
 {% block title %}Чат{% endblock %}
 {% block content_mode %}{% endblock %}{# no max-width — chat owns full width with source-panel #}
-{% block sidebar %}{{ sidebar_student(active='chat') }}{% endblock %}
+{% block sidebar %}{{ sidebar(active='chat') }}{% endblock %}
 {% block topbar %}{{ topbar() }}{% endblock %}
 
 {% block content %}
@@ -108,6 +108,11 @@ function pluralize(n, one, few, many) {
 
 function mdToHtml(text) {
   return escHtml(text)
+    // Заголовки и списки — построчно, до замены переводов строк.
+    // GigaChat отвечает с ### / #### и «- пунктами».
+    .replace(/^#{1,2}\s+(.+)$/gm, '<span class="t-md t-bold" style="display:block;margin-top:var(--sp-3)">$1</span>')
+    .replace(/^#{3,6}\s+(.+)$/gm, '<span class="t-bold" style="display:block;margin-top:var(--sp-2)">$1</span>')
+    .replace(/^\s*[-*]\s+(.+)$/gm, '• $1')
     .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
     .replace(/\*(.+?)\*/g, '<i>$1</i>')
     .replace(/`([^`]+)`/g, '<code style="background:var(--c-surface-2);padding:1px 5px;border-radius:3px">$1</code>')
@@ -499,11 +504,56 @@ const conversationHistory = JSON.parse(sessionStorage.getItem(_SS_HISTORY) || '[
 // ── Send message ──────────────────────────────────────────────────────────────
 let messageCount = 0;
 
+// ───────── Темы программы на пустом экране ─────────
+// Подсказки из GET /me/program: клик подставляет вопрос в поле ввода.
+let programTopics = null;
+
+async function renderTopicHints() {
+  const box = document.getElementById('messages');
+  if (box.children.length) return;
+  if (programTopics === null) {
+    try {
+      const res = await authFetch('/me/program');
+      programTopics = res.ok ? ((await res.json()).topics || []).filter(t => t.coverage_chunks > 0) : [];
+    } catch (_) { programTopics = []; }
+  }
+  if (!programTopics.length || box.children.length) return;
+
+  const sections = new Map();
+  programTopics.forEach(t => {
+    if (!sections.has(t.section)) sections.set(t.section, []);
+    sections.get(t.section).push(t);
+  });
+  const hints = document.createElement('div');
+  hints.id = 'topic-hints';
+  hints.className = 'card';
+  hints.style.cssText = 'max-width: 760px; margin: var(--sp-4) auto; width: 100%;';
+  hints.innerHTML = `<div class="t-md t-bold mb-1">Темы программы</div>
+    <div class="t-xs t-muted mb-4">Выберите тему — вопрос подставится в поле ввода. Можно спрашивать и своими словами.</div>`
+    + [...sections].map(([section, topics]) => `
+      <div class="t-uppercase mb-2 mt-3">${escHtml(section)}</div>
+      <div class="flex flex-wrap gap-2">${topics.map(t =>
+        `<button type="button" class="badge badge--info" style="cursor:pointer; border:none;"
+           data-topic-prompt="${escHtml(t.prompt)}">
+           ${escHtml(t.external_id)} ${escHtml(t.title)}</button>`).join('')}
+      </div>`).join('');
+  hints.addEventListener('click', e => {
+    const b = e.target.closest('[data-topic-prompt]');
+    if (!b) return;
+    const input = document.getElementById('chat-input');
+    // Текст вопроса собирает сервер (GET /me/program, _study_prompt).
+    input.value = b.dataset.topicPrompt;
+    input.focus();
+  });
+  box.appendChild(hints);
+}
+
 async function sendMessage() {
   const input = document.getElementById('chat-input');
   const msg = input.value.trim();
   if (!msg) return;
   input.value = '';
+  document.getElementById('topic-hints')?.remove();
 
   const btn = document.getElementById('send-btn');
   btn.disabled = true;
@@ -572,6 +622,7 @@ document.getElementById('clear-btn').addEventListener('click', () => {
   document.getElementById('stat-msgs').textContent = '0';
   document.getElementById('stat-srcs').textContent = '0';
   document.getElementById('stat-refusals').textContent = '0';
+  renderTopicHints();
   document.getElementById('source-cards').innerHTML = `
     <div class="empty" style="padding: var(--sp-6) var(--sp-3);">
       <div class="empty__icon"><i class="bi bi-book" style="font-size: 32px;" aria-hidden="true"></i></div>
@@ -582,6 +633,7 @@ document.getElementById('clear-btn').addEventListener('click', () => {
 // onAuthReady is defined in _app.html bootstrap; nothing more to do here
 window.onAuthReady = function () {
   document.getElementById('chat-input').focus();
+  renderTopicHints();
   // Phase 6 screenshot helper: ?ask=<query> auto-fires sendMessage on load.
   // Optional ?open-source=<idx> opens the source-modal AFTER the answer
   // arrives (waits up to 60s polling for source-cards).

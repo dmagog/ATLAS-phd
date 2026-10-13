@@ -87,6 +87,10 @@ else:
 
 print("==> Пользователи (invite → redeem)...")
 for email, role in [("admin@ipma.demo", "tenant-admin"), ("georgy@ipma.demo", "student")]:
+    # Уже есть — не создаём инвайт: погасить его будет нечем (redeem → 409),
+    # и он висел бы «активным» в админке.
+    if call("POST", "/auth/login", {"email": email, "password": PWD})[0] == 200:
+        print(f"    = уже существует {email}"); continue
     code, body = call("POST", "/invites", {"role": role, "expires_in_days": 30}, headers=auth)
     if code != 201:
         print(f"    ✗ invite {email}: {code} {body}"); continue

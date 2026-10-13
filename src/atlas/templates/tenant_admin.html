@@ -1,8 +1,8 @@
 {% extends "_app.html" %}
-{% from "_partials.html" import sidebar_tenant_admin, topbar %}
+{% from "_partials.html" import sidebar, topbar %}
 {% block title %}Программа кафедры{% endblock %}
 {% block content_mode %}app__content--dashboard{% endblock %}
-{% block sidebar %}{{ sidebar_tenant_admin(active='program') }}{% endblock %}
+{% block sidebar %}{{ sidebar(active='program') }}{% endblock %}
 {% block topbar %}{{ topbar() }}{% endblock %}
 
 {% block content %}
@@ -144,11 +144,12 @@ function heroCard(label, value, valueMod, footnote) {
 let currentSlug = null;
 
 async function refreshAll() {
-  const [progRes, covRes, invRes, studRes] = await Promise.all([
+  const [progRes, covRes, invRes, studRes, docsRes] = await Promise.all([
     authFetch(`/tenants/${encodeURIComponent(currentSlug)}/program`),
     authFetch(`/tenants/${encodeURIComponent(currentSlug)}/coverage`),
     authFetch('/invites'),
     authFetch(`/tenants/${encodeURIComponent(currentSlug)}/supervisor/students`),
+    authFetch('/admin/documents'),
   ]);
 
   if (progRes.status === 403 || covRes.status === 403) {
@@ -161,6 +162,7 @@ async function refreshAll() {
   const coverage = covRes.ok ? await covRes.json() : null;
   const invites = invRes.ok ? await invRes.json() : [];
   const students = studRes.ok ? await studRes.json() : { n_total: 0, n_visible: 0, students: [] };
+  const documents = docsRes.ok ? await docsRes.json() : null;
 
   hide('ta-loading');
 
@@ -170,7 +172,7 @@ async function refreshAll() {
   }
   show('ta-dashboard');
 
-  renderHero(program, coverage, students, invites);
+  renderHero(program, coverage, students, invites, documents);
   renderTopics(program, coverage);
   renderInvites(invites);
   renderUsers(students);
@@ -183,8 +185,12 @@ async function refreshAll() {
   }
 }
 
-function renderHero(program, coverage, students, invites) {
-  const totalChunks = program.topics.reduce((acc, t) => acc + (t.coverage_chunks || 0), 0);
+function renderHero(program, coverage, students, invites, documents) {
+  // Сумма coverage_chunks по топикам считает чанк столько раз, к скольким
+  // топикам привязан его материал, — реальный объём берём из /admin/documents.
+  const totalChunks = documents
+    ? documents.reduce((acc, d) => acc + (d.chunk_count || 0), 0)
+    : '—';
   const greenTopics = coverage ? coverage.topics.filter(t => t.bucket === 'green').length : program.topics.length;
   const coveragePct = program.topics.length ? Math.round(greenTopics / program.topics.length * 100) : 0;
   const activeInvites = invites.filter(i => !i.redeemed_at && (!i.expires_at || new Date(i.expires_at) > new Date())).length;

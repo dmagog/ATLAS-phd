@@ -1,8 +1,8 @@
 {% extends "_app.html" %}
-{% from "_partials.html" import sidebar_tenant_admin, topbar %}
+{% from "_partials.html" import sidebar, topbar %}
 {% block title %}Материалы{% endblock %}
 {% block content_mode %}app__content--dashboard{% endblock %}
-{% block sidebar %}{{ sidebar_tenant_admin(active='materials') }}{% endblock %}
+{% block sidebar %}{{ sidebar(active='materials') }}{% endblock %}
 {% block topbar %}{{ topbar() }}{% endblock %}
 
 {% block content %}
@@ -144,7 +144,7 @@ document.getElementById('upload-btn').addEventListener('click', async () => {
     // FormData → don't set Content-Type, let browser set boundary
     const res = await fetch('/admin/ingestion-jobs', {
       method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + getToken() },
+      headers: { 'Authorization': 'Bearer ' + getToken(), ...tenantHeaders() },
       body: form,
     });
     if (res.status === 401) {

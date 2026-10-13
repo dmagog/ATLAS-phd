@@ -1,8 +1,8 @@
 {% extends "_app.html" %}
-{% from "_partials.html" import sidebar_tenant_admin, topbar %}
+{% from "_partials.html" import sidebar, topbar %}
 {% block title %}Инвайты{% endblock %}
 {% block content_mode %}app__content--dashboard{% endblock %}
-{% block sidebar %}{{ sidebar_tenant_admin(active='invites') }}{% endblock %}
+{% block sidebar %}{{ sidebar(active='invites') }}{% endblock %}
 {% block topbar %}{{ topbar() }}{% endblock %}
 
 {% block content %}

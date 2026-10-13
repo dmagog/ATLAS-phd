@@ -1,8 +1,8 @@
 {% extends "_app.html" %}
-{% from "_partials.html" import sidebar_student, topbar %}
+{% from "_partials.html" import sidebar, topbar %}
 {% block title %}Самопроверка{% endblock %}
 {% block content_mode %}app__content--chat{% endblock %}
-{% block sidebar %}{{ sidebar_student(active='selfcheck') }}{% endblock %}
+{% block sidebar %}{{ sidebar(active='selfcheck') }}{% endblock %}
 {% block topbar %}{{ topbar() }}{% endblock %}
 
 {% block content %}
@@ -11,13 +11,17 @@
 <div id="start-card" class="card">
   <h1 class="t-xl t-bold mb-2">Самопроверка по теме</h1>
   <p class="t-sm t-muted mb-5">
-    Введите тему — ATLAS сгенерирует 6 вопросов (MC + open-ended) и оценит ответы по рубрике
+    Выберите тему программы — ATLAS сгенерирует вопросы (MC + open-ended) и оценит ответы по рубрике
     <span class="badge badge--info"><i class="bi bi-shield-check" aria-hidden="true"></i>κ = 1.000 vs expert</span>.
   </p>
 
   <div class="flex gap-2 items-end" style="flex-wrap: wrap;">
-    <div class="field" style="flex: 1; min-width: 280px; margin-bottom: 0;">
-      <label class="label" for="topic-input">Тема</label>
+    <div class="field hidden" id="topic-select-field" style="flex: 1; min-width: 280px; margin-bottom: 0;">
+      <label class="label" for="topic-select">Тема программы</label>
+      <select class="select" id="topic-select"></select>
+    </div>
+    <div class="field" id="topic-input-field" style="flex: 1; min-width: 280px; margin-bottom: 0;">
+      <label class="label" for="topic-input">Своя тема</label>
       <input class="input" id="topic-input" placeholder="Например: «Метод наименьших квадратов»">
     </div>
     <div class="field" style="margin-bottom: 0;">
@@ -199,9 +203,65 @@ function renderMath(el) { if (typeof renderMathInElement === 'function') renderM
 })();
 
 
+// ───────── Темы программы ─────────
+// Список берётся из GET /me/program. «Своя тема…» оставляет свободный ввод;
+// если программы нет — только он.
+const CUSTOM_TOPIC = '__custom__';
+
+function topicQuery(t) {
+  // Короткие названия («Сроки», «Содержание») слабо ищутся сами по себе —
+  // раздел программы даёт retrieval'у контекст.
+  return `${t.title} (${t.section})`;
+}
+
+async function loadProgramTopics() {
+  let program;
+  try {
+    const res = await authFetch('/me/program');
+    if (!res.ok) return;
+    program = await res.json();
+  } catch (_) { return; }
+  const topics = (program.topics || []).filter(t => t.coverage_chunks > 0);
+  if (!topics.length) return;
+
+  const sel = document.getElementById('topic-select');
+  const groups = new Map();
+  topics.forEach(t => {
+    if (!groups.has(t.section)) {
+      const g = document.createElement('optgroup');
+      g.label = t.section;
+      groups.set(t.section, g);
+      sel.appendChild(g);
+    }
+    const opt = document.createElement('option');
+    opt.value = topicQuery(t);
+    opt.textContent = `${t.external_id} ${t.title}`;
+    groups.get(t.section).appendChild(opt);
+  });
+  const custom = document.createElement('option');
+  custom.value = CUSTOM_TOPIC;
+  custom.textContent = 'Своя тема…';
+  sel.appendChild(custom);
+
+  const syncCustom = () =>
+    document.getElementById('topic-input-field').classList.toggle('hidden', sel.value !== CUSTOM_TOPIC);
+  sel.addEventListener('change', syncCustom);
+  // ?topic=… (демо-ссылки) — сразу в режим своей темы.
+  if (document.getElementById('topic-input').value.trim()) sel.value = CUSTOM_TOPIC;
+  document.getElementById('topic-select-field').classList.remove('hidden');
+  syncCustom();
+}
+
+function selectedTopic() {
+  const sel = document.getElementById('topic-select');
+  const useSelect = !document.getElementById('topic-select-field').classList.contains('hidden')
+    && sel.value !== CUSTOM_TOPIC;
+  return useSelect ? sel.value : document.getElementById('topic-input').value.trim();
+}
+
 // ───────── Start handler ─────────
 document.getElementById('start-btn').addEventListener('click', async () => {
-  const topic = document.getElementById('topic-input').value.trim();
+  const topic = selectedTopic();
   if (!topic) return;
   hide('start-error');
   document.getElementById('start-btn').disabled = true;
@@ -468,8 +528,10 @@ document.getElementById('topic-input').addEventListener('keydown', e => {
   }
 });
 
-window.onAuthReady = function () {
-  document.getElementById('topic-input').focus();
+window.onAuthReady = async function () {
+  await loadProgramTopics();
+  const sel = document.getElementById('topic-select-field');
+  document.getElementById(sel.classList.contains('hidden') ? 'topic-input' : 'topic-select').focus();
 };
 </script>
 {% endblock %}

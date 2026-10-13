@@ -17,8 +17,8 @@
 
 <div class="app">
   {% block sidebar %}
-    {% from "_partials.html" import sidebar_student %}
-    {{ sidebar_student(active='') }}
+    {% from "_partials.html" import sidebar %}
+    {{ sidebar(active='') }}
   {% endblock %}
 
   <main class="app__main">
@@ -37,11 +37,20 @@
 // ── Auth ──────────────────────────────────────────────────────────────────────
 const TOKEN_KEY = 'atlas_token';
 const EMAIL_KEY = 'atlas_email';
+// super-admin не привязан к кафедре: выбранная в шапке кафедра уходит
+// в каждый запрос заголовком X-Atlas-Tenant (см. resolve_tenant_id_for_user).
+const TENANT_KEY = 'atlas_tenant';
 
 function getToken()  { return localStorage.getItem(TOKEN_KEY); }
-function clearToken() { localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(EMAIL_KEY); }
+function clearToken() {
+  localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(EMAIL_KEY); localStorage.removeItem(TENANT_KEY);
+}
+function tenantHeaders() {
+  const slug = localStorage.getItem(TENANT_KEY);
+  return slug ? { 'X-Atlas-Tenant': slug } : {};
+}
 function authHeaders(extra = {}) {
-  return { 'Authorization': 'Bearer ' + getToken(), 'Content-Type': 'application/json', ...extra };
+  return { 'Authorization': 'Bearer ' + getToken(), 'Content-Type': 'application/json', ...tenantHeaders(), ...extra };
 }
 function redirectToLogin() {
   const next = encodeURIComponent(location.pathname + location.search);
@@ -62,10 +71,50 @@ function initialsFromEmail(email) {
   return (parts[0][0] + parts[1][0]).toUpperCase();
 }
 
+// Тестовый прогон (tests/) оставляет в локальной БД тенанты test-*;
+// в переключателе они только мешают.
+const HIDDEN_TENANT_PREFIX = 'test-';
+
+async function resolveSuperAdminTenant(me) {
+  const res = await authFetch('/tenants');
+  const tenants = res.ok ? (await res.json()).filter(t => !t.slug.startsWith(HIDDEN_TENANT_PREFIX)) : [];
+  let slug = localStorage.getItem(TENANT_KEY);
+  if (!tenants.some(t => t.slug === slug)) slug = me.default_tenant_slug;
+  localStorage.setItem(TENANT_KEY, slug);
+  const current = tenants.find(t => t.slug === slug);
+  me.tenant_slug = slug;
+  me.tenant_display_name = current ? current.display_name : slug;
+  return tenants;
+}
+
+function renderTenantSwitcher(tenants, currentSlug) {
+  document.querySelectorAll('[data-tenant-name]').forEach(el => {
+    const sel = document.createElement('select');
+    sel.className = 'select tenant-ctx__switcher';
+    sel.setAttribute('aria-label', 'Кафедра');
+    tenants.forEach(t => {
+      const opt = document.createElement('option');
+      opt.value = t.slug; opt.textContent = t.display_name; opt.selected = t.slug === currentSlug;
+      sel.appendChild(opt);
+    });
+    sel.addEventListener('change', () => { localStorage.setItem(TENANT_KEY, sel.value); location.reload(); });
+    el.replaceChildren(sel);
+  });
+}
+
 async function loadMe() {
   const res = await authFetch('/me');
   if (!res.ok) throw new Error('me failed');
   const me = await res.json();
+  let tenants = null;
+  if (me.role === 'super-admin') {
+    tenants = await resolveSuperAdminTenant(me);
+  } else {
+    localStorage.removeItem(TENANT_KEY);
+  }
+  document.querySelectorAll('[data-roles]').forEach(el => {
+    el.hidden = !el.dataset.roles.split(' ').includes(me.role);
+  });
   // Populate all data-* placeholders
   document.querySelectorAll('[data-user-email]').forEach(el => el.textContent = me.email);
   document.querySelectorAll('[data-user-initials]').forEach(el => el.textContent = initialsFromEmail(me.email));
@@ -73,9 +122,13 @@ async function loadMe() {
     el.textContent = me.role;
     el.className = 'tenant-ctx__role tenant-ctx__role--' + me.role;
   });
-  document.querySelectorAll('[data-tenant-name]').forEach(el => {
-    el.textContent = me.tenant_display_name || (me.role === 'super-admin' ? 'Платформа · все тенанты' : '—');
-  });
+  if (tenants && tenants.length) {
+    renderTenantSwitcher(tenants, me.tenant_slug);
+  } else {
+    document.querySelectorAll('[data-tenant-name]').forEach(el => {
+      el.textContent = me.tenant_display_name || '—';
+    });
+  }
   return me;
 }
 
