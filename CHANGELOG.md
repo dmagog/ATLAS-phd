@@ -8,6 +8,10 @@
 
 ## [Unreleased]
 
+---
+
+## [0.12.0] — 2026-10-13
+
 ### Добавлено
 
 - **Пороги hard-gate для кафедры** — `tenants.config.retrieval`
