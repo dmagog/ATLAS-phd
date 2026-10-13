@@ -74,3 +74,57 @@
   </div>
 </aside>
 {% endmacro %}
+
+{# ============================================================== #}
+{# Dev live-reload (только app_env != production).                 #}
+{# Long-poll на /_/dev/version; при смене версии — перезагрузка.    #}
+{# Если на странице есть несохранённое (переписка в чате, начатая   #}
+{# самопроверка, набранный текст) — вместо перезагрузки плашка.     #}
+{# ============================================================== #}
+{% macro dev_live_reload() %}
+{% if live_reload_enabled %}
+<script>
+(function () {
+  let current = null;
+
+  function hasUnsavedWork() {
+    if (document.querySelector('.bubble')) return true;
+    const qc = document.getElementById('questions-card');
+    if (qc && !qc.classList.contains('hidden')) return true;
+    return [...document.querySelectorAll('textarea, input[type="text"], input:not([type])')]
+      .some(el => el.offsetParent !== null && el.value.trim() !== '');
+  }
+
+  function offerReload() {
+    if (document.getElementById('dev-reload-toast')) return;
+    const t = document.createElement('div');
+    t.id = 'dev-reload-toast';
+    t.className = 'toast';
+    t.innerHTML = '<i class="bi bi-arrow-repeat" aria-hidden="true"></i>Интерфейс обновился'
+      + '<button type="button" class="btn btn--primary btn--sm">Обновить</button>';
+    t.querySelector('button').addEventListener('click', () => location.reload());
+    document.body.appendChild(t);
+  }
+
+  async function poll() {
+    try {
+      const qs = current ? '?since=' + encodeURIComponent(current) : '';
+      const res = await fetch('/_/dev/version' + qs, { cache: 'no-store' });
+      if (res.status === 404) return;            // production — выключено
+      if (!res.ok) throw new Error(res.status);
+      const { version } = await res.json();
+      if (current && version !== current) {
+        if (hasUnsavedWork()) offerReload(); else location.reload();
+        return;
+      }
+      current = version;
+      poll();
+    } catch (_) {
+      setTimeout(poll, 1000);                    // сервер перезапускается
+    }
+  }
+  poll();
+})();
+</script>
+{% endif %}
+{% endmacro %}

@@ -1,3 +1,6 @@
+import asyncio
+import time
+import uuid
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -24,6 +27,47 @@ def _asset_version(filename: str = "atlas.css") -> str:
 
 
 templates.env.globals["asset_v"] = _asset_version
+
+
+# ── Dev live-reload ─────────────────────────────────────────────────────────
+# Страница держит long-poll на /_/dev/version и перезагружается, когда версия
+# меняется. Версия = id процесса + max mtime шаблонов и статики:
+#   * правка .py → uvicorn --reload перезапускает процесс → новый _BOOT_ID;
+#   * правка шаблона/CSS → меняется mtime (Jinja и так перечитывает шаблон,
+#     а --reload за ними не следит — без этого страница бы не узнала).
+# В production эндпоинт отдаёт 404, а скрипт в шаблоны не попадает.
+_DEV_LIVE_RELOAD = settings.app_env != "production"
+_BOOT_ID = uuid.uuid4().hex[:8]
+_WATCH_DIRS = (Path(__file__).parent.parent.parent / "templates", _STATIC_DIR)
+_LONG_POLL_S = 25.0
+_POLL_STEP_S = 0.5
+
+templates.env.globals["live_reload_enabled"] = _DEV_LIVE_RELOAD
+
+
+def _content_version() -> str:
+    latest = 0.0
+    for root in _WATCH_DIRS:
+        for f in root.rglob("*"):
+            try:
+                latest = max(latest, f.stat().st_mtime)
+            except OSError:
+                pass
+    return f"{_BOOT_ID}-{int(latest * 1000)}"
+
+
+@router.get("/_/dev/version", include_in_schema=False)
+async def dev_version(since: str | None = None):
+    """Long-poll: ответ сразу, если версия отличается от `since`, иначе —
+    когда изменится или через _LONG_POLL_S (клиент переподключится)."""
+    if not _DEV_LIVE_RELOAD:
+        raise HTTPException(status_code=404)
+    deadline = time.monotonic() + _LONG_POLL_S
+    version = _content_version()
+    while version == since and time.monotonic() < deadline:
+        await asyncio.sleep(_POLL_STEP_S)
+        version = _content_version()
+    return {"version": version}
 
 
 @router.get("/login", response_class=HTMLResponse)

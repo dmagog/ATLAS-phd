@@ -169,5 +169,6 @@ document.addEventListener('click', e => {
 })();
 </script>
 {% block scripts %}{% endblock %}
+{% from "_partials.html" import dev_live_reload %}{{ dev_live_reload() }}
 </body>
 </html>
