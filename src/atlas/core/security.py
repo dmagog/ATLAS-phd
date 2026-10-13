@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timedelta, timezone
 from passlib.context import CryptContext
-from jose import jwt, JWTError
+import jwt
 from atlas.core.config import settings
 
 pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
@@ -61,5 +61,5 @@ def create_access_token(user_id: str, role: str, jwt_version: int = 1) -> str:
 def decode_token(token: str) -> dict:
     try:
         return jwt.decode(token, settings.jwt_secret, algorithms=["HS256"])
-    except JWTError:
+    except jwt.PyJWTError:
         raise ValueError("Invalid token")
