@@ -45,8 +45,12 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://atlas:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required, see .env.example}@postgres:5432/atlas
       EMBEDDINGS_URL: http://embeddings:8001
-      LLM_API_KEY: ${LLM_API_KEY}
+      LLM_PROVIDER: ${LLM_PROVIDER:-openrouter}
+      LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_MODEL_ID: ${LLM_MODEL_ID:-qwen/qwen3-8b:free}
+      GIGACHAT_AUTH_KEY: ${GIGACHAT_AUTH_KEY:-}
+      GIGACHAT_SCOPE: ${GIGACHAT_SCOPE:-GIGACHAT_API_PERS}
+      GIGACHAT_MODEL: ${GIGACHAT_MODEL:-GigaChat-2-Pro}
       JWT_SECRET: ${JWT_SECRET}
       ADMIN_EMAIL: ${ADMIN_EMAIL}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}

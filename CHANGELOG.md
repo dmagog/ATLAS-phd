@@ -10,11 +10,19 @@
 
 ### Добавлено
 
+- **GigaChat как LLM-провайдер** (`LLM_PROVIDER=gigachat`): OAuth-токен с кэшем
+  и перевыпуском на 401, TLS через корневой сертификат Минцифры
+  (`src/atlas/resources/certs/russian_trusted_ca.pem`), модель `GIGACHAT_MODEL`
+  (по умолчанию `GigaChat-2-Pro`). OpenRouter остаётся провайдером по умолчанию.
+- **Номера страниц для PDF.** Ingestion извлекает PDF постранично, `chunk.page`
+  = физическая страница; цитаты в ответах теперь `[Doc: …, p.N]` и для PDF,
+  а не только для JSONL. Уже загруженные PDF нужно перезагрузить.
 - **Направление «Сертификация IPMA» (тенант `ipma-pm`).** Программа по ICB 4.0
   (`corpus/ipma-pm/program.md`, 30 топиков с нумерацией ICB4), bootstrap-скрипт
   `scripts/seed_ipma.sh`: тенант, программа, `admin@ipma.demo` и `georgy@ipma.demo`,
   загрузка ICB4 + 8 лекций + конспектов из git-ignored `Сертификация IPMA/`,
-  автопривязка к топикам. `@ipma.demo` добавлен в домены `/_/demo-login`.
+  автопривязка к топикам; материалы грузятся по одному файлу на job с
+  тайм-аутом зависания. `@ipma.demo` добавлен в домены `/_/demo-login`.
 - `attach_corpus_by_keywords.py`: порог hits для документа не выше его
   `chunk_count` — короткие конспекты (1–2 чанка) раньше не привязывались никогда.
 

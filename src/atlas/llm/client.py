@@ -1,8 +1,16 @@
 """
-LLM client for OpenRouter API.
-Compatible with OpenAI chat completions format.
+LLM client for OpenRouter or GigaChat (settings.llm_provider).
+Both speak the OpenAI chat completions format.
 Retries on 429 and 5xx with exponential backoff (max 2 retries).
+
+GigaChat specifics: access_token via OAuth (Basic auth key → ~30 min token,
+cached per process and refreshed on 401), TLS signed by the Russian Trusted
+Root CA (bundle in atlas/resources/certs).
 """
+import time
+import uuid
+from pathlib import Path
+
 import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
 
@@ -10,6 +18,9 @@ from atlas.core.config import settings
 from atlas.core.logging import logger
 
 _OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+_GIGACHAT_CA_BUNDLE = Path(__file__).resolve().parents[1] / "resources" / "certs" / "russian_trusted_ca.pem"
+# Перевыпускаем токен за минуту до истечения, чтобы не поймать 401 в полёте.
+_TOKEN_REFRESH_MARGIN_MS = 60_000
 
 
 def _should_retry(exc: BaseException) -> bool:
@@ -31,18 +42,64 @@ def _should_retry(exc: BaseException) -> bool:
 
 class LLMClient:
     def __init__(self) -> None:
-        timeout_s = settings.request_timeout_ms / 1000
-        self._client = httpx.AsyncClient(
-            timeout=httpx.Timeout(timeout=timeout_s, connect=5.0),
-            headers={
-                "Authorization": f"Bearer {settings.llm_api_key}",
-                "HTTP-Referer": "https://github.com/atlas-phd",
-                "X-Title": "ATLAS phd",
-            },
-        )
+        timeout = httpx.Timeout(timeout=settings.request_timeout_ms / 1000, connect=5.0)
+        self._gigachat = settings.llm_provider == "gigachat"
+        if self._gigachat:
+            self._url = f"{settings.gigachat_base_url.rstrip('/')}/chat/completions"
+            self._default_model = settings.gigachat_model
+            self._client = httpx.AsyncClient(timeout=timeout, verify=str(_GIGACHAT_CA_BUNDLE))
+        else:
+            self._url = _OPENROUTER_URL
+            self._default_model = settings.llm_model_id
+            self._client = httpx.AsyncClient(
+                timeout=timeout,
+                headers={
+                    "Authorization": f"Bearer {settings.llm_api_key}",
+                    "HTTP-Referer": "https://github.com/atlas-phd",
+                    "X-Title": "ATLAS phd",
+                },
+            )
+        self._token: str | None = None
+        self._token_expires_at_ms = 0
 
     async def close(self) -> None:
         await self._client.aclose()
+
+    async def _gigachat_token(self) -> str:
+        now_ms = int(time.time() * 1000)
+        if self._token and now_ms < self._token_expires_at_ms - _TOKEN_REFRESH_MARGIN_MS:
+            return self._token
+        resp = await self._client.post(
+            settings.gigachat_oauth_url,
+            headers={
+                "Authorization": f"Basic {settings.gigachat_auth_key}",
+                "RqUID": str(uuid.uuid4()),
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+            data={"scope": settings.gigachat_scope},
+        )
+        resp.raise_for_status()
+        payload = resp.json()
+        self._token = payload["access_token"]
+        # expires_at — миллисекунды эпохи; без него считаем токен живым 30 минут.
+        self._token_expires_at_ms = int(payload.get("expires_at") or now_ms + 30 * 60 * 1000)
+        return self._token
+
+    async def _post(self, payload: dict) -> httpx.Response:
+        if not self._gigachat:
+            return await self._client.post(self._url, json=payload)
+        token = await self._gigachat_token()
+        resp = await self._client.post(
+            self._url, json=payload, headers={"Authorization": f"Bearer {token}"}
+        )
+        if resp.status_code == 401:
+            # Токен отозван раньше expires_at — перевыпускаем один раз.
+            self._token = None
+            token = await self._gigachat_token()
+            resp = await self._client.post(
+                self._url, json=payload, headers={"Authorization": f"Bearer {token}"}
+            )
+        return resp
 
     @retry(
         retry=retry_if_exception(_should_retry),
@@ -58,7 +115,7 @@ class LLMClient:
         max_tokens: int = 2048,
         request_id: str = "",
     ) -> str:
-        model = model or settings.llm_model_id
+        model = model or self._default_model
         payload = {
             "model": model,
             "messages": messages,
@@ -67,7 +124,7 @@ class LLMClient:
         }
         logger.info("llm_request", model=model, messages_count=len(messages), request_id=request_id)
 
-        resp = await self._client.post(_OPENROUTER_URL, json=payload)
+        resp = await self._post(payload)
         resp.raise_for_status()
 
         data = resp.json()

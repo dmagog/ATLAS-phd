@@ -99,7 +99,7 @@ cp .env.example .env
 | Дизайн-система | 18 BEM-компонентов · light + dark · brand-цвета из SVG `atlas-icon-v5-shield-no-ring-calm-blue` |
 | БД | PostgreSQL 16 + pgvector (HNSW partial-индексы per-tenant, cosine) |
 | Embeddings | `paraphrase-multilingual-MiniLM-L12-v2` (384-dim, RU+EN, sidecar в Docker) |
-| LLM | OpenRouter API. Default: `meta-llama/llama-3.3-70b-instruct` (paid, $0.10/M input). Free fallback: `:free` suffix |
+| LLM | `LLM_PROVIDER`: OpenRouter (default `meta-llama/llama-3.3-70b-instruct`, free fallback — суффикс `:free`) или GigaChat (`GigaChat-2-Pro`, OAuth + CA Минцифры) |
 | Multi-tenancy | M4.A: `tenant_id` на всех данных, JWT с `jv` claim, RBAC (4 роли), invite-flow, audit_log |
 | Auth | JWT HS256, Argon2 пароли, jwt-version revocation (BDD 7.5) |
 | Ingestion | JSONL (page-aware) / PDF / DOCX / TXT / MD |

@@ -43,7 +43,7 @@ fi
 
 export BASE_URL SLUG DISPLAY_NAME DEMO_PASSWORD SOURCES_DIR ADMIN_EMAIL ADMIN_PASSWORD
 
-python3 - <<'PY'
+python3 -u - <<'PY'
 import json, mimetypes, os, time, uuid, urllib.error, urllib.request
 from pathlib import Path
 
@@ -96,34 +96,39 @@ for email, role in [("admin@ipma.demo", "tenant-admin"), ("georgy@ipma.demo", "s
           .get(code, f"    ✗ redeem {email}: {code} {body}"))
 
 print(f"==> Загрузка материалов из «{SRC}»...")
+# По одному файлу на job: сбой на одном файле не теряет остальные.
+STALL_LIMIT_S = 600  # прогресс не меняется 10 минут → считаем job зависшим
 files = sorted(p for p in SRC.iterdir() if p.suffix.lower() in (".pdf", ".docx"))
-boundary = uuid.uuid4().hex
-parts = []
-for p in files:
+for n, p in enumerate(files, 1):
+    boundary = uuid.uuid4().hex
     mime = mimetypes.guess_type(p.name)[0] or "application/octet-stream"
-    parts.append(
+    payload = (
         f'--{boundary}\r\nContent-Disposition: form-data; name="files"; '
-        f'filename="{p.name}"\r\nContent-Type: {mime}\r\n\r\n'.encode() + p.read_bytes() + b"\r\n")
-payload = b"".join(parts) + f"--{boundary}--\r\n".encode()
-code, body = call("POST", "/admin/ingestion-jobs", raw=payload, headers=auth,
-                  ctype=f"multipart/form-data; boundary={boundary}")
-assert code in (200, 201, 202), f"upload failed: {code} {body}"
-job = body["job_id"]
-print(f"    → {len(files)} файлов, job={job}; жду окончания индексации...")
-while True:
-    code, st = call("GET", f"/admin/ingestion-jobs/{job}", headers=auth)
-    if st.get("status") in ("completed", "completed_with_errors", "failed"):
-        break
-    done = len(st.get("accepted_files", [])) + len(st.get("rejected_files", []))
-    print(f"      {st.get('status')}: {done}/{len(files)}")
-    time.sleep(10)
-print(f"    статус: {st['status']}")
-for f in st["accepted_files"]:
-    print(f"    ✓ {f.get('filename')}  ({f.get('chunks_created', '?')} чанков)")
-for f in st["rejected_files"]:
-    reason = f.get("reason")
-    mark = "=" if reason == "DUPLICATE" else "✗"
-    print(f"    {mark} {f.get('filename')}: {reason}")
+        f'filename="{p.name}"\r\nContent-Type: {mime}\r\n\r\n'.encode()
+        + p.read_bytes() + f"\r\n--{boundary}--\r\n".encode())
+    code, body = call("POST", "/admin/ingestion-jobs", raw=payload, headers=auth,
+                      ctype=f"multipart/form-data; boundary={boundary}")
+    if code not in (200, 201, 202):
+        print(f"    ✗ [{n}/{len(files)}] {p.name}: upload {code} {body}"); continue
+    job = body["job_id"]
+    last_progress, last_change = None, time.time()
+    while True:
+        code, st = call("GET", f"/admin/ingestion-jobs/{job}", headers=auth)
+        if st.get("status") in ("completed", "completed_with_errors", "failed"):
+            break
+        if st.get("progress_info") != last_progress:
+            last_progress, last_change = st.get("progress_info"), time.time()
+        elif time.time() - last_change > STALL_LIMIT_S:
+            st["status"] = "stalled"; break
+        time.sleep(5)
+    acc, rej = st.get("accepted_files") or [], st.get("rejected_files") or []
+    if acc:
+        print(f"    ✓ [{n}/{len(files)}] {p.name}  ({acc[0].get('chunks_created', '?')} чанков)")
+    elif rej and rej[0].get("reason") == "DUPLICATE":
+        print(f"    = [{n}/{len(files)}] {p.name}: уже загружен")
+    else:
+        reason = rej[0].get("reason") if rej else st.get("status")
+        print(f"    ✗ [{n}/{len(files)}] {p.name}: {reason} (job={job})")
 PY
 
 echo "==> Привязка материалов к топикам по key_concepts..."

@@ -2,7 +2,8 @@
 Ingestion pipeline: accept → extract → normalize → chunk → embed → index
 
 Supported formats:
-  - PDF, DOCX, TXT, MD  — plain text extraction, page number unknown
+  - PDF                 — per-page text extraction, chunk.page = physical page (1-based)
+  - DOCX, TXT, MD       — plain text extraction, page number unknown
   - JSONL               — page-aware format: {"page": N, "text": "...", "source_pdf": "..."}
                           Preserves page numbers in chunk metadata for accurate citations.
 """
@@ -115,11 +116,13 @@ def _is_jsonl(raw: RawFile) -> bool:
 def extract_pages(raw: RawFile) -> list[ChunkMeta]:
     """
     Extract content as a list of ChunkMeta items.
-    For JSONL: one item per page (with page number).
+    For JSONL and PDF: one item per page (with page number).
     For other formats: one item with the full text (page=None).
     """
     if _is_jsonl(raw):
         return _extract_jsonl(raw.content)
+    if raw.mime_type == "application/pdf":
+        return _extract_pdf_pages(raw.content)
     text = _extract_plain(raw)
     return [ChunkMeta(text=text)]
 
@@ -141,17 +144,22 @@ def _extract_jsonl(content: bytes) -> list[ChunkMeta]:
     return pages
 
 
+def _extract_pdf_pages(content: bytes) -> list[ChunkMeta]:
+    # Номер страницы — физический (1-based), как в PDF-просмотрщике: по нему
+    # студент открывает цитату. Пустые страницы (сканы, разделители) пропускаем.
+    reader = PdfReader(io.BytesIO(content))
+    pages = []
+    for idx, page in enumerate(reader.pages, start=1):
+        text = (page.extract_text() or "").strip()
+        if text:
+            pages.append(ChunkMeta(text=text, page=idx))
+    return pages
+
+
 def _extract_plain(raw: RawFile) -> str:
-    if raw.mime_type == "application/pdf":
-        return _extract_pdf(raw.content)
     if raw.mime_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
         return _extract_docx(raw.content)
     return raw.content.decode("utf-8", errors="replace")
-
-
-def _extract_pdf(content: bytes) -> str:
-    reader = PdfReader(io.BytesIO(content))
-    return "\n\n".join(page.extract_text() or "" for page in reader.pages)
 
 
 def _extract_docx(content: bytes) -> str:

@@ -28,8 +28,18 @@ class Settings(BaseSettings):
     app_env: str = "development"
     database_url: str
     embeddings_url: str = "http://localhost:8001"
-    llm_api_key: str
+    # LLM-провайдер: openrouter (LLM_API_KEY + LLM_MODEL_ID) или gigachat
+    # (GIGACHAT_AUTH_KEY + GIGACHAT_MODEL). GigaChat добавлен 2026-10-13,
+    # когда истёк ключ OpenRouter; формат chat/completions у них совместим.
+    llm_provider: str = "openrouter"
+    llm_api_key: str = ""
     llm_model_id: str = "qwen/qwen3-8b:free"
+    # Authorization key из личного кабинета Sber (Basic, уже base64).
+    gigachat_auth_key: str = ""
+    gigachat_scope: str = "GIGACHAT_API_PERS"
+    gigachat_model: str = "GigaChat-2-Pro"
+    gigachat_oauth_url: str = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
+    gigachat_base_url: str = "https://gigachat.devices.sberbank.ru/api/v1"
     jwt_secret: str
     admin_email: str
     admin_password: str
@@ -114,15 +124,26 @@ class Settings(BaseSettings):
             )
         return v
 
-    @field_validator("llm_api_key")
-    @classmethod
-    def _check_llm_api_key(cls, v: str) -> str:
-        if v.strip().lower() in _FORBIDDEN_SECRETS or not v.strip():
+    @model_validator(mode="after")
+    def _check_llm_credentials(self):
+        if self.llm_provider == "openrouter":
+            v = self.llm_api_key.strip()
+            if not v or v.lower() in _FORBIDDEN_SECRETS:
+                raise ValueError(
+                    "LLM_API_KEY не задан или равен placeholder-значению. "
+                    "Получи ключ на https://openrouter.ai и положи в .env."
+                )
+        elif self.llm_provider == "gigachat":
+            if not self.gigachat_auth_key.strip():
+                raise ValueError(
+                    "LLM_PROVIDER=gigachat, но GIGACHAT_AUTH_KEY не задан. "
+                    "Authorization key берётся в личном кабинете developers.sber.ru."
+                )
+        else:
             raise ValueError(
-                "LLM_API_KEY не задан или равен placeholder-значению. "
-                "Получи ключ на https://openrouter.ai и положи в .env."
+                f"LLM_PROVIDER='{self.llm_provider}': допустимо openrouter | gigachat"
             )
-        return v
+        return self
 
     @model_validator(mode="after")
     def _enforce_strength_in_production(self):

@@ -18,7 +18,7 @@ This file is auto-loaded by Claude Code at session start. It defines repository-
 
 - **Language:** Russian for prose, code identifiers in English.
 - **Branch:** `main`. The `develop-code` branch is the historical M2 line; new work lands on `main`.
-- **Hardware target:** MacBook Pro M1, 8 GB RAM. LLM via OpenRouter API; embeddings local in Docker.
+- **Hardware target:** MacBook Pro M1, 8 GB RAM. LLM via OpenRouter or GigaChat (`LLM_PROVIDER` в `.env`); embeddings local in Docker.
 - **Stack:** FastAPI + Postgres+pgvector + sentence-transformers (embeddings sidecar) + Jinja2 UI. See `docs/system-design.md`.
 
 ## Live planning artifacts
@@ -27,6 +27,10 @@ This file is auto-loaded by Claude Code at session start. It defines repository-
 - [`docs/bdd-scenarios.md`](docs/bdd-scenarios.md) — 53 Gherkin scenarios across 8 features, mapped to milestones.
 
 Both documents are **authoritative for scope and priorities**. When the user requests a change to scope, update the roadmap version + add a changelog entry; do not just discuss verbally.
+
+## LLM-провайдер (2026-10-13)
+
+Локально работает `LLM_PROVIDER=gigachat` (`GigaChat-2-Pro`, тот же Authorization key, что в PulseSTD — общий лимит токенов). Ключ OpenRouter в `.env` истёк 2026-10-13: для возврата на OpenRouter нужен новый ключ и `LLM_PROVIDER=openrouter`. Eval-харнесс (`eval/score.py`, LLM-judge) по-прежнему ходит только в OpenRouter.
 
 ## OpenRouter free-tier reality (2026-05-02)
 
