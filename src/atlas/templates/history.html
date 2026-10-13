@@ -16,6 +16,23 @@
   </a>
 </div>
 
+<!-- Фильтры: варианты из /self-check/history/facets, выбор — в query-строке -->
+<div id="history-filters" class="card card--flat mb-3 hidden" style="padding: var(--sp-3);">
+  <div class="flex items-end gap-3 flex-wrap">
+    <div class="field hidden" id="filter-tenant-field" style="margin-bottom: 0; min-width: 220px;">
+      <label class="label" for="filter-tenant">Кафедра</label>
+      <select class="select" id="filter-tenant"></select>
+    </div>
+    <div class="field" style="margin-bottom: 0; flex: 1; min-width: 260px;">
+      <label class="label" for="filter-topic">Тема</label>
+      <select class="select" id="filter-topic"></select>
+    </div>
+    <button class="btn btn--ghost btn--sm hidden" id="filter-reset" type="button">
+      <i class="bi bi-x-lg" aria-hidden="true"></i>Сбросить
+    </button>
+  </div>
+</div>
+
 <div id="history-loading" class="card">
   <div class="empty">
     <div class="empty__icon"><span class="spinner spinner--lg"></span></div>
@@ -34,6 +51,12 @@
 
 <div id="history-list-card" class="card hidden">
   <div id="history-list" class="flex-col gap-2"></div>
+</div>
+
+<div id="history-filtered-empty" class="card hidden">
+  <div class="empty">
+    <div class="empty__title">Нет попыток по выбранному фильтру</div>
+  </div>
 </div>
 
 
@@ -79,20 +102,101 @@ function statusBadge(s) {
   return `<span class="badge ${cls}">${label}</span>`;
 }
 
+function plural(n) {
+  return n % 10 === 1 && n % 100 !== 11 ? 'попытка'
+    : (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 > 20) ? 'попытки' : 'попыток');
+}
+
+// ───────── Фильтры ─────────
+let facets = { tenants: [], topics: [] };
+
+function currentFilters() {
+  const p = new URLSearchParams(location.search);
+  return { tenant: p.get('tenant') || '', topic: p.get('topic') || '' };
+}
+
+function setFilters(f) {
+  const p = new URLSearchParams(location.search);
+  ['tenant', 'topic'].forEach(k => f[k] ? p.set(k, f[k]) : p.delete(k));
+  const qs = p.toString();
+  history.replaceState(null, '', location.pathname + (qs ? '?' + qs : ''));
+}
+
+function renderFilters() {
+  const f = currentFilters();
+  const multiTenant = facets.tenants.length > 1;
+  const tenantSel = document.getElementById('filter-tenant');
+  tenantSel.innerHTML = '<option value="">Все кафедры</option>' + facets.tenants.map(t =>
+    `<option value="${escHtml(t.slug)}" ${t.slug === f.tenant ? 'selected' : ''}>${escHtml(t.name)} (${t.count})</option>`).join('');
+  document.getElementById('filter-tenant-field').classList.toggle('hidden', !multiTenant);
+
+  // Темы — выбранной кафедры; без выбора — все, сгруппированные по кафедрам.
+  const topics = facets.topics.filter(t => !f.tenant || t.tenant_slug === f.tenant);
+  const opt = t => {
+    const value = t.key === 'custom' ? 'custom' : t.key;
+    const label = t.external_id ? `${t.external_id} ${t.title}` : t.title;
+    return `<option value="${escHtml(value)}" ${value === f.topic ? 'selected' : ''}>${escHtml(label)} (${t.count})</option>`;
+  };
+  let html = '<option value="">Все темы</option>';
+  if (multiTenant && !f.tenant) {
+    facets.tenants.forEach(tn => {
+      const group = topics.filter(t => t.tenant_slug === tn.slug && t.key !== 'custom');
+      if (group.length) html += `<optgroup label="${escHtml(tn.name)}">${group.map(opt).join('')}</optgroup>`;
+    });
+    const custom = topics.filter(t => t.key === 'custom').reduce((n, t) => n + t.count, 0);
+    if (custom) html += opt({ key: 'custom', title: 'Свои темы', count: custom });
+  } else {
+    html += topics.map(opt).join('');
+  }
+  document.getElementById('filter-topic').innerHTML = html;
+  document.getElementById('filter-reset').classList.toggle('hidden', !f.tenant && !f.topic);
+  document.getElementById('history-filters').classList.toggle('hidden', facets.topics.length < 2 && !multiTenant);
+}
+
+async function loadFacets() {
+  try {
+    const res = await authFetch('/self-check/history/facets');
+    if (res.ok) facets = await res.json();
+  } catch (_) {}
+  const total = facets.tenants.reduce((n, t) => n + t.count, 0);
+  document.querySelectorAll('[data-count-history]').forEach(el => el.textContent = total || '');
+  renderFilters();
+}
+
+document.getElementById('filter-tenant').addEventListener('change', e => {
+  setFilters({ tenant: e.target.value, topic: '' });
+  renderFilters(); loadHistory();
+});
+document.getElementById('filter-topic').addEventListener('change', e => {
+  setFilters({ ...currentFilters(), topic: e.target.value });
+  renderFilters(); loadHistory();
+});
+document.getElementById('filter-reset').addEventListener('click', () => {
+  setFilters({ tenant: '', topic: '' });
+  renderFilters(); loadHistory();
+});
+
 async function loadHistory() {
   try {
-    const res = await authFetch('/self-check/history/list');
+    const f = currentFilters();
+    const qs = new URLSearchParams({ limit: '100' });
+    if (f.tenant) qs.set('tenant', f.tenant);
+    if (f.topic) qs.set('topic', f.topic);
+    const res = await authFetch('/self-check/history/list?' + qs);
     if (!res.ok) throw new Error(res.status);
     const data = await res.json();
     hide('history-loading');
+    const filtered = !!(f.tenant || f.topic);
+    ['history-empty', 'history-filtered-empty', 'history-list-card'].forEach(hide);
     if (!data.length) {
-      show('history-empty');
-      document.getElementById('history-info').textContent = 'нет попыток';
+      show(filtered ? 'history-filtered-empty' : 'history-empty');
+      document.getElementById('history-info').textContent = filtered ? '0 по фильтру' : 'нет попыток';
       return;
     }
     show('history-list-card');
-    document.getElementById('history-info').textContent = `${data.length} попыт${data.length % 10 === 1 && data.length !== 11 ? 'ка' : (data.length % 10 >= 2 && data.length % 10 <= 4 && (data.length % 100 < 10 || data.length % 100 > 20) ? 'ки' : 'ок')} всего`;
-    document.querySelectorAll('[data-count-history]').forEach(el => el.textContent = data.length);
+    document.getElementById('history-info').textContent =
+      `${data.length} ${plural(data.length)}${filtered ? ' по фильтру' : ' всего'}${data.length === 100 ? ' (последние 100)' : ''}`;
+    const showTenant = facets.tenants.length > 1;
 
     const list = document.getElementById('history-list');
     list.innerHTML = '';
@@ -108,8 +212,10 @@ async function loadHistory() {
       row.innerHTML = `
         ${scoreHtml}
         <div class="flex-1" style="min-width: 0;">
-          <div class="t-md t-bold" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escHtml(a.topic)}</div>
-          <div class="t-xs t-muted">${fmtDate(a.created_at)}</div>
+          <div class="t-md t-bold" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+            ${a.topic_external_id ? `<span class="t-mono t-faint" style="font-weight: 500;">${escHtml(a.topic_external_id)}</span> ${escHtml(a.topic_title)}` : escHtml(a.topic)}
+          </div>
+          <div class="t-xs t-muted">${fmtDate(a.created_at)}${showTenant && a.tenant_name ? ' · ' + escHtml(a.tenant_name) : ''}</div>
         </div>
         ${statusBadge(a.status)}
         ${a.status === 'completed' ? '<i class="bi bi-chevron-right" style="color: var(--c-text-3); font-size: 0.85rem;" aria-hidden="true"></i>' : ''}
@@ -222,6 +328,7 @@ document.getElementById('detail-overlay').addEventListener('click', e => {
 });
 
 window.onAuthReady = async function () {
+  await loadFacets();
   await loadHistory();
   // Phase 6 screenshot helper: ?open=<attempt_id> auto-opens detail modal.
   const open = new URLSearchParams(location.search).get('open');

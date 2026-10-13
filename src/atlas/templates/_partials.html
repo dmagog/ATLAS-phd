@@ -42,9 +42,10 @@
 
 {% macro sidebar(active='') %}
 <aside class="sidebar">
-  <a class="sidebar__brand" href="/" title="На главную">
+  <a class="sidebar__brand" href="/" title="На главную · ATLAS phd v{{ app_version }}">
     <img src="/static/icons/atlas-shield.svg" class="sidebar__brand-mark" alt="">
     <span class="sidebar__brand-name sidebar__label">ATLAS phd</span>
+    <span class="sidebar__version sidebar__label">v{{ app_version }}</span>
   </a>
 
   {{ _link('chat', active, '/', 'bi-chat-dots-fill', 'Чат') }}
@@ -69,14 +70,15 @@
   </div>
 
   <div class="sidebar__footer">
-    <div class="sidebar__user" title="" data-user-title>
+    <a class="sidebar__user {% if active == 'profile' %}sidebar__user--active{% endif %}" href="/profile"
+       title="Профиль" data-user-title>
       <div class="sidebar__user-avatar" data-user-initials>—</div>
       <span class="sidebar__user-email sidebar__label" data-user-email>—</span>
-    </div>
+      <i class="bi bi-chevron-right sidebar__label sidebar__user-chevron" aria-hidden="true"></i>
+    </a>
     <button class="sidebar__logout" data-logout type="button" title="Выйти">
       <i class="bi bi-box-arrow-right" aria-hidden="true"></i><span class="sidebar__label">Выйти</span>
     </button>
-    <div class="sidebar__version sidebar__label" title="Версия ATLAS">v{{ app_version }}</div>
   </div>
 </aside>
 {% endmacro %}

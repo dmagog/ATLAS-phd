@@ -493,9 +493,16 @@ img, svg { display: block; max-width: 100%; }
 .sidebar__logout:hover { background: var(--c-danger-bg); color: var(--c-danger); }
 .sidebar__logout i { width: 16px; height: 16px; flex-shrink: 0; }
 .sidebar__version {
-  padding: var(--sp-2) var(--sp-3) 0;
-  font-size: 11px; color: var(--c-text-3); font-family: var(--font-mono);
+  align-self: flex-end; margin-bottom: 2px;
+  font-size: 10px; font-weight: 400; color: var(--c-text-3); font-family: var(--font-mono);
 }
+a.sidebar__user {
+  color: inherit; text-decoration: none; border-radius: var(--r-md);
+  transition: background var(--t-fast);
+}
+a.sidebar__user:hover { background: var(--c-surface-2); text-decoration: none; }
+.sidebar__user--active { background: var(--c-primary-bg); }
+.sidebar__user-chevron { color: var(--c-text-3); font-size: 11px; }
 
 /* Свёрнутое меню: html[data-sidebar="collapsed"] (localStorage atlas_sidebar,
    ставится в <head> до рендера, чтобы не мигало). Остаются иконки, подписи —

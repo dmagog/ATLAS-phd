@@ -4,6 +4,9 @@ Currently scoped to:
   * GET  /me — basic profile + visibility flag.
   * GET  /me/program — topics of the active program in the caller's tenant
     context (any role; super-admin picks the tenant via X-Atlas-Tenant).
+  * POST /me/sessions/revoke — «выйти на всех устройствах»: bump
+    jwt_version, все выданные токены (включая текущий) становятся
+    недействительными (тот же механизм, что BDD 7.5).
   * GET  /me/visibility — current supervisor_visibility setting.
   * POST /me/visibility — student/supervisor/tenant-admin toggles their
     own opt-in for supervisor analytics (BDD 3.4). The change is logged
@@ -15,7 +18,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -40,6 +43,8 @@ class MeOut(BaseModel):
     visibility_changed_at: datetime | None
     # super-admin: тенант, в котором бэкенд работает без X-Atlas-Tenant.
     default_tenant_slug: str | None = None
+    created_at: datetime | None = None
+    consent_recorded_at: datetime | None = None
 
 
 class StudyTopicOut(BaseModel):
@@ -122,7 +127,32 @@ async def me(
         default_tenant_slug=(
             settings.pilot_tenant_slug if current_user.tenant_id is None else None
         ),
+        created_at=current_user.created_at,
+        consent_recorded_at=current_user.consent_recorded_at,
     )
+
+
+@router.post("/sessions/revoke", status_code=204)
+async def revoke_sessions(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Response:
+    """Выйти на всех устройствах: токены с прежним `jv` перестают проходить
+    get_current_user. Клиент после ответа сам удаляет свой токен."""
+    current_user.jwt_version = (current_user.jwt_version or 1) + 1
+    await write_audit(
+        db,
+        action="user.sessions.revoke",
+        actor_id=current_user.id,
+        actor_role=current_user.role,
+        tenant_id=current_user.tenant_id,
+        target_type="user",
+        target_id=str(current_user.id),
+        details={"jwt_version": current_user.jwt_version},
+        flush_only=True,
+    )
+    await db.commit()
+    return Response(status_code=204)
 
 
 @router.get("/program", response_model=StudyProgramOut)

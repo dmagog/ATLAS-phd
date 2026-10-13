@@ -121,7 +121,7 @@ async function loadMe() {
   });
   // Populate all data-* placeholders
   document.querySelectorAll('[data-user-email]').forEach(el => el.textContent = me.email);
-  document.querySelectorAll('[data-user-title]').forEach(el => el.title = me.email);
+  document.querySelectorAll('[data-user-title]').forEach(el => el.title = 'Профиль · ' + me.email);
   document.querySelectorAll('[data-user-initials]').forEach(el => el.textContent = initialsFromEmail(me.email));
   document.querySelectorAll('[data-user-role]').forEach(el => {
     el.textContent = me.role;

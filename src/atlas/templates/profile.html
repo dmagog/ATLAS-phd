@@ -1,0 +1,176 @@
+{% extends "_app.html" %}
+{% from "_partials.html" import sidebar, topbar %}
+{% block title %}Профиль{% endblock %}
+{% block content_mode %}app__content--chat{% endblock %}
+{% block sidebar %}{{ sidebar(active='profile') }}{% endblock %}
+{% block topbar %}{{ topbar() }}{% endblock %}
+
+{% block content %}
+<!-- Шапка профиля -->
+<div class="card mb-4">
+  <div class="flex items-center gap-4">
+    <div class="sidebar__user-avatar" data-user-initials
+         style="width: 56px; height: 56px; font-size: 20px;">—</div>
+    <div class="flex-1">
+      <div class="t-xl t-bold" data-user-email>—</div>
+      <div class="flex items-center gap-2 mt-1 flex-wrap">
+        <span class="badge" id="profile-role">—</span>
+        <span class="t-sm t-muted" id="profile-tenant">—</span>
+      </div>
+    </div>
+  </div>
+  <div class="grid grid-cols-2 mt-4 t-sm">
+    <div><div class="label">В системе с</div><div id="profile-created">—</div></div>
+    <div><div class="label">Согласие на обработку данных</div><div id="profile-consent">—</div></div>
+  </div>
+</div>
+
+<!-- Активность -->
+<div class="card mb-4" id="profile-activity">
+  <div class="flex items-center justify-between">
+    <div class="card__title" style="margin-bottom: 0;">Самопроверки</div>
+    <a class="btn btn--ghost btn--sm" href="/self-check/history">История<i class="bi bi-chevron-right" aria-hidden="true"></i></a>
+  </div>
+  <div class="grid grid-cols-3 mt-3" id="profile-stats">
+    <div class="t-sm t-muted">Загружаю…</div>
+  </div>
+</div>
+
+<!-- Приватность (только для привязанных к кафедре ролей) -->
+<div class="card mb-4 hidden" id="profile-privacy">
+  <div class="card__title">Приватность</div>
+  <label class="flex items-start gap-3" style="cursor: pointer;">
+    <input type="checkbox" id="visibility-toggle" style="margin-top: 3px; width: 16px; height: 16px;">
+    <span>
+      <span class="t-sm t-semibold">Показывать мои результаты научному руководителю</span>
+      <span class="t-xs t-muted" style="display:block; margin-top: 2px;">
+        Без согласия научрук видит только обезличенную статистику кафедры («Аспирант #N»).
+        Изменение записывается в журнал аудита.
+      </span>
+      <span class="t-xs t-faint" id="visibility-changed" style="display:block; margin-top: 4px;"></span>
+    </span>
+  </label>
+</div>
+
+<!-- Сессия -->
+<div class="card mb-4">
+  <div class="card__title">Сессия</div>
+  <div class="t-sm t-muted mb-4" id="profile-session">—</div>
+  <div class="flex gap-2 flex-wrap">
+    <button class="btn btn--secondary btn--sm" type="button" data-logout>
+      <i class="bi bi-box-arrow-right" aria-hidden="true"></i>Выйти
+    </button>
+    <button class="btn btn--ghost btn--sm" type="button" id="revoke-btn">
+      <i class="bi bi-shield-x" aria-hidden="true"></i>Выйти на всех устройствах
+    </button>
+  </div>
+  <div class="t-xs t-faint mt-2">«На всех устройствах» отзывает все выданные токены, включая этот.</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const ROLE_LABELS = {
+  'student': ['Студент', 'badge--success'],
+  'supervisor': ['Научный руководитель', 'badge--info'],
+  'tenant-admin': ['Администратор кафедры', 'badge--warning'],
+  'super-admin': ['Администратор платформы', 'badge--danger'],
+};
+
+function fmtDate(iso, withTime = false) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return withTime
+    ? d.toLocaleString('ru-RU', { dateStyle: 'long', timeStyle: 'short' })
+    : d.toLocaleDateString('ru-RU', { dateStyle: 'long' });
+}
+
+function tokenExpiry() {
+  // exp из payload JWT — только для показа; проверяет токен сервер.
+  try {
+    const payload = JSON.parse(atob(getToken().split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    return payload.exp ? new Date(payload.exp * 1000) : null;
+  } catch (_) { return null; }
+}
+
+function statCard(label, value, sub) {
+  return `<div><div class="label">${label}</div>
+    <div class="t-xl t-bold" style="font-variant-numeric: tabular-nums;">${value}</div>
+    ${sub ? `<div class="t-xs t-faint">${sub}</div>` : ''}</div>`;
+}
+
+async function renderActivity() {
+  const box = document.getElementById('profile-stats');
+  try {
+    const res = await authFetch('/self-check/history/list?limit=100');
+    const attempts = res.ok ? await res.json() : [];
+    const scored = attempts.filter(a => a.overall_score !== null && a.overall_score !== undefined);
+    const avg = scored.length ? (scored.reduce((s, a) => s + a.overall_score, 0) / scored.length).toFixed(1) : '—';
+    const last = attempts[0];
+    box.innerHTML =
+      statCard('Попыток', attempts.length, attempts.length >= 100 ? 'показаны последние 100' : '')
+      + statCard('Средний балл', avg, scored.length ? `по ${scored.length} завершённым` : '')
+      + statCard('Последняя', last ? fmtDate(last.created_at) : '—', last ? escapeHtml(last.topic) : '');
+  } catch (_) {
+    box.innerHTML = '<div class="t-sm t-muted">Не удалось загрузить статистику.</div>';
+  }
+}
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function renderVisibility(value, changedAt) {
+  document.getElementById('visibility-toggle').checked = value === 'show-to-supervisor';
+  document.getElementById('visibility-changed').textContent =
+    changedAt ? 'Последнее изменение: ' + fmtDate(changedAt, true) : '';
+}
+
+window.onAuthReady = async function (me) {
+  const [label, cls] = ROLE_LABELS[me.role] || [me.role, ''];
+  const role = document.getElementById('profile-role');
+  role.textContent = label;
+  role.className = 'badge ' + cls;
+  document.getElementById('profile-tenant').textContent =
+    me.role === 'super-admin'
+      ? 'Все кафедры · сейчас выбрана: ' + (me.tenant_display_name || '—')
+      : (me.tenant_display_name || '—');
+  document.getElementById('profile-created').textContent = fmtDate(me.created_at);
+  document.getElementById('profile-consent').textContent =
+    me.consent_recorded_at ? 'дано ' + fmtDate(me.consent_recorded_at) : 'не требовалось';
+
+  const exp = tokenExpiry();
+  document.getElementById('profile-session').textContent =
+    exp ? `Текущая сессия действует до ${fmtDate(exp.toISOString(), true)}.` : 'Срок действия сессии неизвестен.';
+
+  if (me.role !== 'super-admin') {
+    document.getElementById('profile-privacy').classList.remove('hidden');
+    renderVisibility(me.supervisor_visibility, me.visibility_changed_at);
+    document.getElementById('visibility-toggle').addEventListener('change', async e => {
+      const visibility = e.target.checked ? 'show-to-supervisor' : 'anonymous-aggregate-only';
+      e.target.disabled = true;
+      try {
+        const res = await authFetch('/me/visibility', { method: 'POST', body: JSON.stringify({ visibility }) });
+        if (!res.ok) throw new Error(res.status);
+        const v = await res.json();
+        renderVisibility(v.supervisor_visibility, v.visibility_changed_at);
+      } catch (_) {
+        e.target.checked = !e.target.checked;
+        alert('Не удалось сохранить настройку приватности.');
+      } finally {
+        e.target.disabled = false;
+      }
+    });
+  }
+
+  document.getElementById('revoke-btn').addEventListener('click', async () => {
+    if (!confirm('Выйти на всех устройствах? Понадобится войти заново.')) return;
+    const res = await authFetch('/me/sessions/revoke', { method: 'POST' });
+    if (res.ok || res.status === 204) { clearToken(); location.href = '/login'; }
+    else alert('Не удалось отозвать сессии.');
+  });
+
+  renderActivity();
+};
+</script>
+{% endblock %}

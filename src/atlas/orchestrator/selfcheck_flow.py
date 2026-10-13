@@ -25,7 +25,10 @@ async def start_selfcheck(
     db: AsyncSession,
     language: str = "ru",
     request_id: str | None = None,
+    topic_id: "uuid.UUID | None" = None,
 ) -> tuple[str, QuestionSet]:
+    """topic_id — тема активной программы (если попытка начата по билету):
+    по нему строятся фильтр истории и аналитика научрука. Для «своей темы» None."""
     request_id = request_id or str(uuid.uuid4())
     logger.info("sc_flow_start", state=RequestState.REQUEST_RECEIVED, request_id=request_id)
 
@@ -59,6 +62,7 @@ async def start_selfcheck(
         tenant_id=tenant_id,
         user_id=user_id,
         topic=topic,
+        topic_id=topic_id,
         language=language,
         status="in_progress",
         question_set=[

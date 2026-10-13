@@ -79,6 +79,12 @@ async def login_page(request: Request):
     return templates.TemplateResponse(request=request, name="login.html")
 
 
+@router.get("/profile", response_class=HTMLResponse)
+async def profile_page(request: Request):
+    """Профиль пользователя: данные аккаунта, активность, приватность, сессии."""
+    return templates.TemplateResponse(request=request, name="profile.html")
+
+
 @router.get("/", response_class=HTMLResponse)
 async def chat_page(request: Request):
     """Chat (Q&A + self-check via planner)."""

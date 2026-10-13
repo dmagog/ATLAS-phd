@@ -6,7 +6,7 @@ from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from atlas.core.deps import get_current_user, require_llm_quota
-from atlas.db.models import SelfCheckAttempt, User
+from atlas.db.models import Program, ProgramTopic, SelfCheckAttempt, Tenant, User
 from atlas.db.session import get_db
 from atlas.orchestrator.selfcheck_flow import start_selfcheck, submit_selfcheck
 
@@ -18,6 +18,31 @@ router = APIRouter(prefix="/self-check", tags=["self-check"])
 class SelfCheckStartRequest(BaseModel):
     topic: str
     language: str = "ru"
+    # Номер темы активной программы (external_id, например «4.5.11»), если
+    # попытка начата по билету. Без него тема ищется по тексту (title или
+    # «title (section)»); «своя тема» остаётся без topic_id.
+    topic_external_id: str | None = None
+
+
+async def _resolve_topic_id(
+    db: AsyncSession, tenant_id, external_id: str | None, topic_text: str
+):
+    program_id = (await db.execute(
+        select(Program.id).where(Program.tenant_id == tenant_id, Program.status == "active")
+    )).scalar_one_or_none()
+    if program_id is None:
+        return None
+    topics = (await db.execute(
+        select(ProgramTopic).where(ProgramTopic.program_id == program_id)
+    )).scalars().all()
+    if external_id:
+        return next((t.id for t in topics if t.external_id == external_id), None)
+    text = topic_text.strip().lower()
+    return next(
+        (t.id for t in topics
+         if text == t.title.lower() or text == f"{t.title} ({t.section})".lower()),
+        None,
+    )
 
 
 class QuestionOut(BaseModel):
@@ -47,6 +72,7 @@ async def selfcheck_start(
         from atlas.db.tenant_helpers import assert_tenant_writable, resolve_tenant_id_for_user
         tenant_id = await resolve_tenant_id_for_user(current_user, db, request)
         await assert_tenant_writable(tenant_id, db, current_user)
+        topic_id = await _resolve_topic_id(db, tenant_id, body.topic_external_id, body.topic)
         attempt_id, question_set = await start_selfcheck(
             topic=body.topic,
             user_id=str(current_user.id),
@@ -54,6 +80,7 @@ async def selfcheck_start(
             db=db,
             language=body.language,
             request_id=request_id,
+            topic_id=topic_id,
         )
     except Exception as exc:
         msg = str(exc)
@@ -208,6 +235,35 @@ class AttemptSummary(BaseModel):
     overall_score: float | None = None
     created_at: str
     completed_at: str | None = None
+    tenant_slug: str | None = None
+    tenant_name: str | None = None
+    # Тема программы, если попытка привязана к билету (иначе «своя тема»).
+    topic_external_id: str | None = None
+    topic_title: str | None = None
+
+
+class HistoryFacetTenant(BaseModel):
+    slug: str
+    name: str
+    count: int
+
+
+class HistoryFacetTopic(BaseModel):
+    key: str  # «<tenant_slug>:<external_id>» или CUSTOM_TOPIC_KEY
+    tenant_slug: str
+    external_id: str | None
+    title: str
+    section: str | None
+    count: int
+
+
+class HistoryFacets(BaseModel):
+    tenants: list[HistoryFacetTenant]
+    topics: list[HistoryFacetTopic]
+
+
+# Значение фильтра «тема» для попыток без привязки к билету.
+CUSTOM_TOPIC_KEY = "custom"
 
 
 class AttemptDetail(BaseModel):
@@ -228,23 +284,41 @@ def _fmt(dt: datetime | None) -> str | None:
     return dt.isoformat() if dt else None
 
 
+def _history_query(user_id):
+    """Попытки пользователя по всем его кафедрам (для привязанных ролей — одна)
+    + кафедра и тема программы. Тема — по (кафедра, external_id): при новой
+    версии программы id тем меняются, номер билета — нет."""
+    return (
+        select(SelfCheckAttempt, Tenant, ProgramTopic)
+        .join(Tenant, Tenant.id == SelfCheckAttempt.tenant_id)
+        .outerjoin(ProgramTopic, ProgramTopic.id == SelfCheckAttempt.topic_id)
+        .where(SelfCheckAttempt.user_id == user_id)
+    )
+
+
 @router.get("/history/list", response_model=list[AttemptSummary])
 async def selfcheck_history(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
+    tenant: str | None = Query(default=None, description="slug кафедры"),
+    topic: str | None = Query(default=None, description="ключ темы из /history/facets"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> list[AttemptSummary]:
+    stmt = _history_query(current_user.id)
+    if tenant:
+        stmt = stmt.where(Tenant.slug == tenant)
+    if topic == CUSTOM_TOPIC_KEY:
+        stmt = stmt.where(SelfCheckAttempt.topic_id.is_(None))
+    elif topic and ":" in topic:
+        topic_tenant, external_id = topic.split(":", 1)
+        stmt = stmt.where(Tenant.slug == topic_tenant, ProgramTopic.external_id == external_id)
     rows = (await db.execute(
-        select(SelfCheckAttempt)
-        .where(SelfCheckAttempt.user_id == current_user.id)
-        .order_by(desc(SelfCheckAttempt.created_at))
-        .limit(limit)
-        .offset(offset)
-    )).scalars().all()
+        stmt.order_by(desc(SelfCheckAttempt.created_at)).limit(limit).offset(offset)
+    )).all()
 
     result = []
-    for a in rows:
+    for a, t, pt in rows:
         score = None
         if a.evaluation and "overall_score" in a.evaluation:
             score = a.evaluation["overall_score"]
@@ -256,8 +330,45 @@ async def selfcheck_history(
             overall_score=score,
             created_at=_fmt(a.created_at),
             completed_at=_fmt(a.completed_at),
+            tenant_slug=t.slug,
+            tenant_name=t.display_name,
+            topic_external_id=pt.external_id if pt else None,
+            topic_title=pt.title if pt else None,
         ))
     return result
+
+
+@router.get("/history/facets", response_model=HistoryFacets)
+async def selfcheck_history_facets(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> HistoryFacets:
+    """Варианты для фильтров истории: только то, что есть в попытках пользователя."""
+    rows = (await db.execute(_history_query(current_user.id))).all()
+    tenants: dict[str, HistoryFacetTenant] = {}
+    topics: dict[str, HistoryFacetTopic] = {}
+    for _a, t, pt in rows:
+        tf = tenants.setdefault(t.slug, HistoryFacetTenant(slug=t.slug, name=t.display_name, count=0))
+        tf.count += 1
+        if pt is not None:
+            key = f"{t.slug}:{pt.external_id}"
+            fallback = HistoryFacetTopic(key=key, tenant_slug=t.slug, external_id=pt.external_id,
+                                         title=pt.title, section=pt.section, count=0)
+        else:
+            key = f"{t.slug}:{CUSTOM_TOPIC_KEY}"
+            fallback = HistoryFacetTopic(key=CUSTOM_TOPIC_KEY, tenant_slug=t.slug, external_id=None,
+                                         title="Свои темы", section=None, count=0)
+        topics.setdefault(key, fallback).count += 1
+
+    def _order(f: HistoryFacetTopic):
+        # Билеты по номеру (4.5.10 после 4.5.9), «Свои темы» — в конце.
+        nums = [int(x) for x in (f.external_id or "").split(".") if x.isdigit()]
+        return (f.tenant_slug, f.external_id is None, nums)
+
+    return HistoryFacets(
+        tenants=sorted(tenants.values(), key=lambda f: f.name),
+        topics=sorted(topics.values(), key=_order),
+    )
 
 
 @router.get("/{attempt_id}/detail", response_model=AttemptDetail)

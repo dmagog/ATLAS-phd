@@ -235,6 +235,7 @@ async function loadProgramTopics() {
     }
     const opt = document.createElement('option');
     opt.value = topicQuery(t);
+    opt.dataset.externalId = t.external_id;
     opt.textContent = `${t.external_id} ${t.title}`;
     groups.get(t.section).appendChild(opt);
   });
@@ -252,16 +253,19 @@ async function loadProgramTopics() {
   syncCustom();
 }
 
+// { topic, externalId }: externalId — номер билета, чтобы попытка привязалась
+// к теме программы (фильтр истории, аналитика научрука); у «своей темы» null.
 function selectedTopic() {
   const sel = document.getElementById('topic-select');
   const useSelect = !document.getElementById('topic-select-field').classList.contains('hidden')
     && sel.value !== CUSTOM_TOPIC;
-  return useSelect ? sel.value : document.getElementById('topic-input').value.trim();
+  if (useSelect) return { topic: sel.value, externalId: sel.selectedOptions[0].dataset.externalId || null };
+  return { topic: document.getElementById('topic-input').value.trim(), externalId: null };
 }
 
 // ───────── Start handler ─────────
 document.getElementById('start-btn').addEventListener('click', async () => {
-  const topic = selectedTopic();
+  const { topic, externalId } = selectedTopic();
   if (!topic) return;
   hide('start-error');
   document.getElementById('start-btn').disabled = true;
@@ -271,7 +275,7 @@ document.getElementById('start-btn').addEventListener('click', async () => {
   try {
     const res = await authFetch('/self-check/start', {
       method: 'POST',
-      body: JSON.stringify({ topic, language: document.getElementById('lang-select').value }),
+      body: JSON.stringify({ topic, topic_external_id: externalId, language: document.getElementById('lang-select').value }),
     });
     stopStepRotation();
     if (!res.ok) {
